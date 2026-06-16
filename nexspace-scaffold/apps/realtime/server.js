@@ -95,6 +95,14 @@ wss.on("connection", (ws) => {
     let m; try { m = JSON.parse(raw.toString()); } catch { return; }
     const p = clients.get(ws);
 
+    if (m.t === "adminReload") {
+      // admin-only: re-pull the world from the API and push it to everyone live (no restart)
+      const claims = verifyJWT(m.token);
+      if (!claims || rank(claims.role) < RANK.admin) return deny(ws, "reload the world", "admin");
+      reloadAndBroadcast();
+      return;
+    }
+
     if (m.t === "join") {
       const id = "u" + (nextId++);
       const claims = verifyJWT(m.token);
@@ -174,6 +182,12 @@ function applyWorld(w) {
     door: { x: r.door.x, y: r.door.y, w: r.door.w, h: r.door.h, state: r.door.state || "closed", knocking: false } }));
   mediaWall = { x: w.mediaWall.x, y: w.mediaWall.y, w: w.mediaWall.w, base: w.mediaWall.base,
     screenH: w.mediaWall.screenH, title: w.mediaWall.title, playing: true, pos: 0, dur: w.mediaWall.dur };
+}
+async function reloadAndBroadcast() {
+  await loadWorld();                               // re-fetch from WORLD_API if configured
+  const msg = JSON.stringify({ t: "world", world: worldForClient() });
+  for (const ws of clients.keys()) if (ws.readyState === 1) ws.send(msg);
+  console.log("World reloaded and broadcast to " + clients.size + " client(s)");
 }
 async function loadWorld() {
   if (!process.env.WORLD_API) return;

@@ -63,6 +63,10 @@
   const hsl=h=>'hsl('+h+' 70% 60%)';
   function hexA(hex,a){const h=(hex||'#888888').replace('#','');return'rgba('+parseInt(h.substr(0,2),16)+','+parseInt(h.substr(2,2),16)+','+parseInt(h.substr(4,2),16)+','+a+')';}
   function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';clearTimeout(t._t);t._t=setTimeout(()=>t.style.display='none',2400);}
+  // Tell the realtime server (served from this same origin) to reload + broadcast the world live.
+  function pushReload(){try{const proto=location.protocol==='https:'?'wss':'ws';const w=new WebSocket(proto+'://'+location.host);
+    w.onopen=()=>{w.send(JSON.stringify({t:'adminReload',token:localStorage.getItem('nexspace_token')||''}));setTimeout(()=>{try{w.close();}catch(_){}}, 600);};
+    w.onerror=()=>{};}catch(e){}}
   function setStatus(){document.getElementById('status').textContent=
     objects.length+' objects · '+rooms.length+' rooms'+(dirty?' · unsaved changes':' · saved');}
 
@@ -112,7 +116,7 @@
     this.textContent='Saving…';
     try{const r=await fetch(API_BASE+'/floors/default/layout',{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.getItem('nexspace_token')||'')},body:JSON.stringify(payload)});
       if(r.status===403){toast('🔒 Admin only — log in as admin@nexspace.dev in the office tab, then reload this editor.');return;}
-      if(!r.ok)throw new Error('HTTP '+r.status);const res=await r.json();dirty=false;setStatus();toast('Saved '+res.objects+' objects ✓ (restart realtime server to load)');}
+      if(!r.ok)throw new Error('HTTP '+r.status);const res=await r.json();dirty=false;setStatus();pushReload();toast('Saved '+res.objects+' objects ✓ — pushed live to everyone');}
     catch(e){toast('Save failed: '+e.message);}finally{this.textContent='💾 Save to API';}});
 
   // ---------- Render ----------

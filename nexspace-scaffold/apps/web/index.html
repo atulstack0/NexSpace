@@ -149,6 +149,7 @@
         for(const id of [...peers.keys()])if(!seen.has(id)){removeVoice(id);peers.delete(id);}
         document.getElementById('count').textContent=m.players.length;
       }
+      else if(m.t==='world'){world=m.world;WORLD={w:world.w,h:world.h};world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});toast('🛠️ Office layout updated');}
       else if(m.t==='denied')toast('🔒 You need '+m.need+' role to '+m.action+'.');
     };
   }

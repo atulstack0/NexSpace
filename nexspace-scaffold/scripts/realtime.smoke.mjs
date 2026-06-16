@@ -81,6 +81,17 @@ try {
   await wait(350);
   (guest.last?.doors?.board === "open") ? ok("admin opened the Boardroom door") : bad("admin could not open door");
 
+  // Live reload — admin push broadcasts a {world} to everyone; a guest cannot trigger it
+  let worldMsgs = 0;
+  guest.ws.on("message", (d) => { if (JSON.parse(d.toString()).t === "world") worldMsgs++; });
+  admin.ws.send(JSON.stringify({ t: "adminReload", token: adminToken }));
+  await wait(450);
+  (worldMsgs > 0) ? ok("admin reload broadcasts {world} to everyone") : bad("world not broadcast on admin reload");
+  const before = worldMsgs;
+  guest.ws.send(JSON.stringify({ t: "adminReload" }));
+  await wait(450);
+  (worldMsgs === before && guest.denied.includes("reload the world")) ? ok("guest denied world reload") : bad("guest reload was NOT blocked");
+
   admin.ws.close(); guest.ws.close(); await wait(250);
 } catch (e) {
   bad("exception: " + e.message);
