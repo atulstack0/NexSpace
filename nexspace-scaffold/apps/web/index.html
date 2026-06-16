@@ -96,6 +96,7 @@
   const cam={x:me.x,y:me.y,zoom:1};
   const RANGES={quiet:{inner:70,outer:200},normal:{inner:95,outer:330},megaphone:{inner:150,outer:640}};
   let mode='normal',muted=false,showLinks=true,myBcast=false,myName='Guest',viewMode='2d';
+  let yaw=-Math.PI/2,pitch=0,cameraMode='thirdPerson',pointerLocked=false,jumpV=0,jumpZ=0,tpDist=300; // 3D camera/controls (§6.24)
   const R=()=>RANGES[mode];
   // LiveKit (optional real media). API runs on :3001 (same host as the page).
   const API_BASE=location.protocol+'//'+location.hostname+':3001';
@@ -149,14 +150,21 @@
   // ---------- Input ----------
   const keys=new Set();let target=null;
   addEventListener('keydown',e=>{const k=e.key.toLowerCase();
-    if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)){keys.add(k);target=null;e.preventDefault();}});
+    if(viewMode==='3d'&&k==='v'){cameraMode=cameraMode==='thirdPerson'?'firstPerson':'thirdPerson';toast(cameraMode==='firstPerson'?'👁️ First-person':'🎥 Third-person');return;}
+    if(viewMode==='3d'&&k===' '){if(jumpZ<=0.5)jumpV=220;e.preventDefault();return;} // cosmetic jump
+    if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','shift'].includes(k)){keys.add(k);if(k!=='shift')target=null;e.preventDefault();}});
   addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
-  canvas.addEventListener('mousedown',e=>{if(e.button!==0||viewMode!=='2d')return; // 3D uses WASD + mouse-look-follow camera
+  canvas.addEventListener('mousedown',e=>{if(e.button!==0)return;
+    if(viewMode==='3d'){if(!pointerLocked&&canvas.requestPointerLock)canvas.requestPointerLock();return;} // click to look around
     const w={x:(e.clientX-VW/2)/cam.zoom+cam.x,y:(e.clientY-VH/2)/cam.zoom+cam.y};
     if(world){const mc={x:world.mediaWall.x+world.mediaWall.w/2,y:world.mediaWall.y};
       if(Math.hypot(w.x-mc.x,w.y-mc.y)<90){toggleMedia();return;}}
     target=w;});
-  canvas.addEventListener('wheel',e=>{e.preventDefault();cam.zoom=Math.max(.5,Math.min(2,cam.zoom*(e.deltaY<0?1.1:1/1.1)));},{passive:false});
+  document.addEventListener('pointerlockchange',()=>{pointerLocked=(document.pointerLockElement===canvas);});
+  document.addEventListener('mousemove',e=>{if(!pointerLocked||viewMode!=='3d')return;
+    yaw+=e.movementX*0.0025;pitch=Math.max(-1.1,Math.min(1.1,pitch-e.movementY*0.0025));});
+  canvas.addEventListener('wheel',e=>{e.preventDefault();const f=e.deltaY<0?1/1.1:1.1;
+    if(viewMode==='3d')tpDist=Math.max(150,Math.min(520,tpDist*f));else cam.zoom=Math.max(.5,Math.min(2,cam.zoom*(e.deltaY<0?1.1:1/1.1)));},{passive:false});
 
   // ---------- Audio (proximity + room override + broadcast) ----------
   let actx=null,master=null,started=false;const voices=new Map(),SCALE=46;let mediaNode=null;
@@ -253,7 +261,19 @@
 
   // ---------- Loop ----------
   const SPEED=230;
+  function step3D(dt){
+    me.facing=yaw;
+    let f=0,s=0;
+    if(keys.has('w')||keys.has('arrowup'))f+=1;if(keys.has('s')||keys.has('arrowdown'))f-=1;
+    if(keys.has('d')||keys.has('arrowright'))s+=1;if(keys.has('a')||keys.has('arrowleft'))s-=1;
+    if(f||s){const sp=SPEED*(keys.has('shift')?1.7:1),fx=Math.cos(yaw),fy=Math.sin(yaw),rx=Math.cos(yaw+Math.PI/2),ry=Math.sin(yaw+Math.PI/2);
+      let dx=fx*f+rx*s,dy=fy*f+ry*s;const m=Math.hypot(dx,dy)||1;moveMe(dx/m*sp*dt,dy/m*sp*dt);}
+    jumpV-=600*dt;jumpZ=Math.max(0,jumpZ+jumpV*dt);if(jumpZ===0&&jumpV<0)jumpV=0;
+    for(const e of peers.values()){e.rx+=(e.x-e.rx)*Math.min(1,dt*10);e.ry+=(e.y-e.ry)*Math.min(1,dt*10);}
+    cam.x=me.x;cam.y=me.y;
+  }
   function step(dt){
+    if(viewMode==='3d'){step3D(dt);return;}
     let dx=0,dy=0;
     if(keys.has('w')||keys.has('arrowup'))dy-=1;if(keys.has('s')||keys.has('arrowdown'))dy+=1;
     if(keys.has('a')||keys.has('arrowleft'))dx-=1;if(keys.has('d')||keys.has('arrowright'))dx+=1;
@@ -346,7 +366,16 @@
     _cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],
     _norm=a=>{const l=Math.hypot(a[0],a[1],a[2])||1;return[a[0]/l,a[1]/l,a[2]/l];};
   let CAM;
-  function setupCam(){const F=me.facing||0,fwd=[Math.cos(F),Math.sin(F),0],camPos=[me.x-fwd[0]*300,me.y-fwd[1]*300,215],look=[me.x+fwd[0]*60,me.y+fwd[1]*60,42];
+  function rayHitDist(x,y,dx,dy,maxD){for(let d=12;d<=maxD;d+=12){if(blocked(x+dx*d,y+dy*d,4))return d;}return maxD;} // camera-collision march
+  function setupCam(){
+    const eyeZ=46+jumpZ;
+    if(cameraMode==='firstPerson'){
+      const cp=[me.x,me.y,eyeZ],dir=[Math.cos(yaw)*Math.cos(pitch),Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch)],look=[cp[0]+dir[0]*120,cp[1]+dir[1]*120,cp[2]+dir[2]*120];
+      const Fc=_norm(_sub(look,cp)),Right=_norm(_cross(Fc,[0,0,1])),Up=_cross(Right,Fc);CAM={camPos:cp,Fc,Right,Up,focal:VH*0.92};return;
+    }
+    const fwd=[Math.cos(yaw),Math.sin(yaw)];
+    const hit=rayHitDist(me.x,me.y,-fwd[0],-fwd[1],tpDist),back=(hit<tpDist)?Math.max(50,hit-18):tpDist; // pull in when blocked
+    const camPos=[me.x-fwd[0]*back,me.y-fwd[1]*back,(150*back/tpDist)+eyeZ-pitch*180],look=[me.x+fwd[0]*60,me.y+fwd[1]*60,42+jumpZ];
     const Fc=_norm(_sub(look,camPos)),Right=_norm(_cross(Fc,[0,0,1])),Up=_cross(Right,Fc);CAM={camPos,Fc,Right,Up,focal:VH*0.92};}
   function project(P){const d=_sub(P,CAM.camPos),cz=_dot(d,CAM.Fc);if(cz<12)return null;
     return{x:VW/2+(_dot(d,CAM.Right)/cz)*CAM.focal,y:VH/2-(_dot(d,CAM.Up)/cz)*CAM.focal,s:CAM.focal/cz,cz};}
@@ -368,8 +397,8 @@
     for(const o of world.obstacles){if((o.w||0)>WORLD.w-100||(o.h||0)>WORLD.h-100)continue;const cx=o.x+(o.w||40)/2,cy=o.y+(o.h||40)/2,cz=_dot(_sub([cx,cy,20],CAM.camPos),CAM.Fc);
       items.push({cz,k:'furn',cx,cy,w:Math.min(o.w||40,o.h||40),boxH:(o.r&&o.r>30)?20:46});}
     {const cx=world.mediaWall.x+world.mediaWall.w/2,cy=world.mediaWall.y,cz=_dot(_sub([cx,cy,(world.mediaWall.screenH||150)/2],CAM.camPos),CAM.Fc);items.push({cz,k:'media'});}
-    for(const [id,e] of peers){const cz=_dot(_sub([e.rx,e.ry,30],CAM.camPos),CAM.Fc),lv=lkVideo.get(id);items.push({cz,k:'av',x:e.rx,y:e.ry,hue:hueOf(id),name:e.name||'Guest',talking:e.talking,bcast:e.bcast,isMe:false,vid:lv&&lv.el});}
-    items.push({cz:_dot(_sub([me.x,me.y,30],CAM.camPos),CAM.Fc),k:'av',x:me.x,y:me.y,hue:212,name:'You',talking:false,bcast:myBcast,isMe:true,vid:localVideoEl});
+    for(const [id,e] of peers){const cz=_dot(_sub([e.rx,e.ry,30],CAM.camPos),CAM.Fc),lv=lkVideo.get(id);items.push({cz,k:'av',x:e.rx,y:e.ry,zoff:0,hue:hueOf(id),name:e.name||'Guest',talking:e.talking,bcast:e.bcast,isMe:false,vid:lv&&lv.el});}
+    if(cameraMode!=='firstPerson')items.push({cz:_dot(_sub([me.x,me.y,30],CAM.camPos),CAM.Fc),k:'av',x:me.x,y:me.y,zoff:jumpZ,hue:212,name:'You',talking:false,bcast:myBcast,isMe:true,vid:localVideoEl}); // hide own avatar in first-person
     items.sort((p,q)=>q.cz-p.cz);
     for(const it of items){if(it.k==='wall')d3wall(it);else if(it.k==='furn')d3box(it.cx,it.cy,it.w,it.boxH);else if(it.k==='media')d3media();else d3av(it);}
     drawMinimap();
@@ -385,7 +414,7 @@
       for(let i=0;i<18;i++){const bh=(bot-top)*.2+Math.abs(Math.sin(frame*.06+i))*(bot-top)*.6;ctx.fillStyle='hsl('+(200+i*7)+' 70% 55%)';ctx.fillRect(left+i*((right-left)/18),bot-bh,((right-left)/18)-2,bh);}}
     ctx.restore();ctx.strokeStyle=hexA('#5b8cff',.6);ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(b0.x,b0.y);ctx.lineTo(b1.x,b1.y);ctx.lineTo(t1.x,t1.y);ctx.lineTo(t0.x,t0.y);ctx.closePath();ctx.stroke();
     ctx.fillStyle='#cfe0ff';ctx.font='600 13px sans-serif';ctx.textAlign='center';ctx.fillText((media.playing?'▶ ':'⏸ ')+m.title,(t0.x+t1.x)/2,Math.min(t0.y,t1.y)-8);}
-  function d3av(it){const feet=project([it.x,it.y,0]),head=project([it.x,it.y,58]);if(!head)return;
+  function d3av(it){const zo=it.zoff||0,feet=project([it.x,it.y,zo]),head=project([it.x,it.y,58+zo]);if(!head)return;
     let alpha=1;if(!it.isMe){const sameRoom=roomAtPt(me.x,me.y)&&roomAtPt(me.x,me.y)===roomAtPt(it.x,it.y),d=Math.hypot(it.x-me.x,it.y-me.y);
       alpha=(sameRoom||it.bcast)?1:Math.max(0.34,1-Math.max(0,d-R().inner)/(R().outer*1.25));}
     ctx.globalAlpha=alpha;const br=Math.max(4,16*head.s*1.05);
@@ -435,7 +464,8 @@
     document.querySelectorAll('#rangeSeg button').forEach(x=>x.classList.remove('active'));this.classList.add('active');mode=this.dataset.m;applyRange();}));
   document.querySelectorAll('#viewSeg button').forEach(b=>b.addEventListener('click',function(){
     document.querySelectorAll('#viewSeg button').forEach(x=>x.classList.remove('active'));this.classList.add('active');viewMode=this.dataset.view;
-    toast(viewMode==='3d'?'🧊 3D — same office, same people & audio':'🗺️ 2D');}));
+    if(viewMode==='3d'){yaw=me.facing||(-Math.PI/2);toast('🧊 3D — click to look · WASD move · Shift sprint · Space jump · V first/third-person');}
+    else{if(pointerLocked&&document.exitPointerLock)document.exitPointerLock();toast('🗺️ 2D');}}));
   document.getElementById('btnBroadcast').addEventListener('click',function(){myBcast=!myBcast;this.classList.toggle('active',myBcast);
     if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'broadcast',on:myBcast}));toast(myBcast?'📢 You are live to the whole floor':'Broadcast ended');});
   document.getElementById('btnMicPub').addEventListener('click',function(){if(!lkActive||!lkRoom)return;
