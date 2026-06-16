@@ -1,0 +1,36 @@
+# Full NexSpace backing services: PostgreSQL + a LiveKit dev SFU.
+#   docker compose up -d
+#
+# Defaults here match apps/api/.env.example, so no extra config is needed:
+#   DATABASE_URL  postgres / nexspace  @ localhost:5432/nexspace
+#   LIVEKIT_URL   ws://localhost:7880   key "devkey"  secret "secret"
+#
+# LiveKit runs with --node-ip 127.0.0.1 so it advertises localhost ICE
+# candidates — that's what makes same-machine browser media work without the
+# usual Docker NAT pain. If media still won't connect (common in some WSL2 /
+# Docker Desktop setups), use LiveKit Cloud instead (see RUNNING.md).
+services:
+  postgres:
+    image: postgres:16
+    container_name: nexspace-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: nexspace
+      POSTGRES_DB: nexspace
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: nexspace-livekit
+    restart: unless-stopped
+    command: --dev --node-ip 127.0.0.1
+    ports:
+      - "7880:7880"      # signaling (HTTP/WebSocket)
+      - "7881:7881"      # RTC over TCP (fallback when UDP is blocked)
+      - "7882:7882/udp"  # RTC over UDP (primary media path)
+
+volumes:
+  pgdata:
