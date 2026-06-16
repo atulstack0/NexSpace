@@ -96,7 +96,8 @@ export interface BroadcastMsg { t: "broadcast"; on: boolean; }              // t
 export interface MediaMsg     { t: "media"; playing: boolean; }            // shared media wall play/pause (6.22)
 export interface DoorMsg      { t: "door"; roomId: string; state: DoorState; } // occupant opens/closes (6.4)
 export interface KnockMsg     { t: "knock"; roomId: string; }              // request entry; occupant admits (6.4)
-export type ClientMsg = JoinMsg | MoveMsg | StateMsg | BroadcastMsg | MediaMsg | DoorMsg | KnockMsg;
+export interface RecordingMsg { t: "recording"; on: boolean; egressId?: string; } // start/stop room recording (6.17)
+export type ClientMsg = JoinMsg | MoveMsg | StateMsg | BroadcastMsg | MediaMsg | DoorMsg | KnockMsg | RecordingMsg;
 
 // ---- Server → Client ----
 export interface PlayerSnapshot {
@@ -115,5 +116,6 @@ export interface SnapshotMsg {
   players: PlayerSnapshot[];
   doors: Record<string, DoorState>;          // roomId -> state
   media: { playing: boolean; pos: number };  // shared media-wall playback (synced)
+  recording: { on: boolean; by: string | null; egressId?: string | null }; // shared recording indicator (6.17)
 }
 export type ServerMsg = WelcomeMsg | SnapshotMsg;

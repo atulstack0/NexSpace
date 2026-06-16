@@ -58,6 +58,7 @@ function worldForClient() {
 // ---------- Clients ----------
 const clients = new Map(); // ws -> player
 let nextId = 1;
+let recording = { on: false, by: null, egressId: null }; // shared recording indicator (spec 6.17)
 
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".ico": "image/x-icon" };
 const server = http.createServer((req, res) => {
@@ -112,6 +113,8 @@ wss.on("connection", (ws) => {
       d.knocking = true;
       const occupied = [...clients.values()].some(q => inRoom(q, room));
       setTimeout(() => { d.knocking = false; if (occupied) d.state = "open"; }, 1300);
+    } else if (m.t === "recording") {
+      recording = m.on ? { on: true, by: p.name, egressId: m.egressId || null } : { on: false, by: null, egressId: null };
     }
   });
 
@@ -130,7 +133,7 @@ setInterval(() => {
   if (clients.size === 0) return;
   const players = [...clients.values()].map(p => ({ id: p.id, name: p.name, x: p.x, y: p.y, facing: p.facing, status: p.status, talking: p.talking, bcast: p.bcast }));
   const doors = {}; for (const r of rooms) doors[r.id] = r.door.state;
-  const snap = JSON.stringify({ t: "snapshot", players, doors, media: { playing: mediaWall.playing, pos: Math.round(mediaWall.pos) } });
+  const snap = JSON.stringify({ t: "snapshot", players, doors, media: { playing: mediaWall.playing, pos: Math.round(mediaWall.pos) }, recording });
   for (const ws of clients.keys()) if (ws.readyState === 1) ws.send(snap);
 }, 1000 / TICK_HZ);
 

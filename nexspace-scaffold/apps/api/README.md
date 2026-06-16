@@ -43,6 +43,8 @@ Now editing the DB (or the seed) changes the office every client sees — no cod
 | GET | `/floors/:slug` | raw floor (rooms + typed objects) for the editor to load |
 | PUT | `/floors/:slug/layout` | persist an edited layout — transactional replace of objects + room updates (spec §6.10) |
 | POST | `/livekit/token` | mint a LiveKit access token `{room, identity, name} → {url, token}` (503 if unconfigured) |
+| POST | `/livekit/egress/start` | start recording the room (RoomComposite → MP4) `{room} → {egressId, filepath}` |
+| POST | `/livekit/egress/stop` | stop a recording `{egressId} → {egressId, status}` |
 
 ## LiveKit (real voice/video)
 
@@ -54,6 +56,16 @@ livekit-server --dev      # url ws://localhost:7880, key "devkey", secret "secre
 ```
 
 With those set, the multiplayer web client automatically connects, publishes mic+cam, routes remote audio through the spatial-audio engine, and shows live video in the avatar bubbles. **Without** them, the client silently falls back to the synth-tone audio — everything else still works.
+
+## Recording (LiveKit Egress)
+
+The **Rec** button in the client starts a `RoomCompositeEgress` (the whole room composited to an MP4).
+
+- The 🔴 **REC indicator** (consent/transparency) is driven by the realtime server and shows for **everyone** the moment recording starts — this works regardless of backend.
+- **Actual file capture** needs an egress backend + storage:
+  - **LiveKit Cloud** has egress built-in — just set the `S3_*` vars (R2/S3/MinIO) so the file has somewhere to land.
+  - **Self-hosted:** run the LiveKit `egress` service (Docker, needs Redis) with a storage config; then a local `filepath` works.
+- Without storage configured, starting recording shows the indicator and toasts that file capture is unavailable (no silent failure).
 
 ## The editor
 

@@ -29,6 +29,7 @@
   #banner{position:fixed;top:72px;left:50%;transform:translateX(-50%);z-index:18;display:none;align-items:center;gap:9px;
     background:rgba(255,93,108,.16);border:1px solid var(--danger);color:#ffd2d7;border-radius:12px;padding:8px 15px;font-size:13px;font-weight:600}
   #banner .l{width:9px;height:9px;border-radius:50%;background:var(--danger);animation:pulse 1.2s infinite}
+  #recind{position:fixed;top:72px;left:12px;z-index:19;display:none;background:rgba(255,93,108,.16);border:1px solid var(--danger);color:#ffd2d7;border-radius:20px;padding:6px 12px;font-size:12px;font-weight:700}
   #knock{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);z-index:18;display:none;align-items:center;gap:12px;
     background:rgba(22,29,46,.96);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:13px}
   #knock b{color:#fff}
@@ -62,9 +63,11 @@
   <button class="btn" id="btnCam" title="Your camera (LiveKit)" style="display:none">🎥</button>
   <div class="seg" id="rangeSeg"><button data-m="quiet">Quiet</button><button data-m="normal" class="active">Normal</button><button data-m="megaphone">Mega</button></div>
   <button class="btn live" id="btnBroadcast">📢 Broadcast</button>
+  <button class="btn" id="btnRec" title="Record the room (LiveKit Egress)">⏺ Rec</button>
   <button class="btn active" id="btnLinks">◠ Links</button>
 </div>
 <div id="banner"><span class="l"></span><span id="bannerText"></span></div>
+<div id="recind"></div>
 <div id="knock"><span id="knockText"></span><button class="btn" id="knockBtn">Knock</button></div>
 <div id="toasts"></div>
 <div id="hint"><b>Move</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>/click · open a <b>2nd tab</b> to meet yourself · knock on doors · click the <b>screen</b> · 📢 to talk floor-wide.</div>
@@ -90,7 +93,7 @@
 
   // ---------- State ----------
   let WORLD={w:2200,h:1500},world=null,myId=null;
-  let doors={},media={playing:true,pos:0};
+  let doors={},media={playing:true,pos:0},recording={on:false,by:null},myEgressId=null;
   const me={x:880,y:900,facing:0};
   const peers=new Map();        // id -> {x,y,facing,name,status,talking,bcast,rx,ry}
   const cam={x:me.x,y:me.y,zoom:1};
@@ -133,7 +136,7 @@
       if(m.t==='welcome'){myId=m.id;world=m.world;WORLD={w:world.w,h:world.h};me.x=m.you.x;me.y=m.you.y;cam.x=me.x;cam.y=me.y;
         world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});initLiveKit();}
       else if(m.t==='snapshot'){
-        doors=m.doors||doors; if(m.media)media=m.media;
+        doors=m.doors||doors; if(m.media)media=m.media; if(m.recording)recording=m.recording;
         const seen=new Set();
         for(const p of m.players){if(p.id===myId){seen.add(p.id);continue;}seen.add(p.id);
           let e=peers.get(p.id);if(!e){e={rx:p.x,ry:p.y};peers.set(p.id,e);}
@@ -431,6 +434,7 @@
 
   // ---------- Banner / knock ----------
   const banner=document.getElementById('banner'),bannerText=document.getElementById('bannerText');
+  const recindEl=document.getElementById('recind'),btnRec=document.getElementById('btnRec');
   const knockEl=document.getElementById('knock'),knockText=document.getElementById('knockText'),knockBtn=document.getElementById('knockBtn');
   let activeDoor=null;
   function updateUI(){
@@ -438,6 +442,10 @@
     let bc=[...peers.values()].filter(e=>e.bcast).map(e=>e.name);if(myBcast)bc.unshift('You');
     if(bc.length){banner.style.display='flex';bannerText.textContent=bc.join(', ')+(bc.length>1?' are':' is')+' broadcasting to the floor';}
     else banner.style.display='none';
+    // recording indicator (consent/transparency — spec 6.17)
+    recindEl.style.display=recording.on?'block':'none';
+    if(recording.on)recindEl.textContent='🔴 REC'+(recording.by?(' · '+recording.by):'');
+    btnRec.classList.toggle('active',recording.on);
     // knock prompt
     if(!world){knockEl.style.display='none';return;}
     const myRoom=roomAtPt(me.x,me.y);let found=null;
@@ -472,6 +480,23 @@
     const on=!lkRoom.localParticipant.isMicrophoneEnabled;lkRoom.localParticipant.setMicrophoneEnabled(on);this.classList.toggle('active',on);toast(on?'🎤 Mic on':'🎤 Mic off');});
   document.getElementById('btnCam').addEventListener('click',function(){if(!lkActive||!lkRoom)return;
     const on=!lkRoom.localParticipant.isCameraEnabled;lkRoom.localParticipant.setCameraEnabled(on);this.classList.toggle('active',on);if(!on)localVideoEl=null;toast(on?'🎥 Camera on':'🎥 Camera off');});
+  btnRec.addEventListener('click',async function(){
+    const turningOn=!recording.on;
+    if(turningOn){
+      if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'recording',on:true}));  // instant 🔴 indicator for everyone
+      toast('⏺ Recording — everyone now sees the indicator');
+      try{const res=await fetch(API_BASE+'/livekit/egress/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({room:'floor:default'})});
+        if(!res.ok)throw new Error(await res.text());const j=await res.json();myEgressId=j.egressId;
+        if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'recording',on:true,egressId:j.egressId}));
+        toast('🔴 Capturing to '+(j.filepath||'storage'));}
+      catch(e){toast('Indicator on — file capture needs egress storage (LiveKit Cloud + S3). See README.');}
+    }else{
+      if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'recording',on:false}));
+      toast('⏹ Recording stopped');
+      if(myEgressId){try{await fetch(API_BASE+'/livekit/egress/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({egressId:myEgressId})});}catch(_){}}
+      myEgressId=null;
+    }
+  });
 
   // ---------- Start ----------
   let last=performance.now(),acc=0;

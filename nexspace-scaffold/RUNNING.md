@@ -62,6 +62,12 @@ You should see live video in the avatar bubbles and hear real voice that pans/fa
 - **Native binary:** download `livekit-server` for Windows from the LiveKit releases, run `livekit-server --dev` (ws://localhost:7880, key `devkey`, secret `secret` — these are the commented defaults in `.env.example`).
 - **Docker:** start Docker Desktop, then `docker compose up -d livekit` from the scaffold root.
 
+## 3b. Recording (optional)
+
+Click **⏺ Rec** in the toolbar. Everyone instantly sees a 🔴 **REC** indicator (consent/transparency).
+For the actual MP4 to be written, recording uses **LiveKit Egress**, which needs storage:
+add `S3_*` (S3 / Cloudflare R2 / MinIO) to `apps\api\.env` — on **LiveKit Cloud** egress is built-in, so the bucket is all that's missing. Without it, the indicator still works but no file is saved (you'll get a toast). Details in `apps/api/README.md`.
+
 ## 4. Editor (optional)
 
 Open **http://localhost:8787/editor.html**, drag furniture / move rooms, **Save to API** (writes to SQLite).
