@@ -6,6 +6,7 @@
 import { spawn } from "node:child_process";
 import { WebSocket } from "ws";
 import crypto from "node:crypto";
+import http from "node:http";
 
 const PORT = 8799;
 const SECRET = "nexspace-dev-secret-change-me"; // matches the realtime server's dev default
@@ -25,8 +26,19 @@ function sign(payload) {
 }
 const adminToken = sign({ sub: "u-admin", name: "Admin Ada", role: "admin" });
 
+// webhook receiver — captures outbound events from the realtime server
+const WHPORT = 8798;
+const API_KEY = "nexspace-demo-key";
+const hooks = [];
+const hookServer = http.createServer((req, res) => {
+  let b = ""; req.on("data", (d) => (b += d));
+  req.on("end", () => { hooks.push({ event: req.headers["x-nexspace-event"], sig: req.headers["x-nexspace-signature"], body: b }); res.writeHead(200); res.end("ok"); });
+});
+await new Promise((r) => hookServer.listen(WHPORT, r));
+
 const server = spawn(process.execPath, ["apps/realtime/server.js"], {
-  env: { ...process.env, PORT: String(PORT) }, stdio: ["ignore", "pipe", "pipe"],
+  env: { ...process.env, PORT: String(PORT), WEBHOOK_URL: `http://localhost:${WHPORT}/hook`, PUBLIC_API_KEY: API_KEY },
+  stdio: ["ignore", "pipe", "pipe"],
 });
 server.stderr.on("data", (d) => process.stderr.write(d));
 await new Promise((res, rej) => {
@@ -107,11 +119,25 @@ try {
   const gRes = await fetch(`http://localhost:${PORT}/analytics`);
   (gRes.status === 403) ? ok("guest /analytics denied (403)") : bad("guest /analytics not denied");
 
+  // public API (6.18) — key required
+  const pRes = await fetch(`http://localhost:${PORT}/api/v1/presence`, { headers: { "x-api-key": API_KEY } });
+  const pJson = pRes.ok ? await pRes.json() : {};
+  (pRes.status === 200 && Array.isArray(pJson.users) && pJson.online >= 1) ? ok("public API /presence returns users (with key)") : bad("public API /presence failed");
+  const nRes = await fetch(`http://localhost:${PORT}/api/v1/presence`);
+  (nRes.status === 401) ? ok("public API rejects missing X-API-Key (401)") : bad("public API not gated");
+
+  // webhooks (6.18) — user.joined fired with a valid HMAC signature
+  const joined = hooks.find((h) => h.event === "user.joined");
+  if (joined) {
+    const expected = crypto.createHmac("sha256", API_KEY).update(joined.body).digest("hex");
+    (joined.sig === expected) ? ok("webhook user.joined fired with valid HMAC signature") : bad("webhook signature mismatch");
+  } else bad("no user.joined webhook received");
+
   admin.ws.close(); guest.ws.close(); await wait(250);
 } catch (e) {
   bad("exception: " + e.message);
 } finally {
-  server.kill();
+  server.kill(); hookServer.close();
 }
 
 console.log("\n" + (fails ? `SMOKE FAILED — ${fails} assertion(s)` : "SMOKE PASSED ✓"));

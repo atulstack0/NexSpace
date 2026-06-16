@@ -37,6 +37,16 @@ function verifyJWT(token) {
   try { const p = JSON.parse(Buffer.from(parts[1], "base64url").toString()); if (p.exp && p.exp < Date.now() / 1000) return null; return p; } catch { return null; }
 }
 
+// ---------- Public API + webhooks (spec 6.18) ----------
+const PUBLIC_API_KEY = process.env.PUBLIC_API_KEY || "nexspace-demo-key";
+const WEBHOOK_URL = process.env.WEBHOOK_URL || "";
+function fireWebhook(event, data) {
+  if (!WEBHOOK_URL) return;
+  const body = JSON.stringify({ event, data, ts: Date.now() });
+  const signature = crypto.createHmac("sha256", PUBLIC_API_KEY).update(body).digest("hex"); // verify with HMAC-SHA256(body, key)
+  fetch(WEBHOOK_URL, { method: "POST", headers: { "Content-Type": "application/json", "X-NexSpace-Event": event, "X-NexSpace-Signature": signature }, body }).catch(() => {});
+}
+
 // ---------- Authoritative world (hardcoded here; loaded from DB in apps/api) ----------
 const WORLD = { w: 2200, h: 1500 };
 let obstacles = [
@@ -105,6 +115,16 @@ const server = http.createServer((req, res) => {
     if (!claims || rank(claims.role) < RANK.admin) { res.writeHead(403, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "admin required" })); return; }
     res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify(analyticsSnapshot())); return;
   }
+  if (urlPath.startsWith("/api/v1/")) { // public REST API (spec 6.18) — X-API-Key gated
+    if ((req.headers["x-api-key"] || "") !== PUBLIC_API_KEY) return json(res, { error: "invalid or missing X-API-Key" }, 401);
+    if (urlPath === "/api/v1/health") return json(res, { ok: true, online: clients.size });
+    if (urlPath === "/api/v1/presence") {
+      const users = [...clients.values()].map((p) => { const r = rooms.find((rm) => inRoom(p, rm)); return { id: p.id, name: p.name, role: p.role, status: p.status, x: Math.round(p.x), y: Math.round(p.y), room: r ? r.id : null }; });
+      return json(res, { online: users.length, users });
+    }
+    if (urlPath === "/api/v1/floor") return json(res, { width: WORLD.w, height: WORLD.h, rooms: rooms.map((r) => ({ id: r.id, name: r.name })), objects: obstacles.length, mediaWall: { title: mediaWall.title, playing: mediaWall.playing } });
+    return json(res, { error: "not found" }, 404);
+  }
   const safe = path.normalize(urlPath).replace(/^(\.\.[/\\])+/, "");
   const file = path.join(WEB_DIR, safe);
   if (!file.startsWith(WEB_DIR)) { res.writeHead(403); res.end("Forbidden"); return; }
@@ -139,6 +159,7 @@ wss.on("connection", (ws) => {
         status: "available", talking: m.talking !== false, bcast: false };
       clients.set(ws, player);
       A.sessions++; if (clients.size > A.peak) A.peak = clients.size;
+      fireWebhook("user.joined", { id, name, role });
       send(ws, { t: "welcome", id, world: worldForClient(), you: { ...player } });
       console.log(`+ ${player.name} (${id}) [${role}] — ${clients.size} online`);
       return;
@@ -181,7 +202,7 @@ wss.on("connection", (ws) => {
     const p = clients.get(ws);
     if (p && p.joinedAt) { A.totalMs += Date.now() - p.joinedAt; A.closed++; }
     clients.delete(ws);
-    if (p) console.log(`- ${p.name} (${p.id}) — ${clients.size} online`);
+    if (p) { fireWebhook("user.left", { id: p.id, name: p.name }); console.log(`- ${p.name} (${p.id}) — ${clients.size} online`); }
   });
 });
 
@@ -203,6 +224,7 @@ setInterval(() => {
 }, 5000);
 
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
+function json(res, obj, code = 200) { res.writeHead(code, { "Content-Type": "application/json" }); res.end(JSON.stringify(obj)); }
 function deny(ws, action, need) { send(ws, { t: "denied", action, need }); } // RBAC refusal feedback
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 

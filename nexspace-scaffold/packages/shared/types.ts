@@ -123,3 +123,16 @@ export interface SnapshotMsg {
   recording: { on: boolean; by: string | null; egressId?: string | null }; // shared recording indicator (6.17)
 }
 export type ServerMsg = WelcomeMsg | SnapshotMsg | DeniedMsg | WorldUpdateMsg;
+
+// ====================================================================
+// Public API + webhooks (spec §6.18). See docs/PUBLIC_API.md.
+// ====================================================================
+export interface PublicPresenceUser {
+  id: string; name: string; role: string; status: PresenceStatus;
+  x: number; y: number; room: string | null;
+}
+export interface WebhookEvent {
+  event: "user.joined" | "user.left";
+  data: Record<string, unknown>;
+  ts: number;
+}
