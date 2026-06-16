@@ -37,7 +37,7 @@ export class LivekitService {
     // Where the file lands: S3-compatible storage if configured (required for LiveKit Cloud);
     // otherwise the egress worker's local/mounted disk (self-hosted egress).
     if (process.env.S3_BUCKET) {
-      file.output = {
+      (file as any).output = {           // oneof shape varies across SDK minors — cast to stay build-safe
         case: "s3",
         value: new S3Upload({
           accessKey: process.env.S3_ACCESS_KEY,

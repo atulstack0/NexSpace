@@ -9,7 +9,13 @@
   ],
   "scripts": {
     "start": "npm --workspace @nexspace/realtime start",
-    "dev": "npm --workspace @nexspace/realtime run dev"
+    "dev": "npm --workspace @nexspace/realtime run dev",
+    "verify": "node scripts/verify.mjs",
+    "test": "node scripts/realtime.smoke.mjs",
+    "check": "npm run verify && npm test"
+  },
+  "devDependencies": {
+    "ws": "^8.18.0"
   },
   "engines": {
     "node": ">=18"

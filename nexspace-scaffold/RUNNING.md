@@ -8,6 +8,26 @@ You need only **Node 18+** (you have it). Two terminals.
 
 ---
 
+## 0. Verify / test the build (run after every change)
+
+Once, from the scaffold root:
+
+```cmd
+cd C:\Users\chat360it1\Claude\Projects\NexSpace\nexspace-scaffold
+npm install        :: sets up workspaces + the test harness (ws)
+```
+
+Then any time code changes:
+
+```cmd
+npm run check      :: syntax-checks server + client JS, type-checks the API, then runs the realtime smoke test
+```
+
+- `npm run verify` — fast: `node --check` on the realtime server and the inline client JS + `tsc --noEmit` on the API.
+- `npm test` — boots the realtime server on a test port and connects two WebSocket clients to assert join, position sync, recording sync, and door-knock.
+
+Green here = the build is structurally sound before you start the servers below. (Run `apps/api` `npm run prisma:generate` first so the API type-check has the Prisma client.)
+
 ## 1. API — SQLite, migrate, seed, run  (Terminal A)
 
 ```cmd
