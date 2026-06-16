@@ -30,6 +30,7 @@
     background:rgba(255,93,108,.16);border:1px solid var(--danger);color:#ffd2d7;border-radius:12px;padding:8px 15px;font-size:13px;font-weight:600}
   #banner .l{width:9px;height:9px;border-radius:50%;background:var(--danger);animation:pulse 1.2s infinite}
   #recind{position:fixed;top:72px;left:12px;z-index:19;display:none;background:rgba(255,93,108,.16);border:1px solid var(--danger);color:#ffd2d7;border-radius:20px;padding:6px 12px;font-size:12px;font-weight:700}
+  #statusSel{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:6px 8px;font-size:13px;cursor:pointer}
   #knock{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);z-index:18;display:none;align-items:center;gap:12px;
     background:rgba(22,29,46,.96);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:13px}
   #knock b{color:#fff}
@@ -65,6 +66,13 @@
   <div class="seg" id="rangeSeg"><button data-m="quiet">Quiet</button><button data-m="normal" class="active">Normal</button><button data-m="megaphone">Mega</button></div>
   <button class="btn live" id="btnBroadcast">📢 Broadcast</button>
   <button class="btn" id="btnRec" title="Record the room (LiveKit Egress)">⏺ Rec</button>
+  <select id="statusSel" title="Your status (6.19)">
+    <option value="available">🟢 Available</option>
+    <option value="busy">🟠 Busy</option>
+    <option value="dnd">🔴 Do Not Disturb</option>
+    <option value="inMeeting">🔵 In a meeting</option>
+    <option value="away">⚪ Away</option>
+  </select>
   <button class="btn active" id="btnLinks">◠ Links</button>
 </div>
 <div id="banner"><span class="l"></span><span id="bannerText"></span></div>
@@ -107,8 +115,10 @@
   // LiveKit (optional real media). API runs on :3001 (same host as the page).
   const API_BASE=location.protocol+'//'+location.hostname+':3001';
   let lkRoom=null,lkActive=false,localVideoEl=null,myToken=null,myRole='guest';
+  let myStatus='available',lastActivity=Date.now(),autoAway=false;
   const lkAudio=new Map(),lkVideo=new Map();
   const hsl=h=>'hsl('+h+' 70% 60%)';
+  const STATUS_COLOR={available:'#39d3a6',away:'#8a96b3',busy:'#ffb454',dnd:'#ff5d6c',inMeeting:'#5b8cff'};
   const hueOf=id=>{let h=0;for(let i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))%360;return h;};
   let frame=0;
 
@@ -360,7 +370,7 @@
       ctx.fillStyle='#0b1019';ctx.font='700 16px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(isMe?'Y':(name[0]||'?'),x,y+1);
     }
     ctx.lineWidth=3;ctx.strokeStyle=isMe?'#fff':'rgba(255,255,255,.7)';ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.stroke();
-    if(status){ctx.beginPath();ctx.fillStyle=status==='available'?'#39d3a6':status==='busy'?'#ffb454':'#8a96b3';ctx.arc(x+12,y-12,5,0,7);ctx.fill();ctx.strokeStyle='#141b2c';ctx.lineWidth=2;ctx.stroke();}
+    if(status){ctx.beginPath();ctx.fillStyle=STATUS_COLOR[status]||'#8a96b3';ctx.arc(x+12,y-12,5,0,7);ctx.fill();ctx.strokeStyle='#141b2c';ctx.lineWidth=2;ctx.stroke();}
     ctx.textBaseline='alphabetic';ctx.font='600 12px sans-serif';const tw=ctx.measureText(name).width;
     ctx.fillStyle='rgba(8,11,18,.7)';rr(x-tw/2-7,y+21,tw+14,18,7);ctx.fill();ctx.fillStyle='#e8edf7';ctx.textAlign='center';ctx.fillText(name,x,y+34);ctx.globalAlpha=1;}
   function drawMinimap(){if(!world)return;const W=mini.width,H=mini.height,sx=W/WORLD.w,sy=H/WORLD.h;
@@ -453,6 +463,7 @@
     recindEl.style.display=recording.on?'block':'none';
     if(recording.on)recindEl.textContent='🔴 REC'+(recording.by?(' · '+recording.by):'');
     btnRec.classList.toggle('active',recording.on);
+    if(!autoAway&&myStatus==='available'&&Date.now()-lastActivity>60000){autoAway=true;setStatus('away');} // idle auto-away (6.19)
     // knock prompt
     if(!world){knockEl.style.display='none';return;}
     const myRoom=roomAtPt(me.x,me.y);let found=null;
@@ -475,6 +486,9 @@
   // ---------- Toolbar ----------
   document.getElementById('btnMic').addEventListener('click',function(){muted=!muted;this.textContent=muted?'🔇':'🔊';this.classList.toggle('danger',muted);this.classList.toggle('active',muted);});
   document.getElementById('btnLinks').addEventListener('click',function(){showLinks=!showLinks;this.classList.toggle('active',showLinks);});
+  function setStatus(s){myStatus=s;const sel=document.getElementById('statusSel');if(sel)sel.value=s;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'state',status:s}));}
+  document.getElementById('statusSel').addEventListener('change',function(){autoAway=false;setStatus(this.value);});
+  ['mousemove','keydown','mousedown','wheel'].forEach(ev=>addEventListener(ev,()=>{lastActivity=Date.now();if(autoAway){autoAway=false;setStatus('available');}}));
   document.querySelectorAll('#rangeSeg button').forEach(b=>b.addEventListener('click',function(){
     document.querySelectorAll('#rangeSeg button').forEach(x=>x.classList.remove('active'));this.classList.add('active');mode=this.dataset.m;applyRange();}));
   document.querySelectorAll('#viewSeg button').forEach(b=>b.addEventListener('click',function(){

@@ -60,6 +60,14 @@ try {
   await wait(450);
   (guest.last?.players?.some((p) => p.id === admin.id && Math.abs(p.x - 500) < 5)) ? ok("position syncs between clients") : bad("position not synced");
 
+  // presence/status sync (6.19) — valid status applies, invalid is ignored
+  admin.ws.send(JSON.stringify({ t: "state", status: "busy" }));
+  await wait(300);
+  (guest.last?.players?.find((p) => p.id === admin.id)?.status === "busy") ? ok("status (busy) syncs to other clients") : bad("status not synced");
+  admin.ws.send(JSON.stringify({ t: "state", status: "bogus" }));
+  await wait(300);
+  (guest.last?.players?.find((p) => p.id === admin.id)?.status === "busy") ? ok("invalid status is rejected (stays busy)") : bad("invalid status was accepted");
+
   // RBAC — guest cannot record
   guest.ws.send(JSON.stringify({ t: "recording", on: true }));
   await wait(350);

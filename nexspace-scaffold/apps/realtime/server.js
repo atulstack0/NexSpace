@@ -123,7 +123,7 @@ wss.on("connection", (ws) => {
       if (Number.isFinite(m.y)) p.y = clamp(m.y, 16, WORLD.h - 16);
       if (Number.isFinite(m.facing)) p.facing = m.facing;
     } else if (m.t === "state") {
-      if (m.status) p.status = m.status;
+      if (m.status && ["available", "away", "busy", "dnd", "inMeeting"].includes(m.status)) p.status = m.status;
       if ("talking" in m) p.talking = !!m.talking;
     } else if (m.t === "broadcast") {
       if (m.on && rank(p.role) < RANK.member) return deny(ws, "broadcast", "member");
