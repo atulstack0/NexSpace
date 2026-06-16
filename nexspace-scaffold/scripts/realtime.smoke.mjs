@@ -49,13 +49,14 @@ await new Promise((res, rej) => {
 function join(name, token) {
   return new Promise((resolve) => {
     const ws = new WebSocket(`ws://localhost:${PORT}`);
-    const st = { ws, name, id: null, role: null, last: null, denied: [] };
+    const st = { ws, name, id: null, role: null, last: null, denied: [], rateLimited: false };
     ws.on("open", () => ws.send(JSON.stringify({ t: "join", name, token })));
     ws.on("message", (d) => {
       const m = JSON.parse(d.toString());
       if (m.t === "welcome") { st.id = m.id; st.role = m.you.role; resolve(st); }
       if (m.t === "snapshot") st.last = m;
       if (m.t === "denied") st.denied.push(m.action);
+      if (m.t === "rateLimited") st.rateLimited = true;
     });
     ws.on("error", (e) => bad("ws error: " + e.message));
   });
@@ -132,6 +133,18 @@ try {
     const expected = crypto.createHmac("sha256", API_KEY).update(joined.body).digest("hex");
     (joined.sig === expected) ? ok("webhook user.joined fired with valid HMAC signature") : bad("webhook signature mismatch");
   } else bad("no user.joined webhook received");
+
+  // server-authoritative movement (§8) — an instant teleport is clamped to max speed
+  admin.ws.send(JSON.stringify({ t: "move", x: 600, y: 600 }));
+  admin.ws.send(JSON.stringify({ t: "move", x: 2000, y: 1400 })); // immediate → dt≈0 → clamped
+  await wait(300);
+  const ax = guest.last?.players?.find((p) => p.id === admin.id)?.x ?? 0;
+  (ax < 900) ? ok("server clamps teleport (anti-cheat), x=" + Math.round(ax)) : bad("teleport NOT clamped (x=" + Math.round(ax) + ")");
+
+  // rate limiting (§8) — a burst triggers a rateLimited notice
+  for (let i = 0; i < 200; i++) guest.ws.send(JSON.stringify({ t: "state", status: "available" }));
+  await wait(400);
+  (guest.rateLimited === true) ? ok("message flood is rate-limited") : bad("rate limit not enforced");
 
   admin.ws.close(); guest.ws.close(); await wait(250);
 } catch (e) {

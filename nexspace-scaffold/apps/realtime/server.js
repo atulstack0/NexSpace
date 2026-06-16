@@ -20,6 +20,8 @@ const crypto = require("crypto");
 
 const PORT = process.env.PORT || 8787;
 const TICK_HZ = 15;
+const MAX_SPEED = 520;   // px/s — server-authoritative movement cap (> client sprint; anti-teleport, §8)
+const RATE_LIMIT = 80;   // max messages/sec per connection (abuse protection, §8)
 const WEB_DIR = path.join(__dirname, "..", "web");
 
 // ---------- Auth (RBAC) — verifies the dependency-free JWT minted by the API ----------
@@ -154,7 +156,7 @@ wss.on("connection", (ws) => {
       const claims = verifyJWT(m.token);
       const role = claims?.role || "guest";
       const name = claims?.name || String(m.name || "Guest").slice(0, 16) || "Guest";
-      const player = { id, name, role, joinedAt: Date.now(),
+      const player = { id, name, role, joinedAt: Date.now(), lastMoveAt: Date.now(),
         x: 820 + Math.random() * 140, y: 860 + Math.random() * 120, facing: 0,
         status: "available", talking: m.talking !== false, bcast: false };
       clients.set(ws, player);
@@ -166,9 +168,21 @@ wss.on("connection", (ws) => {
     }
     if (!p) return;
 
+    // per-connection rate limit (abuse protection, §8)
+    const _now = Date.now();
+    if (_now - (p.rlStart || 0) > 1000) { p.rlStart = _now; p.rlCount = 0; p.rlNotified = false; }
+    p.rlCount = (p.rlCount || 0) + 1;
+    if (p.rlCount > RATE_LIMIT) { if (!p.rlNotified) { p.rlNotified = true; send(ws, { t: "rateLimited" }); } return; }
+
     if (m.t === "move") {
-      if (Number.isFinite(m.x)) p.x = clamp(m.x, 16, WORLD.w - 16);
-      if (Number.isFinite(m.y)) p.y = clamp(m.y, 16, WORLD.h - 16);
+      // server-authoritative: clamp to MAX_SPEED since this client's last update (anti-teleport)
+      const dt = Math.min(1, (_now - (p.lastMoveAt || _now)) / 1000);
+      p.lastMoveAt = _now;
+      let nx = Number.isFinite(m.x) ? clamp(m.x, 16, WORLD.w - 16) : p.x;
+      let ny = Number.isFinite(m.y) ? clamp(m.y, 16, WORLD.h - 16) : p.y;
+      const dx = nx - p.x, dy = ny - p.y, dist = Math.hypot(dx, dy), maxDist = MAX_SPEED * dt + 8;
+      if (dist > maxDist) { const s = maxDist / dist; nx = p.x + dx * s; ny = p.y + dy * s; }
+      p.x = nx; p.y = ny;
       if (Number.isFinite(m.facing)) p.facing = m.facing;
     } else if (m.t === "state") {
       if (m.status && ["available", "away", "busy", "dnd", "inMeeting"].includes(m.status)) p.status = m.status;
