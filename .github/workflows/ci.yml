@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:   # lets you run it manually from the Actions tab
+
+concurrency:           # a newer push cancels an in-progress run on the same ref
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:
