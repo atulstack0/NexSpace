@@ -24,18 +24,37 @@ Each node:
         events:   nexspace:event
 ```
 
-## Run two nodes locally
+## Run two nodes locally (no Docker required)
 
+You **don't have to** run this locally — the `redis-multinode` CI job starts Redis and verifies
+multi-node behavior on every push. But to see it on your machine, you just need a Redis server.
+Pick one:
+
+**A. Redis in WSL (recommended — no Docker):**
+```bash
+# in WSL/Ubuntu
+sudo apt-get update && sudo apt-get install -y redis-server
+sudo service redis-server start      # or: redis-server --daemonize yes
+redis-cli ping                       # → PONG
+```
+A `redis-server` in WSL is reachable from Windows at `localhost:6379` (WSL2 localhost forwarding).
+
+**B. Hosted Redis (zero install):** create a free DB at https://upstash.com (or any Redis host) and use its URL.
+
+**C. Memurai (native Windows Redis):** https://www.memurai.com
+
+Then start two instances pointing at it (PowerShell):
 ```powershell
-# start Redis (Docker), then two realtime instances:
-docker run -d -p 6379:6379 redis:7
-# terminal 1
+# REDIS_URL = redis://localhost:6379 (A/C) or your hosted rediss://… URL (B)
 cd nexspace-scaffold\apps\realtime; $env:REDIS_URL="redis://localhost:6379"; $env:PORT="8901"; npm start
-# terminal 2
+# new window:
 cd nexspace-scaffold\apps\realtime; $env:REDIS_URL="redis://localhost:6379"; $env:PORT="8902"; npm start
 ```
 
-Open one office tab against `:8901` and another against `:8902` — you'll see each other.
+Open one office tab on `:8901` and another on `:8902` — you'll see each other across nodes.
+
+> If `docker run … redis` fails with `docker_engine ... cannot find the file`, Docker Desktop just
+> isn't running — use option A or B instead; Docker is not required.
 
 ## Tested in CI
 
