@@ -16,10 +16,26 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { WebSocketServer } = require("ws");
+const crypto = require("crypto");
 
 const PORT = process.env.PORT || 8787;
 const TICK_HZ = 15;
 const WEB_DIR = path.join(__dirname, "..", "web");
+
+// ---------- Auth (RBAC) — verifies the dependency-free JWT minted by the API ----------
+const JWT_SECRET = process.env.JWT_SECRET || "nexspace-dev-secret-change-me";
+const RANK = { guest: 0, member: 1, admin: 2, owner: 3 };
+const rank = (r) => RANK[r] || 0;
+function verifyJWT(token) {
+  if (!token) return null;
+  const t = token.startsWith("Bearer ") ? token.slice(7) : token;
+  const parts = t.split("."); if (parts.length !== 3) return null;
+  const data = parts[0] + "." + parts[1];
+  const exp = crypto.createHmac("sha256", JWT_SECRET).update(data).digest("base64url");
+  if (parts[2].length !== exp.length) return null;
+  if (!crypto.timingSafeEqual(Buffer.from(parts[2]), Buffer.from(exp))) return null;
+  try { const p = JSON.parse(Buffer.from(parts[1], "base64url").toString()); if (p.exp && p.exp < Date.now() / 1000) return null; return p; } catch { return null; }
+}
 
 // ---------- Authoritative world (hardcoded here; loaded from DB in apps/api) ----------
 const WORLD = { w: 2200, h: 1500 };
@@ -81,12 +97,15 @@ wss.on("connection", (ws) => {
 
     if (m.t === "join") {
       const id = "u" + (nextId++);
-      const player = { id, name: String(m.name || "Guest").slice(0, 16) || "Guest",
+      const claims = verifyJWT(m.token);
+      const role = claims?.role || "guest";
+      const name = claims?.name || String(m.name || "Guest").slice(0, 16) || "Guest";
+      const player = { id, name, role,
         x: 820 + Math.random() * 140, y: 860 + Math.random() * 120, facing: 0,
         status: "available", talking: m.talking !== false, bcast: false };
       clients.set(ws, player);
-      send(ws, { t: "welcome", id, world: worldForClient(), you: player });
-      console.log(`+ ${player.name} (${id}) — ${clients.size} online`);
+      send(ws, { t: "welcome", id, world: worldForClient(), you: { ...player } });
+      console.log(`+ ${player.name} (${id}) [${role}] — ${clients.size} online`);
       return;
     }
     if (!p) return;
@@ -99,10 +118,13 @@ wss.on("connection", (ws) => {
       if (m.status) p.status = m.status;
       if ("talking" in m) p.talking = !!m.talking;
     } else if (m.t === "broadcast") {
+      if (m.on && rank(p.role) < RANK.member) return deny(ws, "broadcast", "member");
       p.bcast = !!m.on;
     } else if (m.t === "media") {
       mediaWall.playing = !!m.playing;
     } else if (m.t === "door") {
+      if (rank(p.role) < RANK.member) return deny(ws, "change doors", "member");
+      if (m.state === "locked" && rank(p.role) < RANK.admin) return deny(ws, "lock doors", "admin");
       const room = rooms.find(r => r.id === m.roomId);
       if (room && ["open", "closed", "locked"].includes(m.state)) room.door.state = m.state;
     } else if (m.t === "knock") {
@@ -110,10 +132,12 @@ wss.on("connection", (ws) => {
       if (!room) return;
       const d = room.door;
       if (d.state === "open" || d.knocking) return;
+      if (d.state === "locked" && rank(p.role) < RANK.member) return deny(ws, "enter the locked room", "member");
       d.knocking = true;
       const occupied = [...clients.values()].some(q => inRoom(q, room));
       setTimeout(() => { d.knocking = false; if (occupied) d.state = "open"; }, 1300);
     } else if (m.t === "recording") {
+      if (rank(p.role) < RANK.admin) return deny(ws, "record", "admin");
       recording = m.on ? { on: true, by: p.name, egressId: m.egressId || null } : { on: false, by: null, egressId: null };
     }
   });
@@ -131,13 +155,14 @@ setInterval(() => {
   const now = Date.now(), dt = (now - lastTick) / 1000; lastTick = now;
   if (mediaWall.playing) { mediaWall.pos += dt; if (mediaWall.pos > mediaWall.dur) mediaWall.pos = 0; }
   if (clients.size === 0) return;
-  const players = [...clients.values()].map(p => ({ id: p.id, name: p.name, x: p.x, y: p.y, facing: p.facing, status: p.status, talking: p.talking, bcast: p.bcast }));
+  const players = [...clients.values()].map(p => ({ id: p.id, name: p.name, x: p.x, y: p.y, facing: p.facing, status: p.status, talking: p.talking, bcast: p.bcast, role: p.role }));
   const doors = {}; for (const r of rooms) doors[r.id] = r.door.state;
   const snap = JSON.stringify({ t: "snapshot", players, doors, media: { playing: mediaWall.playing, pos: Math.round(mediaWall.pos) }, recording });
   for (const ws of clients.keys()) if (ws.readyState === 1) ws.send(snap);
 }, 1000 / TICK_HZ);
 
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
+function deny(ws, action, need) { send(ws, { t: "denied", action, need }); } // RBAC refusal feedback
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
 // Optionally load the authoritative world from the API (apps/api). Falls back

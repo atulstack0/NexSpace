@@ -89,7 +89,7 @@ export interface WorldBlob {
 }
 
 // ---- Client → Server ----
-export interface JoinMsg      { t: "join"; name: string; talking?: boolean; }
+export interface JoinMsg      { t: "join"; name: string; token?: string; talking?: boolean; } // token = JWT from /auth/login (6.14)
 export interface MoveMsg      { t: "move"; x: number; y: number; facing?: number; }
 export interface StateMsg     { t: "state"; status?: PresenceStatus; talking?: boolean; }
 export interface BroadcastMsg { t: "broadcast"; on: boolean; }              // talk floor-wide (spec 6.5)
@@ -109,8 +109,10 @@ export interface PlayerSnapshot {
   status: PresenceStatus;
   talking: boolean;
   bcast: boolean;          // broadcasting to the whole floor
+  role: string;            // owner | admin | member | guest (6.14)
 }
 export interface WelcomeMsg  { t: "welcome"; id: string; world: WorldBlob; you: PlayerSnapshot; }
+export interface DeniedMsg   { t: "denied"; action: string; need: string; }   // RBAC refusal (6.14)
 export interface SnapshotMsg {
   t: "snapshot";
   players: PlayerSnapshot[];
@@ -118,4 +120,4 @@ export interface SnapshotMsg {
   media: { playing: boolean; pos: number };  // shared media-wall playback (synced)
   recording: { on: boolean; by: string | null; egressId?: string | null }; // shared recording indicator (6.17)
 }
-export type ServerMsg = WelcomeMsg | SnapshotMsg;
+export type ServerMsg = WelcomeMsg | SnapshotMsg | DeniedMsg;

@@ -1,56 +1,87 @@
 // NexSpace realtime smoke test — run from the scaffold root:  npm test
-// Spawns the realtime server on a test port and connects two WebSocket clients to
-// verify the core multiplayer contract: join/welcome, position sync, recording sync,
-// and door-knock. No browser needed. Exits non-zero on failure.
+// Spawns the realtime server and connects two WebSocket clients (an admin with a
+// signed token, and a guest) to verify the core contract AND server-side RBAC:
+// join/welcome, role assignment, position sync, recording sync, and door rules.
+// No browser/DB needed. Exits non-zero on failure.
 import { spawn } from "node:child_process";
 import { WebSocket } from "ws";
+import crypto from "node:crypto";
 
 const PORT = 8799;
+const SECRET = "nexspace-dev-secret-change-me"; // matches the realtime server's dev default
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
 const ok = (m) => console.log("  ✓ " + m);
 const bad = (m) => { fails++; console.log("  ✗ " + m); };
 
+// mint a JWT the same dependency-free way the API does
+function sign(payload) {
+  const b = (s) => Buffer.from(s).toString("base64url");
+  const h = b(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const now = Math.floor(Date.now() / 1000);
+  const p = b(JSON.stringify({ ...payload, iat: now, exp: now + 7200 }));
+  const data = `${h}.${p}`;
+  return `${data}.${crypto.createHmac("sha256", SECRET).update(data).digest("base64url")}`;
+}
+const adminToken = sign({ sub: "u-admin", name: "Admin Ada", role: "admin" });
+
 const server = spawn(process.execPath, ["apps/realtime/server.js"], {
   env: { ...process.env, PORT: String(PORT) }, stdio: ["ignore", "pipe", "pipe"],
 });
 server.stderr.on("data", (d) => process.stderr.write(d));
-
-// wait for the listen log
 await new Promise((res, rej) => {
   let buf = ""; const to = setTimeout(() => rej(new Error("server did not start in time")), 8000);
   server.stdout.on("data", (d) => { buf += d.toString(); if (buf.includes("realtime")) { clearTimeout(to); res(); } });
 }).catch((e) => { console.error(e.message); server.kill(); process.exit(1); });
 
-function join(name) {
+function join(name, token) {
   return new Promise((resolve) => {
     const ws = new WebSocket(`ws://localhost:${PORT}`);
-    const st = { ws, name, id: null, last: null };
-    ws.on("open", () => ws.send(JSON.stringify({ t: "join", name })));
-    ws.on("message", (d) => { const m = JSON.parse(d.toString()); if (m.t === "welcome") { st.id = m.id; resolve(st); } if (m.t === "snapshot") st.last = m; });
-    ws.on("error", (e) => { bad("ws error: " + e.message); });
+    const st = { ws, name, id: null, role: null, last: null, denied: [] };
+    ws.on("open", () => ws.send(JSON.stringify({ t: "join", name, token })));
+    ws.on("message", (d) => {
+      const m = JSON.parse(d.toString());
+      if (m.t === "welcome") { st.id = m.id; st.role = m.you.role; resolve(st); }
+      if (m.t === "snapshot") st.last = m;
+      if (m.t === "denied") st.denied.push(m.action);
+    });
+    ws.on("error", (e) => bad("ws error: " + e.message));
   });
 }
 
 try {
-  const a = await join("Alice");
-  const b = await join("Bob");
-  (a.id && b.id) ? ok("two clients joined and received welcome+id") : bad("welcome/id missing");
+  const admin = await join("Admin Ada", adminToken);
+  const guest = await join("Bob", undefined);
+  (admin.id && guest.id) ? ok("two clients joined (welcome+id)") : bad("welcome/id missing");
+  (admin.role === "admin") ? ok("admin token → admin role") : bad("admin role not applied (got " + admin.role + ")");
+  (guest.role === "guest") ? ok("no token → guest role") : bad("guest role not applied");
 
-  a.ws.send(JSON.stringify({ t: "move", x: 500, y: 500, facing: 0 })); // 500,500 is inside the Focus Room
+  admin.ws.send(JSON.stringify({ t: "move", x: 500, y: 500, facing: 0 }));
   await wait(450);
-  (b.last?.players?.some((p) => p.id === a.id && Math.abs(p.x - 500) < 5)) ? ok("Bob sees Alice's synced position") : bad("position not synced");
+  (guest.last?.players?.some((p) => p.id === admin.id && Math.abs(p.x - 500) < 5)) ? ok("position syncs between clients") : bad("position not synced");
 
-  a.ws.send(JSON.stringify({ t: "recording", on: true }));
+  // RBAC — guest cannot record
+  guest.ws.send(JSON.stringify({ t: "recording", on: true }));
   await wait(350);
-  (b.last?.recording?.on === true) ? ok("recording flag syncs to Bob") : bad("recording not synced");
+  (guest.last?.recording?.on === false && guest.denied.includes("record")) ? ok("guest denied recording (server-enforced)") : bad("guest recording was NOT blocked");
 
-  b.ws.send(JSON.stringify({ t: "knock", roomId: "focus" })); // Alice is inside Focus → occupant admits
-  await wait(1700);
-  (b.last?.doors?.focus === "open") ? ok("knock opened Focus door (occupant present)") : bad("door knock did not open");
+  // RBAC — admin can record
+  admin.ws.send(JSON.stringify({ t: "recording", on: true }));
+  await wait(350);
+  (guest.last?.recording?.on === true) ? ok("admin recording starts → indicator syncs to guest") : bad("admin recording did not start");
+  admin.ws.send(JSON.stringify({ t: "recording", on: false }));
 
-  a.ws.close(); b.ws.close();
-  await wait(250);
+  // RBAC — guest cannot open the locked Boardroom door
+  guest.ws.send(JSON.stringify({ t: "door", roomId: "board", state: "open" }));
+  await wait(350);
+  (guest.last?.doors?.board === "locked" && guest.denied.includes("change doors")) ? ok("guest denied changing the locked door") : bad("guest door change was NOT blocked");
+
+  // RBAC — admin can open it
+  admin.ws.send(JSON.stringify({ t: "door", roomId: "board", state: "open" }));
+  await wait(350);
+  (guest.last?.doors?.board === "open") ? ok("admin opened the Boardroom door") : bad("admin could not open door");
+
+  admin.ws.close(); guest.ws.close(); await wait(250);
 } catch (e) {
   bad("exception: " + e.message);
 } finally {

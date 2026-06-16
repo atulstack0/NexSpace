@@ -42,7 +42,7 @@
   #card{width:min(470px,92vw);background:linear-gradient(180deg,var(--panel),#121828);border:1px solid var(--line);border-radius:18px;padding:28px 30px;text-align:center}
   #card .orb{width:34px;height:34px;border-radius:50%;margin:0 auto 10px;background:conic-gradient(from 200deg,var(--accent),var(--accent2),var(--accent))}
   #card h1{font-size:21px;margin:0 0 4px} #card p{color:var(--muted);font-size:13px;line-height:1.6}
-  #name{width:100%;margin:14px 0 4px;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:#0d1424;color:var(--text);font-size:15px}
+  #name,#email,#password{width:100%;margin:8px 0 0;padding:11px 13px;border-radius:10px;border:1px solid var(--line);background:#0d1424;color:var(--text);font-size:14px}
   #go{width:100%;margin-top:12px;padding:13px;border:0;border-radius:12px;font-size:15px;font-weight:700;color:#fff;cursor:pointer;background:linear-gradient(135deg,var(--accent),#7aa2ff)}
   .tip{font-size:11px;color:var(--muted);margin-top:12px}
 </style>
@@ -55,6 +55,7 @@
   <span class="brand"><span class="dot"></span>NexSpace</span>
   <span class="pill" id="conn"><b id="connText">connecting…</b></span>
   <span class="pill">online: <b id="count">1</b></span>
+  <span class="pill" id="rolePill">you: guest</span>
   <span class="sep"></span>
   <div class="seg" id="viewSeg" title="Same office, two renderers (spec 6.23)"><button data-view="2d" class="active">🗺️ 2D</button><button data-view="3d">🧊 3D</button></div>
   <span class="sep"></span>
@@ -77,8 +78,10 @@
   <div class="orb"></div><h1>Join the office</h1>
   <p>Your position syncs through the server; everyone shares the same rooms, doors, and media wall, and hears each other with spatial audio.</p>
   <input id="name" maxlength="16" placeholder="Your name" />
+  <input id="email" placeholder="Email (optional — blank = guest)" />
+  <input id="password" type="password" placeholder="Password (optional)" />
   <button id="go">Enter →</button>
-  <div class="tip">🎧 Headphones recommended · synth "voice" per peer · no mic, nothing recorded.</div>
+  <div class="tip">🎧 Headphones recommended. Demo logins: <b>admin@nexspace.dev / admin1234</b> · <b>member@nexspace.dev / member1234</b> — or leave blank to join as guest.</div>
 </div></div>
 
 <script>
@@ -103,7 +106,7 @@
   const R=()=>RANGES[mode];
   // LiveKit (optional real media). API runs on :3001 (same host as the page).
   const API_BASE=location.protocol+'//'+location.hostname+':3001';
-  let lkRoom=null,lkActive=false,localVideoEl=null;
+  let lkRoom=null,lkActive=false,localVideoEl=null,myToken=null,myRole='guest';
   const lkAudio=new Map(),lkVideo=new Map();
   const hsl=h=>'hsl('+h+' 70% 60%)';
   const hueOf=id=>{let h=0;for(let i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))%360;return h;};
@@ -129,12 +132,14 @@
     const proto=location.protocol==='https:'?'wss':'ws';
     ws=new WebSocket(proto+'://'+location.host);
     const conn=document.getElementById('conn'),ct=document.getElementById('connText');
-    ws.onopen=()=>{conn.classList.remove('bad');ct.textContent='connected';ws.send(JSON.stringify({t:'join',name}));};
+    ws.onopen=()=>{conn.classList.remove('bad');ct.textContent='connected';ws.send(JSON.stringify({t:'join',name,token:myToken}));};
     ws.onclose=()=>{conn.classList.add('bad');ct.textContent='reconnecting…';setTimeout(()=>connect(name),1500);};
     ws.onerror=()=>{conn.classList.add('bad');ct.textContent='connection error';};
     ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch{return;}
       if(m.t==='welcome'){myId=m.id;world=m.world;WORLD={w:world.w,h:world.h};me.x=m.you.x;me.y=m.you.y;cam.x=me.x;cam.y=me.y;
-        world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});initLiveKit();}
+        world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});
+        if(m.you&&m.you.role){myRole=m.you.role;const rp=document.getElementById('rolePill');if(rp)rp.textContent='you: '+myRole;}
+        initLiveKit();}
       else if(m.t==='snapshot'){
         doors=m.doors||doors; if(m.media)media=m.media; if(m.recording)recording=m.recording;
         const seen=new Set();
@@ -144,6 +149,7 @@
         for(const id of [...peers.keys()])if(!seen.has(id)){removeVoice(id);peers.delete(id);}
         document.getElementById('count').textContent=m.players.length;
       }
+      else if(m.t==='denied')toast('🔒 You need '+m.need+' role to '+m.action+'.');
     };
   }
   function sendMove(now){if(ws&&ws.readyState===1&&now-lastSend>60){lastSend=now;
@@ -502,8 +508,18 @@
   let last=performance.now(),acc=0;
   function loop(now){const dt=Math.min(0.05,(now-last)/1000);last=now;frame++;
     step(dt);sendMove(now);updateAudio();(viewMode==='3d'?render3D():draw());acc+=dt;if(acc>0.1){updateUI();acc=0;}requestAnimationFrame(loop);}
-  document.getElementById('go').addEventListener('click',()=>{const name=(document.getElementById('name').value||'Guest').slice(0,16);myName=name;
-    document.getElementById('overlay').style.display='none';startAudio();if(actx&&actx.state==='suspended')actx.resume();connect(name);requestAnimationFrame(loop);});
+  document.getElementById('go').addEventListener('click',async function(){
+    const name=(document.getElementById('name').value||'Guest').slice(0,16);
+    const email=document.getElementById('email').value.trim(),password=document.getElementById('password').value;
+    myName=name;
+    if(email&&password){
+      try{const r=await fetch(API_BASE+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+        if(r.ok){const j=await r.json();myToken=j.token;myRole=j.user.role;myName=j.user.name;localStorage.setItem('nexspace_token',myToken);}
+        else alert('Login failed — joining as guest.');}
+      catch(e){alert('Could not reach the API ('+API_BASE+') — joining as guest.');}
+    }
+    document.getElementById('rolePill').textContent='you: '+myRole;
+    document.getElementById('overlay').style.display='none';startAudio();if(actx&&actx.state==='suspended')actx.resume();connect(myName);requestAnimationFrame(loop);});
   document.getElementById('name').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('go').click();});
 })();
 </script>
