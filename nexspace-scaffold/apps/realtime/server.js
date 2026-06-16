@@ -49,6 +49,13 @@ function fireWebhook(event, data) {
   fetch(WEBHOOK_URL, { method: "POST", headers: { "Content-Type": "application/json", "X-NexSpace-Event": event, "X-NexSpace-Signature": signature }, body }).catch(() => {});
 }
 
+// Slack notifications via an incoming webhook (spec 6.18). Paste a Slack incoming-webhook URL.
+const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || "";
+function notifySlack(text) {
+  if (!SLACK_WEBHOOK_URL) return;
+  fetch(SLACK_WEBHOOK_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) }).catch(() => {});
+}
+
 // ---------- Authoritative world (hardcoded here; loaded from DB in apps/api) ----------
 const WORLD = { w: 2200, h: 1500 };
 let obstacles = [
@@ -162,6 +169,7 @@ wss.on("connection", (ws) => {
       clients.set(ws, player);
       A.sessions++; if (clients.size > A.peak) A.peak = clients.size;
       fireWebhook("user.joined", { id, name, role });
+      notifySlack("👋 " + name + " entered the office");
       send(ws, { t: "welcome", id, world: worldForClient(), you: { ...player } });
       console.log(`+ ${player.name} (${id}) [${role}] — ${clients.size} online`);
       return;
@@ -216,7 +224,7 @@ wss.on("connection", (ws) => {
     const p = clients.get(ws);
     if (p && p.joinedAt) { A.totalMs += Date.now() - p.joinedAt; A.closed++; }
     clients.delete(ws);
-    if (p) { fireWebhook("user.left", { id: p.id, name: p.name }); console.log(`- ${p.name} (${p.id}) — ${clients.size} online`); }
+    if (p) { fireWebhook("user.left", { id: p.id, name: p.name }); notifySlack("👋 " + p.name + " left the office"); console.log(`- ${p.name} (${p.id}) — ${clients.size} online`); }
   });
 });
 

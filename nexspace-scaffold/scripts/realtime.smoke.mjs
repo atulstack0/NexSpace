@@ -32,12 +32,12 @@ const API_KEY = "nexspace-demo-key";
 const hooks = [];
 const hookServer = http.createServer((req, res) => {
   let b = ""; req.on("data", (d) => (b += d));
-  req.on("end", () => { hooks.push({ event: req.headers["x-nexspace-event"], sig: req.headers["x-nexspace-signature"], body: b }); res.writeHead(200); res.end("ok"); });
+  req.on("end", () => { hooks.push({ url: req.url, event: req.headers["x-nexspace-event"], sig: req.headers["x-nexspace-signature"], body: b }); res.writeHead(200); res.end("ok"); });
 });
 await new Promise((r) => hookServer.listen(WHPORT, r));
 
 const server = spawn(process.execPath, ["apps/realtime/server.js"], {
-  env: { ...process.env, PORT: String(PORT), WEBHOOK_URL: `http://localhost:${WHPORT}/hook`, PUBLIC_API_KEY: API_KEY },
+  env: { ...process.env, PORT: String(PORT), WEBHOOK_URL: `http://localhost:${WHPORT}/hook`, SLACK_WEBHOOK_URL: `http://localhost:${WHPORT}/slack`, PUBLIC_API_KEY: API_KEY },
   stdio: ["ignore", "pipe", "pipe"],
 });
 server.stderr.on("data", (d) => process.stderr.write(d));
@@ -133,6 +133,12 @@ try {
     const expected = crypto.createHmac("sha256", API_KEY).update(joined.body).digest("hex");
     (joined.sig === expected) ? ok("webhook user.joined fired with valid HMAC signature") : bad("webhook signature mismatch");
   } else bad("no user.joined webhook received");
+
+  // Slack notification (6.18) — Slack-formatted {text} posted on join
+  const slack = hooks.find((h) => h.url && h.url.includes("/slack"));
+  let slackOk = false;
+  if (slack) { try { const j = JSON.parse(slack.body); slackOk = typeof j.text === "string" && /entered the office/.test(j.text); } catch {} }
+  slackOk ? ok("Slack notification posted on join") : bad("Slack notification missing/wrong format");
 
   // server-authoritative movement (§8) — an instant teleport is clamped to max speed
   admin.ws.send(JSON.stringify({ t: "move", x: 600, y: 600 }));
