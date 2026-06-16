@@ -69,6 +69,10 @@ try {
   (admin.role === "admin") ? ok("admin token → admin role") : bad("admin role not applied (got " + admin.role + ")");
   (guest.role === "guest") ? ok("no token → guest role") : bad("guest role not applied");
 
+  // move in two steps — the server-authoritative speed cap only allows so much travel per
+  // update since the last one, so a single 380px jump from spawn would (correctly) be clamped.
+  admin.ws.send(JSON.stringify({ t: "move", x: 500, y: 500, facing: 0 }));
+  await wait(1200);
   admin.ws.send(JSON.stringify({ t: "move", x: 500, y: 500, facing: 0 }));
   await wait(450);
   (guest.last?.players?.some((p) => p.id === admin.id && Math.abs(p.x - 500) < 5)) ? ok("position syncs between clients") : bad("position not synced");
