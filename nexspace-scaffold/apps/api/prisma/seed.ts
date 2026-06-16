@@ -34,13 +34,13 @@ async function main() {
   for (const r of ROOMS) await prisma.room.create({ data: { floorId: floor.id, ...r, audioMode: "room" } });
 
   for (const w of WALLS)
-    await prisma.placedObject.create({ data: { floorId: floor.id, type: "wall", x: w.x, y: w.y, collidable: true, config: { w: w.w, h: w.h } } });
+    await prisma.placedObject.create({ data: { floorId: floor.id, type: "wall", x: w.x, y: w.y, collidable: true, config: JSON.stringify({ w: w.w, h: w.h }) } });
   for (const f of FURNITURE)
-    await prisma.placedObject.create({ data: { floorId: floor.id, type: "furniture", x: f.x, y: f.y, collidable: true, config: { w: f.w, h: f.h, r: f.r } } });
+    await prisma.placedObject.create({ data: { floorId: floor.id, type: "furniture", x: f.x, y: f.y, collidable: true, config: JSON.stringify({ w: f.w, h: f.h, r: f.r }) } });
 
   await prisma.placedObject.create({
     data: { floorId: floor.id, type: "mediaWall", x: MEDIA_WALL.x, y: MEDIA_WALL.y, collidable: true,
-      config: { w: MEDIA_WALL.w, base: MEDIA_WALL.base, screenH: MEDIA_WALL.screenH, title: MEDIA_WALL.title, dur: MEDIA_WALL.dur } },
+      config: JSON.stringify({ w: MEDIA_WALL.w, base: MEDIA_WALL.base, screenH: MEDIA_WALL.screenH, title: MEDIA_WALL.title, dur: MEDIA_WALL.dur }) },
   });
 
   console.log("Seeded floor 'default' with", ROOMS.length, "rooms,", WALLS.length + FURNITURE.length, "obstacles + media wall.");

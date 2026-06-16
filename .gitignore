@@ -18,6 +18,11 @@ out/
 # Prisma generated client (schema + migrations ARE committed)
 **/node_modules/.prisma/
 
+# SQLite dev database (created by `prisma migrate`; not committed)
+*.db
+*.db-journal
+*.sqlite
+
 # Logs
 *.log
 npm-debug.log*

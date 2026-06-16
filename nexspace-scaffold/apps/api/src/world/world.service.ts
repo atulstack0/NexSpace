@@ -18,14 +18,14 @@ export class WorldService {
 
     const collidable = floor.objects.filter((o) => o.collidable && (o.type === "wall" || o.type === "furniture"));
     const obstacles = collidable.map((o) => {
-      const c = o.config as any;
+      const c = this.parse(o.config);
       const rect: any = { x: o.x, y: o.y, w: c.w, h: c.h };
       if (c.r != null) rect.r = c.r;
       return rect;
     });
 
     const mw = floor.objects.find((o) => o.type === "mediaWall");
-    const mwc = (mw?.config as any) ?? {};
+    const mwc = this.parse(mw?.config);
     const mediaWall = mw
       ? { x: mw.x, y: mw.y, w: mwc.w, base: mwc.base, screenH: mwc.screenH, title: mwc.title, dur: mwc.dur }
       : null;
@@ -47,8 +47,10 @@ export class WorldService {
   async getFloorRaw(slug: string) {
     const floor = await this.prisma.floor.findUnique({ where: { slug }, include: { rooms: true, objects: true } });
     if (!floor) throw new NotFoundException(`Floor '${slug}' not found`);
-    return floor;
+    return { ...floor, objects: floor.objects.map((o) => ({ ...o, config: this.parse(o.config) })) };
   }
+
+  private parse(s: any) { try { return JSON.parse(s || "{}"); } catch { return {}; } }
 
   /**
    * Persist an edited layout (spec §6.10). Transactional: replace this floor's
@@ -71,7 +73,7 @@ export class WorldService {
             rotation: Number(o.rotation) || 0,
             scale: Number(o.scale) || 1,
             collidable: o.collidable !== false,
-            config: o.config ?? {},
+            config: JSON.stringify(o.config ?? {}),
           },
         });
       }

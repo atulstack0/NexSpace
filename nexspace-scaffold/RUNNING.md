@@ -1,99 +1,90 @@
-# Running the full NexSpace stack (Postgres + LiveKit + API + realtime)
+# Running the full NexSpace stack (Windows-friendly, no Docker needed)
 
-This brings up real voice/video and persistent layouts. You'll use **3 terminals**
-plus Docker. Run everything from `nexspace-scaffold/`.
+The dev database is **SQLite** (a local file) — **no Docker, no Postgres server**.
+You need only **Node 18+** (you have it). Two terminals.
 
-> Prereqs: **Docker**, **Node 18+**. In WSL, open your browser tabs on Windows at
-> **http://localhost:...** — `localhost` is a "secure context", so the browser will
-> allow camera/mic over plain http. (Accessing via a raw WSL IP will block mic/cam.)
+> Run commands in **Windows CMD** (or PowerShell). Notes for CMD:
+> use `copy` (not `cp`), backslash paths, and `set VAR=val && cmd` for env vars.
 
 ---
 
-## 1. Backing services — Postgres + LiveKit (Docker)
+## 1. API — SQLite, migrate, seed, run  (Terminal A)
 
-```bash
-cd nexspace-scaffold
-docker compose up -d
-docker compose ps          # both nexspace-pg and nexspace-livekit should be "running"
-```
-
-This starts:
-- **Postgres** on `localhost:5432` (db `nexspace`, user `postgres`, password `nexspace`)
-- **LiveKit dev SFU** on `ws://localhost:7880` (api key `devkey`, secret `secret`)
-
-## 2. API — migrate, seed, run (Terminal A)
-
-```bash
-cd nexspace-scaffold/apps/api
-cp .env.example .env          # defaults already match docker-compose
+```cmd
+cd C:\Users\chat360it1\Claude\Projects\NexSpace\nexspace-scaffold\apps\api
 npm install
 npm run prisma:generate
-npm run migrate               # creates tables (also runs the seed)
-npm run seed                  # (safe to run again; idempotent)
-npm run dev                   # API on http://localhost:3001
+npm run migrate
+npm run seed
+npm run dev
 ```
 
-Verify: open **http://localhost:3001/floors/default/world** → JSON world.
-The `.env` already has `LIVEKIT_URL/KEY/SECRET` set to the docker LiveKit, so the
-token endpoint is live.
+- `.env` is already present (`DATABASE_URL="file:./dev.db"`), so nothing to copy.
+- `npm run migrate` creates `prisma\dev.db`; `npm run seed` fills the office floor.
+- API runs on **http://localhost:3001**. Verify: open **http://localhost:3001/floors/default/world** → JSON.
 
-## 3. Realtime + web (Terminal B)
+> The API now boots even if the DB isn't ready — it just logs a warning. So if something
+> is off with migrate/seed, LiveKit and the realtime server still work.
 
-```bash
-cd nexspace-scaffold/apps/realtime
+## 2. Realtime + web  (Terminal B)
+
+```cmd
+cd C:\Users\chat360it1\Claude\Projects\NexSpace\nexspace-scaffold\apps\realtime
 npm install
-WORLD_API=http://localhost:3001 npm start    # serves web on http://localhost:8787, loads world from the API
+npm start
 ```
 
-You should see `Loaded world from API: http://localhost:3001/floors/default/world`.
+- Serves the office at **http://localhost:8787**. Open it in **two tabs**.
+- It uses built-in geometry by default. To load the **DB-backed** world (so editor changes show up):
+  ```cmd
+  set WORLD_API=http://localhost:3001 && npm start
+  ```
 
-## 4. Verify real voice/video
+At this point the two-tab office works with **synth audio** (what you already saw). For **real voice/video**, do step 3.
 
-1. Open **http://localhost:8787** in **two tabs** (or two devices/browsers). Enter a name in each.
-2. The browser will prompt for **camera + microphone** — Allow.
-3. You should now see, in each tab:
-   - the toolbar gains **🎤 / 🎥** toggles and a toast "🎙️ LiveKit connected";
-   - the other person's **live video inside their avatar bubble** (yours too);
-   - real **voice that pans and fades with distance** — walk apart and it quiets, walk together and it's full; step into a room for full-room audio.
-4. Toggle 🎥/🎤 to confirm publish control; toggle a colleague far away and confirm their track unsubscribes (proximity culling).
+## 3. Real voice/video with LiveKit (optional)
 
-## 5. Editor (optional) — persist a layout
+On Windows the simplest, most reliable option is **LiveKit Cloud** (free) — no Docker:
 
-Open **http://localhost:8787/editor.html**, drag furniture / move a room, **Save to API**
-(writes to Postgres), then restart Terminal B (the realtime server) — the new layout is
-what everyone joins.
+1. Create a free project at **https://cloud.livekit.io** → copy the **ws URL**, **API Key**, **API Secret**.
+2. Edit **`apps\api\.env`**, uncomment and set the three lines:
+   ```
+   LIVEKIT_URL="wss://YOUR-PROJECT.livekit.cloud"
+   LIVEKIT_API_KEY="API..."
+   LIVEKIT_API_SECRET="..."
+   ```
+3. Restart the API (Ctrl-C in Terminal A, `npm run dev` again).
+4. Reload both tabs at **http://localhost:8787**, click **Allow** for camera + mic.
+
+You should see live video in the avatar bubbles and hear real voice that pans/fades with distance, plus 🎤/🎥 toggles in the toolbar.
+
+**Alternatives to Cloud:**
+- **Native binary:** download `livekit-server` for Windows from the LiveKit releases, run `livekit-server --dev` (ws://localhost:7880, key `devkey`, secret `secret` — these are the commented defaults in `.env.example`).
+- **Docker:** start Docker Desktop, then `docker compose up -d livekit` from the scaffold root.
+
+## 4. Editor (optional)
+
+Open **http://localhost:8787/editor.html**, drag furniture / move rooms, **Save to API** (writes to SQLite).
+Restart the realtime server with `set WORLD_API=http://localhost:3001 && npm start` to load the new layout.
 
 ---
 
 ## Troubleshooting
 
-**No 🎤/🎥 toggles / "LiveKit connect failed" / still hearing synth tones**
-- Confirm the API is up and `POST http://localhost:3001/livekit/token` returns `{url, token}` (not 503). 503 = LiveKit env not set → check `apps/api/.env`.
-- Confirm `nexspace-livekit` is running: `docker compose logs livekit`.
+**`Environment variable not found: DATABASE_URL`** — fixed: SQLite is the default and `.env` is created. If you still see it, make sure you're in `apps\api` and ran `npm run prisma:generate` then `npm run migrate`.
 
-**Connected but no audio/video flowing (black bubbles / silence)** — this is almost always WebRTC networking, not the code:
-- Make sure you opened **http://localhost:8787** (not an IP). getUserMedia needs a secure context; `localhost` qualifies, a raw IP does not.
-- WSL2 / Docker Desktop can mangle WebRTC media. The most reliable fix is to use **LiveKit Cloud** instead of the local SFU:
-  1. Create a free project at https://cloud.livekit.io → copy the **ws URL**, **API key**, **secret**.
-  2. Put them in `apps/api/.env` (`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`) and restart the API.
-  3. No Docker LiveKit needed — `docker compose up -d postgres` for just the DB.
-- Local UDP blocked? LiveKit falls back to TCP (port 7881) automatically; make sure that port is mapped (it is, in the compose file).
+**`cp` is not recognized** — that's a Unix command. In CMD use `copy`. (You don't need to copy anything now — `.env` already exists.)
 
-**Port already in use** — stop whatever holds 5432/7880/7881/7882/3001/8787, or change the port mappings in `docker-compose.yml` and `.env`.
+**Docker errors (`npipe ... docker_engine`)** — Docker is **no longer required**. It's only for the optional local Postgres/LiveKit. Ignore unless you choose the Docker LiveKit path (then start Docker Desktop first).
 
-**Prisma can't reach the DB** — wait a few seconds after `docker compose up` for Postgres to accept connections, then re-run `npm run migrate`.
+**Wrong directory (`cannot find the path`)** — use full backslash paths as shown; don't prefix with `nexspace-scaffold/` if you're already inside it.
 
-**Mic/cam permission blocked** — check the browser's site permissions for `localhost:8787`; reset to "Allow" and reload.
+**Setting env in CMD** — `set WORLD_API=http://localhost:3001 && npm start` (not `WORLD_API=... npm start`).
 
----
+**Camera/mic blocked** — open **http://localhost:8787** exactly (localhost is a secure context; a raw IP is not). Check the browser's site permissions.
 
-## What "full stack" looks like when it's working
+**LiveKit connects but video/audio won't flow** — almost always WebRTC NAT. Use **LiveKit Cloud** (step 3) — it sidesteps local networking entirely.
 
-```
- Browser tab A ─┐                        ┌─ Browser tab B
-   WS positions  │   ws://localhost:8787  │   WS positions
-   LiveKit media │                        │   LiveKit media
-        │        ▼                        ▼        │
-        │   realtime server (8787) ──WORLD_API──▶ API (3001) ──▶ Postgres (5432)
-        └────────── LiveKit SFU (7880/1/2) ◀───── token ─────────┘
-```
+**Reset the database** — delete `apps\api\prisma\dev.db`, then `npm run migrate` and `npm run seed` again.
+
+**Port already in use** — change `PORT` in `apps\api\.env` (API) or the port in `apps\realtime\server.js` (`8787`).

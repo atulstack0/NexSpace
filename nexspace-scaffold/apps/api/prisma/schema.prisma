@@ -6,7 +6,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  // SQLite = zero-install local dev (no Docker, no DB server). To use Postgres
+  // instead: set provider = "postgresql" and DATABASE_URL to your connection
+  // string (docker-compose.yml provides one), then re-run `prisma migrate dev`.
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -60,5 +63,5 @@ model PlacedObject {
   rotation   Float   @default(0)
   scale      Float   @default(1)
   collidable Boolean @default(true)
-  config     Json    @default("{}")             // { w, h, r?, ...type-specific }
+  config     String  @default("{}")             // JSON text: { w, h, r?, ...type-specific } (String = provider-agnostic; use Json on Postgres if preferred)
 }

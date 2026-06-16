@@ -40,7 +40,7 @@ nexspace-scaffold/
    ├─ web/
    │  ├─ index.html             # client: full shared office — rooms, doors, media wall, collisions, proximity/room/broadcast audio + optional LiveKit voice/video
    │  └─ editor.html            # drag-and-drop floor editor — moves/adds furniture, saves layouts to the API
-   └─ api/                       # NestJS + Prisma + PostgreSQL persistence (spec §5) + LiveKit token endpoint
+   └─ api/                       # NestJS + Prisma persistence (SQLite by default — no Docker; Postgres-ready) (spec §5) + LiveKit token endpoint
       ├─ prisma/schema.prisma   # Floor / Room / PlacedObject
       ├─ prisma/seed.ts         # seeds the "default" office floor
       ├─ src/world/             # GET /floors/:slug/world -> WorldBlob
