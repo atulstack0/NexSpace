@@ -37,3 +37,30 @@ jobs:
       # verify (syntax + tsc) and the realtime smoke test (RBAC, sync, reload, analytics)
       - name: Verify + smoke test
         run: npm run check
+
+  redis-multinode:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nexspace-scaffold
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 5
+    env:
+      REDIS_URL: "redis://localhost:6379"
+      JWT_SECRET: "nexspace-dev-secret-change-me"
+      DATABASE_URL: "file:./dev.db"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install
+        run: npm install
+      # two server instances + Redis: cross-node presence and event propagation
+      - name: Multi-node Redis test
+        run: npm run test:redis

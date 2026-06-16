@@ -116,6 +116,43 @@ function analyticsSnapshot() {
   };
 }
 
+// ---------- Multi-node fan-out via Redis (spec §4/§8) — optional, behind REDIS_URL ----------
+const REDIS_URL = process.env.REDIS_URL || "";
+const NODE_ID = crypto.randomBytes(4).toString("hex");
+const remoteByNode = new Map(); // nodeId -> { players, ts }
+let pub = null;
+function localPlayers() {
+  return [...clients.values()].map((p) => ({ id: p.id, name: p.name, x: p.x, y: p.y, facing: p.facing, status: p.status, talking: p.talking, bcast: p.bcast, role: p.role }));
+}
+function remotePlayers() {
+  const out = [], now = Date.now();
+  for (const [nid, e] of remoteByNode) { if (now - e.ts > 3000) { remoteByNode.delete(nid); continue; } for (const p of e.players) out.push(p); }
+  return out;
+}
+function publishEvent(event, data) { if (pub) pub.publish("nexspace:event", JSON.stringify({ nodeId: NODE_ID, event, data })); }
+function applyEvent(event, data) {
+  if (event === "door") { const r = rooms.find((x) => x.id === data.roomId); if (r && ["open", "closed", "locked"].includes(data.state)) r.door.state = data.state; }
+  else if (event === "media") { mediaWall.playing = !!data.playing; }
+  else if (event === "recording") { recording = data.on ? { on: true, by: data.by, egressId: data.egressId || null } : { on: false, by: null, egressId: null }; }
+  else if (event === "worldReload") { reloadAndBroadcast(); }
+}
+if (REDIS_URL) {
+  const Redis = require("ioredis");
+  pub = new Redis(REDIS_URL);
+  const sub = new Redis(REDIS_URL);
+  pub.on("error", (e) => console.warn("redis pub:", e.message));
+  sub.on("error", (e) => console.warn("redis sub:", e.message));
+  sub.subscribe("nexspace:presence", "nexspace:event");
+  sub.on("message", (channel, raw) => {
+    let msg; try { msg = JSON.parse(raw); } catch { return; }
+    if (msg.nodeId === NODE_ID) return; // ignore our own messages
+    if (channel === "nexspace:presence") remoteByNode.set(msg.nodeId, { players: msg.players, ts: Date.now() });
+    else if (channel === "nexspace:event") applyEvent(msg.event, msg.data);
+  });
+  setInterval(() => { try { pub.publish("nexspace:presence", JSON.stringify({ nodeId: NODE_ID, players: localPlayers() })); } catch {} }, 250);
+  console.log("Redis fan-out enabled (node " + NODE_ID + ")");
+}
+
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".ico": "image/x-icon" };
 const server = http.createServer((req, res) => {
   const urlPath = (req.url === "/" || !req.url) ? "/index.html" : req.url.split("?")[0];
@@ -158,6 +195,7 @@ wss.on("connection", (ws) => {
       const claims = verifyJWT(m.token);
       if (!claims || rank(claims.role) < RANK.admin) return deny(ws, "reload the world", "admin");
       reloadAndBroadcast();
+      publishEvent("worldReload", {});
       return;
     }
 
@@ -203,12 +241,12 @@ wss.on("connection", (ws) => {
       if (m.on && rank(p.role) < RANK.member) return deny(ws, "broadcast", "member");
       p.bcast = !!m.on;
     } else if (m.t === "media") {
-      mediaWall.playing = !!m.playing;
+      mediaWall.playing = !!m.playing; publishEvent("media", { playing: mediaWall.playing });
     } else if (m.t === "door") {
       if (rank(p.role) < RANK.member) return deny(ws, "change doors", "member");
       if (m.state === "locked" && rank(p.role) < RANK.admin) return deny(ws, "lock doors", "admin");
       const room = rooms.find(r => r.id === m.roomId);
-      if (room && ["open", "closed", "locked"].includes(m.state)) room.door.state = m.state;
+      if (room && ["open", "closed", "locked"].includes(m.state)) { room.door.state = m.state; publishEvent("door", { roomId: m.roomId, state: m.state }); }
     } else if (m.t === "knock") {
       const room = rooms.find(r => r.id === m.roomId);
       if (!room) return;
@@ -217,10 +255,11 @@ wss.on("connection", (ws) => {
       if (d.state === "locked" && rank(p.role) < RANK.member) return deny(ws, "enter the locked room", "member");
       d.knocking = true;
       const occupied = [...clients.values()].some(q => inRoom(q, room));
-      setTimeout(() => { d.knocking = false; if (occupied) d.state = "open"; }, 1300);
+      setTimeout(() => { d.knocking = false; if (occupied) { d.state = "open"; publishEvent("door", { roomId: room.id, state: "open" }); } }, 1300);
     } else if (m.t === "recording") {
       if (rank(p.role) < RANK.admin) return deny(ws, "record", "admin");
       recording = m.on ? { on: true, by: p.name, egressId: m.egressId || null } : { on: false, by: null, egressId: null };
+      publishEvent("recording", recording);
     }
   });
 
@@ -238,7 +277,7 @@ setInterval(() => {
   const now = Date.now(), dt = (now - lastTick) / 1000; lastTick = now;
   if (mediaWall.playing) { mediaWall.pos += dt; if (mediaWall.pos > mediaWall.dur) mediaWall.pos = 0; }
   if (clients.size === 0) return;
-  const players = [...clients.values()].map(p => ({ id: p.id, name: p.name, x: p.x, y: p.y, facing: p.facing, status: p.status, talking: p.talking, bcast: p.bcast, role: p.role }));
+  const players = localPlayers().concat(remotePlayers()); // local + cross-node (Redis) presence
   const doors = {}; for (const r of rooms) doors[r.id] = r.door.state;
   const snap = JSON.stringify({ t: "snapshot", players, doors, media: { playing: mediaWall.playing, pos: Math.round(mediaWall.pos) }, recording });
   for (const ws of clients.keys()) if (ws.readyState === 1) ws.send(snap);
