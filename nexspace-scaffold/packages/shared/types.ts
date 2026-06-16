@@ -116,6 +116,7 @@ export interface WelcomeMsg  { t: "welcome"; id: string; world: WorldBlob; you: 
 export interface DeniedMsg   { t: "denied"; action: string; need: string; }   // RBAC refusal (6.14)
 export interface WorldUpdateMsg { t: "world"; world: WorldBlob; }              // live layout reload pushed to clients (6.10)
 export interface RateLimitedMsg { t: "rateLimited"; }                          // connection exceeded the message rate (§8)
+export interface FullMsg        { t: "full"; }                                 // server at capacity, join refused (§8)
 export interface SnapshotMsg {
   t: "snapshot";
   players: PlayerSnapshot[];
@@ -123,7 +124,7 @@ export interface SnapshotMsg {
   media: { playing: boolean; pos: number };  // shared media-wall playback (synced)
   recording: { on: boolean; by: string | null; egressId?: string | null }; // shared recording indicator (6.17)
 }
-export type ServerMsg = WelcomeMsg | SnapshotMsg | DeniedMsg | WorldUpdateMsg | RateLimitedMsg;
+export type ServerMsg = WelcomeMsg | SnapshotMsg | DeniedMsg | WorldUpdateMsg | RateLimitedMsg | FullMsg;
 
 // ====================================================================
 // Public API + webhooks (spec §6.18). See docs/PUBLIC_API.md.

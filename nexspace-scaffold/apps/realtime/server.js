@@ -22,6 +22,7 @@ const PORT = process.env.PORT || 8787;
 const TICK_HZ = 15;
 const MAX_SPEED = 520;   // px/s — server-authoritative movement cap (> client sprint; anti-teleport, §8)
 const RATE_LIMIT = 80;   // max messages/sec per connection (abuse protection, §8)
+const MAX_CLIENTS = Number(process.env.MAX_CLIENTS) || 200; // connection cap per node (§8)
 const WEB_DIR = path.join(__dirname, "..", "web");
 
 // ---------- Auth (RBAC) — verifies the dependency-free JWT minted by the API ----------
@@ -146,6 +147,8 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server });
 wss.on("connection", (ws) => {
+  ws.isAlive = true;
+  ws.on("pong", () => { ws.isAlive = true; });
   ws.on("message", (raw) => {
     let m; try { m = JSON.parse(raw.toString()); } catch { return; }
     const p = clients.get(ws);
@@ -159,6 +162,7 @@ wss.on("connection", (ws) => {
     }
 
     if (m.t === "join") {
+      if (clients.size >= MAX_CLIENTS) { send(ws, { t: "full" }); setTimeout(() => { try { ws.close(); } catch {} }, 50); return; }
       const id = "u" + (nextId++);
       const claims = verifyJWT(m.token);
       const role = claims?.role || "guest";
@@ -245,6 +249,11 @@ setInterval(() => {
   for (const p of clients.values()) { const r = rooms.find((rm) => inRoom(p, rm)); const k = r ? r.id : "open"; roomSeconds[k] = (roomSeconds[k] || 0) + 5; }
 }, 5000);
 
+// heartbeat — terminate sockets that stop responding so presence/analytics stay accurate (§8)
+const heartbeat = setInterval(() => {
+  wss.clients.forEach((ws) => { if (ws.isAlive === false) return ws.terminate(); ws.isAlive = false; try { ws.ping(); } catch {} });
+}, 30000);
+
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 function json(res, obj, code = 200) { res.writeHead(code, { "Content-Type": "application/json" }); res.end(JSON.stringify(obj)); }
 function deny(ws, action, need) { send(ws, { t: "denied", action, need }); } // RBAC refusal feedback
@@ -281,3 +290,8 @@ async function loadWorld() {
 loadWorld().finally(() => {
   server.listen(PORT, () => console.log(`NexSpace realtime + web: http://localhost:${PORT}  (open two tabs)`));
 });
+
+// graceful shutdown (§8)
+function shutdown() { clearInterval(heartbeat); try { wss.close(); } catch {} try { server.close(); } catch {} console.log("NexSpace realtime shutting down…"); process.exit(0); }
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

@@ -37,7 +37,7 @@ const hookServer = http.createServer((req, res) => {
 await new Promise((r) => hookServer.listen(WHPORT, r));
 
 const server = spawn(process.execPath, ["apps/realtime/server.js"], {
-  env: { ...process.env, PORT: String(PORT), WEBHOOK_URL: `http://localhost:${WHPORT}/hook`, SLACK_WEBHOOK_URL: `http://localhost:${WHPORT}/slack`, PUBLIC_API_KEY: API_KEY },
+  env: { ...process.env, PORT: String(PORT), WEBHOOK_URL: `http://localhost:${WHPORT}/hook`, SLACK_WEBHOOK_URL: `http://localhost:${WHPORT}/slack`, PUBLIC_API_KEY: API_KEY, MAX_CLIENTS: "2" },
   stdio: ["ignore", "pipe", "pipe"],
 });
 server.stderr.on("data", (d) => process.stderr.write(d));
@@ -151,6 +151,16 @@ try {
   for (let i = 0; i < 200; i++) guest.ws.send(JSON.stringify({ t: "state", status: "available" }));
   await wait(400);
   (guest.rateLimited === true) ? ok("message flood is rate-limited") : bad("rate limit not enforced");
+
+  // connection cap (§8) — a 3rd client is rejected when MAX_CLIENTS=2
+  const third = await new Promise((resolve) => {
+    const ws = new WebSocket(`ws://localhost:${PORT}`); const r = { full: false, welcomed: false };
+    ws.on("open", () => ws.send(JSON.stringify({ t: "join", name: "Carol" })));
+    ws.on("message", (d) => { const m = JSON.parse(d.toString()); if (m.t === "full") r.full = true; if (m.t === "welcome") r.welcomed = true; });
+    ws.on("close", () => resolve(r));
+    setTimeout(() => { try { ws.close(); } catch {} resolve(r); }, 900);
+  });
+  (third.full && !third.welcomed) ? ok("connection cap rejects 3rd client (MAX_CLIENTS=2)") : bad("connection cap not enforced");
 
   admin.ws.close(); guest.ws.close(); await wait(250);
 } catch (e) {
