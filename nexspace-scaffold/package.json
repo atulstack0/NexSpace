@@ -1,0 +1,17 @@
+{
+  "name": "nexspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NexSpace — spatial virtual office. Monorepo scaffold (Phase 0 + realtime position-sync slice).",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "start": "npm --workspace @nexspace/realtime start",
+    "dev": "npm --workspace @nexspace/realtime run dev"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

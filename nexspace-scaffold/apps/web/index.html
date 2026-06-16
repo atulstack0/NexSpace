@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NexSpace — Multiplayer Office</title>
+<style>
+  :root{--bg:#0e1320;--panel:#161d2e;--panel2:#1e2740;--line:#2b3654;--text:#e8edf7;--muted:#8a96b3;--accent:#5b8cff;--accent2:#39d3a6;--warn:#ffb454;--danger:#ff5d6c}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);overflow:hidden;user-select:none;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  #game{position:fixed;inset:0;display:block;background:#0b1019;cursor:crosshair}
+  #bar{position:fixed;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:7px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:96vw;
+    background:rgba(22,29,46,.92);border:1px solid var(--line);border-radius:14px;padding:8px 12px;z-index:20;backdrop-filter:blur(8px)}
+  .brand{font-weight:700;display:flex;align-items:center;gap:8px}
+  .dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  .pill{font-size:12px;color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:5px 10px}
+  .pill b{color:var(--accent2)} #conn.bad b{color:var(--danger)}
+  .sep{width:1px;height:22px;background:var(--line)}
+  .btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:13px;cursor:pointer;transition:.15s;white-space:nowrap}
+  .btn:hover{border-color:var(--accent);color:#fff}
+  .btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.danger.active{background:var(--danger);border-color:var(--danger)}
+  .btn.live.active{background:var(--danger);border-color:var(--danger);animation:pulse 1.2s infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,93,108,.5)}50%{box-shadow:0 0 0 6px rgba(255,93,108,0)}}
+  .seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg button{background:var(--panel2);color:var(--muted);border:0;padding:6px 9px;font-size:12px;cursor:pointer}
+  .seg button.active{background:var(--accent);color:#fff}
+  #banner{position:fixed;top:72px;left:50%;transform:translateX(-50%);z-index:18;display:none;align-items:center;gap:9px;
+    background:rgba(255,93,108,.16);border:1px solid var(--danger);color:#ffd2d7;border-radius:12px;padding:8px 15px;font-size:13px;font-weight:600}
+  #banner .l{width:9px;height:9px;border-radius:50%;background:var(--danger);animation:pulse 1.2s infinite}
+  #knock{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);z-index:18;display:none;align-items:center;gap:12px;
+    background:rgba(22,29,46,.96);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:13px}
+  #knock b{color:#fff}
+  #toasts{position:fixed;top:116px;left:50%;transform:translateX(-50%);z-index:25;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+  .toast{background:rgba(22,29,46,.96);border:1px solid var(--line);border-radius:10px;padding:9px 15px;font-size:13px;transition:opacity .5s}
+  #hint{position:fixed;bottom:14px;left:14px;z-index:15;font-size:12px;color:var(--muted);background:rgba(22,29,46,.85);border:1px solid var(--line);border-radius:10px;padding:8px 12px;line-height:1.6;max-width:48vw}
+  kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 6px;font-size:11px;color:var(--text)}
+  #minimapWrap{position:fixed;bottom:12px;right:12px;z-index:15;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:rgba(11,16,25,.9)}
+  #overlay{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:radial-gradient(1000px 500px at 50% 30%,rgba(91,140,255,.18),transparent),rgba(8,11,18,.94)}
+  #card{width:min(470px,92vw);background:linear-gradient(180deg,var(--panel),#121828);border:1px solid var(--line);border-radius:18px;padding:28px 30px;text-align:center}
+  #card .orb{width:34px;height:34px;border-radius:50%;margin:0 auto 10px;background:conic-gradient(from 200deg,var(--accent),var(--accent2),var(--accent))}
+  #card h1{font-size:21px;margin:0 0 4px} #card p{color:var(--muted);font-size:13px;line-height:1.6}
+  #name{width:100%;margin:14px 0 4px;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:#0d1424;color:var(--text);font-size:15px}
+  #go{width:100%;margin-top:12px;padding:13px;border:0;border-radius:12px;font-size:15px;font-weight:700;color:#fff;cursor:pointer;background:linear-gradient(135deg,var(--accent),#7aa2ff)}
+  .tip{font-size:11px;color:var(--muted);margin-top:12px}
+</style>
+<!-- LiveKit client (optional). If this fails to load (offline), the app falls back to synth audio. -->
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="bar">
+  <span class="brand"><span class="dot"></span>NexSpace</span>
+  <span class="pill" id="conn"><b id="connText">connecting…</b></span>
+  <span class="pill">online: <b id="count">1</b></span>
+  <span class="sep"></span>
+  <button class="btn" id="btnMic" title="Deafen (mute everyone you hear)">🔊</button>
+  <button class="btn" id="btnMicPub" title="Your microphone (LiveKit)" style="display:none">🎤</button>
+  <button class="btn" id="btnCam" title="Your camera (LiveKit)" style="display:none">🎥</button>
+  <div class="seg" id="rangeSeg"><button data-m="quiet">Quiet</button><button data-m="normal" class="active">Normal</button><button data-m="megaphone">Mega</button></div>
+  <button class="btn live" id="btnBroadcast">📢 Broadcast</button>
+  <button class="btn active" id="btnLinks">◠ Links</button>
+</div>
+<div id="banner"><span class="l"></span><span id="bannerText"></span></div>
+<div id="knock"><span id="knockText"></span><button class="btn" id="knockBtn">Knock</button></div>
+<div id="toasts"></div>
+<div id="hint"><b>Move</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>/click · open a <b>2nd tab</b> to meet yourself · knock on doors · click the <b>screen</b> · 📢 to talk floor-wide.</div>
+<div id="minimapWrap"><canvas id="minimap" width="180" height="123"></canvas></div>
+
+<div id="overlay"><div id="card">
+  <div class="orb"></div><h1>Join the office</h1>
+  <p>Your position syncs through the server; everyone shares the same rooms, doors, and media wall, and hears each other with spatial audio.</p>
+  <input id="name" maxlength="16" placeholder="Your name" />
+  <button id="go">Enter →</button>
+  <div class="tip">🎧 Headphones recommended · synth "voice" per peer · no mic, nothing recorded.</div>
+</div></div>
+
+<script>
+"use strict";
+(function(){
+  const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+  const mini=document.getElementById('minimap'),mctx=mini.getContext('2d');
+  let DPR=Math.max(1,Math.min(2,devicePixelRatio||1)),VW=0,VH=0;
+  function resize(){VW=innerWidth;VH=innerHeight;canvas.width=VW*DPR;canvas.height=VH*DPR;
+    canvas.style.width=VW+'px';canvas.style.height=VH+'px';ctx.setTransform(DPR,0,0,DPR,0,0);}
+  addEventListener('resize',resize);resize();
+
+  // ---------- State ----------
+  let WORLD={w:2200,h:1500},world=null,myId=null;
+  let doors={},media={playing:true,pos:0};
+  const me={x:880,y:900,facing:0};
+  const peers=new Map();        // id -> {x,y,facing,name,status,talking,bcast,rx,ry}
+  const cam={x:me.x,y:me.y,zoom:1};
+  const RANGES={quiet:{inner:70,outer:200},normal:{inner:95,outer:330},megaphone:{inner:150,outer:640}};
+  let mode='normal',muted=false,showLinks=true,myBcast=false,myName='Guest';
+  const R=()=>RANGES[mode];
+  // LiveKit (optional real media). API runs on :3001 (same host as the page).
+  const API_BASE=location.protocol+'//'+location.hostname+':3001';
+  let lkRoom=null,lkActive=false,localVideoEl=null;
+  const lkAudio=new Map(),lkVideo=new Map();
+  const hsl=h=>'hsl('+h+' 70% 60%)';
+  const hueOf=id=>{let h=0;for(let i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))%360;return h;};
+  let frame=0;
+
+  // ---------- Geometry helpers ----------
+  function roomAtPt(x,y){if(!world)return null;for(const r of world.rooms){const b=r.bounds;
+    if(x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h)return r;}return null;}
+  function circleRect(cx,cy,cr,r){const nx=Math.max(r.x,Math.min(cx,r.x+r.w)),ny=Math.max(r.y,Math.min(cy,r.y+r.h));
+    const dx=cx-nx,dy=cy-ny;return dx*dx+dy*dy<cr*cr;}
+  function blocked(x,y,rad){if(!world)return false;
+    for(const o of world.obstacles)if(circleRect(x,y,rad,o))return true;
+    for(const r of world.rooms){if(doors[r.id]&&doors[r.id]!=='open'&&circleRect(x,y,rad,r.door))return true;}
+    return false;}
+  function moveMe(dx,dy){const rad=16;
+    if(dx&&!blocked(me.x+dx,me.y,rad))me.x+=dx;
+    if(dy&&!blocked(me.x,me.y+dy,rad))me.y+=dy;
+    me.x=Math.max(16,Math.min(WORLD.w-16,me.x));me.y=Math.max(16,Math.min(WORLD.h-16,me.y));}
+
+  // ---------- Networking ----------
+  let ws=null;
+  function connect(name){
+    const proto=location.protocol==='https:'?'wss':'ws';
+    ws=new WebSocket(proto+'://'+location.host);
+    const conn=document.getElementById('conn'),ct=document.getElementById('connText');
+    ws.onopen=()=>{conn.classList.remove('bad');ct.textContent='connected';ws.send(JSON.stringify({t:'join',name}));};
+    ws.onclose=()=>{conn.classList.add('bad');ct.textContent='reconnecting…';setTimeout(()=>connect(name),1500);};
+    ws.onerror=()=>{conn.classList.add('bad');ct.textContent='connection error';};
+    ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch{return;}
+      if(m.t==='welcome'){myId=m.id;world=m.world;WORLD={w:world.w,h:world.h};me.x=m.you.x;me.y=m.you.y;cam.x=me.x;cam.y=me.y;
+        world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});initLiveKit();}
+      else if(m.t==='snapshot'){
+        doors=m.doors||doors; if(m.media)media=m.media;
+        const seen=new Set();
+        for(const p of m.players){if(p.id===myId){seen.add(p.id);continue;}seen.add(p.id);
+          let e=peers.get(p.id);if(!e){e={rx:p.x,ry:p.y};peers.set(p.id,e);}
+          Object.assign(e,{x:p.x,y:p.y,facing:p.facing,name:p.name,status:p.status,talking:p.talking,bcast:p.bcast});}
+        for(const id of [...peers.keys()])if(!seen.has(id)){removeVoice(id);peers.delete(id);}
+        document.getElementById('count').textContent=m.players.length;
+      }
+    };
+  }
+  function sendMove(now){if(ws&&ws.readyState===1&&now-lastSend>60){lastSend=now;
+    ws.send(JSON.stringify({t:'move',x:Math.round(me.x),y:Math.round(me.y),facing:+me.facing.toFixed(2)}));}}
+  let lastSend=0;
+
+  // ---------- Input ----------
+  const keys=new Set();let target=null;
+  addEventListener('keydown',e=>{const k=e.key.toLowerCase();
+    if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)){keys.add(k);target=null;e.preventDefault();}});
+  addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
+  canvas.addEventListener('mousedown',e=>{if(e.button!==0)return;
+    const w={x:(e.clientX-VW/2)/cam.zoom+cam.x,y:(e.clientY-VH/2)/cam.zoom+cam.y};
+    if(world){const mc={x:world.mediaWall.x+world.mediaWall.w/2,y:world.mediaWall.y};
+      if(Math.hypot(w.x-mc.x,w.y-mc.y)<90){toggleMedia();return;}}
+    target=w;});
+  canvas.addEventListener('wheel',e=>{e.preventDefault();cam.zoom=Math.max(.5,Math.min(2,cam.zoom*(e.deltaY<0?1.1:1/1.1)));},{passive:false});
+
+  // ---------- Audio (proximity + room override + broadcast) ----------
+  let actx=null,master=null,started=false;const voices=new Map(),SCALE=46;let mediaNode=null;
+  function startAudio(){if(started)return;const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+    actx=new AC();master=actx.createGain();master.gain.value=.9;master.connect(actx.destination);started=true;makeMedia();}
+  function mkPan(){const p=actx.createPanner();p.panningModel=(p.panningModel!==undefined)?'HRTF':'equalpower';
+    p.distanceModel='linear';p.refDistance=R().inner/SCALE;p.maxDistance=R().outer/SCALE;p.rolloffFactor=1;return p;}
+  function ensureVoice(id){if(!started||voices.has(id))return;const freq=160+hueOf(id)%200;
+    const osc=actx.createOscillator();osc.type='sawtooth';osc.frequency.value=freq;
+    const bp=actx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=freq*2.2;bp.Q.value=4;
+    const trem=actx.createGain();trem.gain.value=.5;const lfo=actx.createOscillator();lfo.type='sine';lfo.frequency.value=4+Math.random()*3;
+    const lfoG=actx.createGain();lfoG.gain.value=.45;const voice=actx.createGain();voice.gain.value=0;const pan=mkPan();
+    osc.connect(bp);bp.connect(trem);trem.connect(voice);voice.connect(pan);pan.connect(master);
+    lfo.connect(lfoG);lfoG.connect(trem.gain);osc.start();lfo.start();voices.set(id,{voice,pan});}
+  function removeVoice(id){const v=voices.get(id);if(v){try{v.voice.gain.value=0;}catch(e){}voices.delete(id);}}
+  function makeMedia(){const o1=actx.createOscillator();o1.type='sine';o1.frequency.value=110;
+    const o2=actx.createOscillator();o2.type='sine';o2.frequency.value=164.81;const mix=actx.createGain();mix.gain.value=.5;
+    const lfo=actx.createOscillator();lfo.type='sine';lfo.frequency.value=.4;const lfoG=actx.createGain();lfoG.gain.value=.25;
+    const voice=actx.createGain();voice.gain.value=0;const pan=mkPan();
+    o1.connect(mix);o2.connect(mix);mix.connect(voice);voice.connect(pan);pan.connect(master);
+    lfo.connect(lfoG);lfoG.connect(mix.gain);o1.start();o2.start();lfo.start();mediaNode={voice,pan};}
+  function applyRange(){if(!started)return;for(const v of voices.values()){v.pan.refDistance=R().inner/SCALE;v.pan.maxDistance=R().outer/SCALE;}
+    if(mediaNode){mediaNode.pan.refDistance=R().inner/SCALE;mediaNode.pan.maxDistance=R().outer/SCALE;}}
+  function setPos(p,x,y){const ax=x/SCALE,az=y/SCALE;if(p.positionX){p.positionX.value=ax;p.positionY.value=0;p.positionZ.value=az;}else if(p.setPosition)p.setPosition(ax,0,az);}
+  function peerVol(e){if(e.bcast)return 1;const mr=roomAtPt(me.x,me.y),pr=roomAtPt(e.rx,e.ry);
+    if(mr||pr)return(mr&&mr===pr)?1:0;const d=Math.hypot(e.rx-me.x,e.ry-me.y);
+    return d<=R().inner?1:d>=R().outer?0:1-(d-R().inner)/(R().outer-R().inner);}
+  function updateAudio(){if(!started||!world)return;const L=actx.listener;
+    if(L.positionX){L.positionX.value=me.x/SCALE;L.positionY.value=0;L.positionZ.value=me.y/SCALE;}else if(L.setPosition)L.setPosition(me.x/SCALE,0,me.y/SCALE);
+    const t=actx.currentTime,mr=roomAtPt(me.x,me.y);
+    for(const [id,e] of peers){
+      const real=lkActive&&lkAudio.has(id);
+      if(lkActive&&voices.has(id))voices.get(id).voice.gain.setTargetAtTime(0,t,0.05); // silence synth once real media is live
+      let chain;
+      if(real)chain=lkAudio.get(id);
+      else if(lkActive)continue;                 // LiveKit on but this peer's track not subscribed yet → silent
+      else{ensureVoice(id);chain=voices.get(id);} // synth fallback
+      if(!chain)continue;
+      if(e.bcast||(mr&&mr===roomAtPt(e.rx,e.ry))){const dx=e.rx-me.x,dy=e.ry-me.y,dd=Math.hypot(dx,dy)||1,near=R().inner*.5;
+        setPos(chain.pan,me.x+dx/dd*near,me.y+dy/dd*near);}else setPos(chain.pan,e.rx,e.ry);
+      let vol=peerVol(e);
+      if(!real&&!e.bcast&&!e.talking)vol=0;       // synth gated by the simulated "talking" flag; real mic carries its own speech
+      chain.voice.gain.setTargetAtTime(muted?0:(real?vol:vol*0.16),t,0.08);}
+    // proximity track culling (spec 6.3): don't subscribe to far peers' media
+    if(lkActive&&lkRoom&&lkRoom.remoteParticipants){for(const part of lkRoom.remoteParticipants.values()){
+      const e=peers.get(part.identity);let want=true;
+      if(e){const d=Math.hypot(e.rx-me.x,e.ry-me.y),pr=roomAtPt(e.rx,e.ry);want=!!(e.bcast||(mr&&mr===pr)||d<R().outer*1.25);}
+      part.trackPublications.forEach(pub=>{try{pub.setSubscribed(want);}catch(_){}}); }}
+    // media wall
+    const mc={x:world.mediaWall.x+world.mediaWall.w/2,y:world.mediaWall.y};setPos(mediaNode.pan,mc.x,mc.y);
+    let mv=0;if(media.playing&&!mr){const d=Math.hypot(mc.x-me.x,mc.y-me.y);mv=d<=R().inner?1:d>=R().outer?0:1-(d-R().inner)/(R().outer-R().inner);}
+    mediaNode.voice.gain.setTargetAtTime(muted?0:mv*0.12,t,0.1);}
+
+  function toggleMedia(){if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'media',playing:!media.playing}));}
+
+  // ---------- LiveKit (optional real voice/video; replaces synth when available) ----------
+  const LK=window.LivekitClient||window.LiveKitClient||null;  // UMD global name guard
+  async function initLiveKit(){
+    if(!LK)return;                                           // CDN not loaded → keep synth
+    let url,token;
+    try{const res=await fetch(API_BASE+'/livekit/token',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({room:'floor:default',identity:myId,name:myName})});
+      if(!res.ok)throw new Error('token '+res.status);({url,token}=await res.json());}
+    catch(e){return;}                                        // API/LiveKit not configured → keep synth
+    try{
+      const room=new LK.Room({adaptiveStream:true,dynacast:true});
+      room.on(LK.RoomEvent.TrackSubscribed,onTrack);
+      room.on(LK.RoomEvent.TrackUnsubscribed,offTrack);
+      room.on(LK.RoomEvent.LocalTrackPublished,(pub)=>{if(pub.track&&pub.track.kind==='video'){
+        const el=pub.track.attach();el.muted=true;el.playsInline=true;el.style.display='none';document.body.appendChild(el);localVideoEl=el;}});
+      await room.connect(url,token);
+      lkRoom=room;lkActive=true;
+      await room.localParticipant.setMicrophoneEnabled(true);
+      await room.localParticipant.setCameraEnabled(true);
+      const mb=document.getElementById('btnMicPub'),cb=document.getElementById('btnCam');
+      mb.style.display='';cb.style.display='';mb.classList.add('active');cb.classList.add('active');
+      toast('🎙️ LiveKit connected — real voice & video');
+    }catch(e){lkActive=false;toast('LiveKit connect failed — using synth audio');}
+  }
+  function onTrack(track,pub,participant){const id=participant.identity;
+    if(track.kind==='audio'){
+      try{const src=actx.createMediaStreamSource(new MediaStream([track.mediaStreamTrack]));
+        const voice=actx.createGain();voice.gain.value=0;const pan=mkPan();
+        src.connect(voice);voice.connect(pan);pan.connect(master);
+        const el=track.attach();el.muted=true;el.style.display='none';document.body.appendChild(el); // keeps the track pulling in some browsers
+        lkAudio.set(id,{src,voice,pan,el});}catch(e){}
+    }else if(track.kind==='video'){const el=track.attach();el.muted=true;el.playsInline=true;el.style.display='none';document.body.appendChild(el);lkVideo.set(id,{el});}
+  }
+  function offTrack(track,pub,participant){const id=participant.identity;
+    if(track.kind==='audio'){const a=lkAudio.get(id);if(a){try{a.src.disconnect();a.voice.disconnect();a.pan.disconnect();}catch(e){}if(a.el)a.el.remove();lkAudio.delete(id);}}
+    else if(track.kind==='video'){const v=lkVideo.get(id);if(v&&v.el)v.el.remove();lkVideo.delete(id);}
+    try{track.detach&&track.detach();}catch(e){}
+  }
+
+  // ---------- Loop ----------
+  const SPEED=230;
+  function step(dt){
+    let dx=0,dy=0;
+    if(keys.has('w')||keys.has('arrowup'))dy-=1;if(keys.has('s')||keys.has('arrowdown'))dy+=1;
+    if(keys.has('a')||keys.has('arrowleft'))dx-=1;if(keys.has('d')||keys.has('arrowright'))dx+=1;
+    if(dx||dy){const m=Math.hypot(dx,dy);dx/=m;dy/=m;me.facing=Math.atan2(dy,dx);moveMe(dx*SPEED*dt,dy*SPEED*dt);}
+    else if(target){const tx=target.x-me.x,ty=target.y-me.y,d=Math.hypot(tx,ty);
+      if(d<4)target=null;else{me.facing=Math.atan2(ty,tx);const s=Math.min(d,SPEED*dt),bx=me.x,by=me.y;
+        moveMe(tx/d*s,ty/d*s);if(Math.abs(me.x-bx)<0.2&&Math.abs(me.y-by)<0.2)target=null;}}
+    for(const e of peers.values()){e.rx+=(e.x-e.rx)*Math.min(1,dt*10);e.ry+=(e.y-e.ry)*Math.min(1,dt*10);}
+    cam.x+=(me.x-cam.x)*Math.min(1,dt*8);cam.y+=(me.y-cam.y)*Math.min(1,dt*8);
+    const hw=VW/(2*cam.zoom),hh=VH/(2*cam.zoom);
+    cam.x=Math.max(hw,Math.min(WORLD.w-hw,cam.x));cam.y=Math.max(hh,Math.min(WORLD.h-hh,cam.y));
+    if(WORLD.w<2*hw)cam.x=WORLD.w/2;if(WORLD.h<2*hh)cam.y=WORLD.h/2;
+  }
+
+  // ---------- Render ----------
+  function rr(x,y,w,h,r){r=Math.min(r,w/2,h/2);ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+  function hexA(hex,a){const h=hex.replace('#','');return'rgba('+parseInt(h.substr(0,2),16)+','+parseInt(h.substr(2,2),16)+','+parseInt(h.substr(4,2),16)+','+a+')';}
+  function fmt(s){s=Math.floor(s);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
+  function draw(){
+    ctx.clearRect(0,0,VW,VH);ctx.fillStyle='#0b1019';ctx.fillRect(0,0,VW,VH);
+    if(!world){return;}
+    ctx.save();ctx.translate(VW/2,VH/2);ctx.scale(cam.zoom,cam.zoom);ctx.translate(-cam.x,-cam.y);
+    ctx.fillStyle='#141b2c';ctx.fillRect(0,0,WORLD.w,WORLD.h);
+    ctx.strokeStyle='rgba(255,255,255,.035)';ctx.lineWidth=1;
+    for(let x=0;x<=WORLD.w;x+=80){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,WORLD.h);ctx.stroke();}
+    for(let y=0;y<=WORLD.h;y+=80){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(WORLD.w,y);ctx.stroke();}
+    for(const r of world.rooms){const b=r.bounds;ctx.fillStyle=hexA(r.color,.10);rr(b.x,b.y,b.w,b.h,18);ctx.fill();
+      ctx.strokeStyle=hexA(r.color,.55);ctx.lineWidth=2;ctx.setLineDash([10,8]);rr(b.x,b.y,b.w,b.h,18);ctx.stroke();ctx.setLineDash([]);
+      ctx.fillStyle=hexA(r.color,.9);ctx.font='600 18px sans-serif';ctx.textAlign='left';ctx.fillText(r.name,b.x+16,b.y+28);}
+    if(!roomAtPt(me.x,me.y)&&!myBcast){const g=ctx.createRadialGradient(me.x,me.y,R().inner*.4,me.x,me.y,R().outer);
+      g.addColorStop(0,'rgba(91,140,255,.16)');g.addColorStop(1,'rgba(91,140,255,0)');ctx.fillStyle=g;
+      ctx.beginPath();ctx.arc(me.x,me.y,R().outer,0,7);ctx.fill();
+      ctx.strokeStyle='rgba(91,140,255,.5)';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(me.x,me.y,R().outer,0,7);ctx.stroke();}
+    if(myBcast)ripples(me.x,me.y);
+    for(const o of world.obstacles){ctx.fillStyle='#222c44';if(o.r){rr(o.x,o.y,o.w,o.h,o.r);ctx.fill();}else ctx.fillRect(o.x,o.y,o.w,o.h);}
+    for(const r of world.rooms)drawDoor(r);
+    drawMedia();
+    if(showLinks&&!muted){for(const e of peers.values()){const v=e.bcast?1:peerVol(e);
+      if(v>0.04){ctx.strokeStyle=(e.bcast?'rgba(255,93,108,':'rgba(57,211,166,')+(0.12+v*0.55)+')';ctx.lineWidth=1+v*2.5;
+        ctx.beginPath();ctx.moveTo(me.x,me.y);ctx.lineTo(e.rx,e.ry);ctx.stroke();}}}
+    for(const [id,e] of peers){const lv=lkVideo.get(id);avatar(e.rx,e.ry,hueOf(id),e.name||'Guest',e.status,e.talking,e.bcast,false,lv&&lv.el);}
+    avatar(me.x,me.y,212,'You',null,false,myBcast,true,localVideoEl);
+    ctx.restore();
+    drawMinimap();
+  }
+  function ripples(x,y){for(let i=0;i<3;i++){const rad=40+((frame*2+i*40)%140);ctx.strokeStyle=hexA('#ff5d6c',0.5*(1-rad/180));
+    ctx.lineWidth=3;ctx.beginPath();ctx.arc(x,y,rad,0,7);ctx.stroke();}}
+  function drawDoor(r){const d=r.door,st=doors[r.id]||'closed';const col=st==='open'?'#39d3a6':st==='locked'?'#ff5d6c':'#ffb454';
+    ctx.fillStyle=hexA(col,st==='open'?.25:.7);rr(d.x,d.y,d.w,d.h,4);ctx.fill();ctx.strokeStyle=col;ctx.lineWidth=2;rr(d.x,d.y,d.w,d.h,4);ctx.stroke();
+    if(st==='locked'){ctx.fillStyle='#fff';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.fillText('🔒',d.x+d.w/2,d.y+d.h/2+4);}}
+  function drawMedia(){const m=world.mediaWall,sx=m.x,sy=m.y-m.screenH,sw=m.w,sh=m.screenH;
+    ctx.fillStyle='#222c44';ctx.fillRect(m.x,m.y,m.w,m.base);
+    ctx.fillStyle='#0a0f1c';rr(sx,sy,sw,sh,8);ctx.fill();ctx.save();rr(sx,sy,sw,sh,8);ctx.clip();
+    if(media.playing){for(let i=0;i<22;i++){const bh=18+Math.abs(Math.sin(frame*.06+i))*Math.abs(Math.sin(frame*.013+i*1.7))*(sh-30);
+      ctx.fillStyle='hsl('+(200+i*6)+' 70% 55%)';ctx.fillRect(sx+8+i*((sw-16)/22),sy+sh-bh-6,((sw-16)/22)-3,bh);}}
+    else{ctx.fillStyle='#5b8cff';ctx.font='28px sans-serif';ctx.textAlign='center';ctx.fillText('⏸',sx+sw/2,sy+sh/2+10);}
+    ctx.restore();ctx.strokeStyle=hexA('#5b8cff',.6);ctx.lineWidth=2;rr(sx,sy,sw,sh,8);ctx.stroke();
+    ctx.fillStyle='rgba(8,11,18,.8)';rr(sx,sy-24,sw,22,6);ctx.fill();
+    ctx.fillStyle='#e8edf7';ctx.font='600 12px sans-serif';ctx.textAlign='left';ctx.fillText((media.playing?'▶ ':'⏸ ')+m.title,sx+8,sy-9);
+    ctx.textAlign='right';ctx.fillStyle='#8a96b3';ctx.fillText(fmt(media.pos)+' / '+fmt(m.dur),sx+sw-8,sy-9);}
+  function avatar(x,y,hue,name,status,talking,bcast,isMe,videoEl){
+    let alpha=1;if(!isMe){const sameRoom=roomAtPt(me.x,me.y)&&roomAtPt(me.x,me.y)===roomAtPt(x,y);const d=Math.hypot(x-me.x,y-me.y);
+      alpha=(sameRoom||bcast)?1:Math.max(0.32,1-Math.max(0,d-R().inner)/(R().outer*1.25));}
+    ctx.globalAlpha=alpha;const r=16;
+    if(!isMe&&(talking||bcast)){ctx.strokeStyle=bcast?'rgba(255,93,108,.7)':'rgba(57,211,166,.6)';ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(x,y,r+6+Math.sin(frame*.25)*2,0,7);ctx.stroke();}
+    if(videoEl&&videoEl.readyState>=2&&videoEl.videoWidth>0&&alpha>0.34){ // live video in the bubble (LiveKit)
+      ctx.save();ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.clip();
+      const vw=videoEl.videoWidth,vh=videoEl.videoHeight,sc=Math.max(2*r/vw,2*r/vh),sw=2*r/sc,sh=2*r/sc;
+      try{ctx.drawImage(videoEl,(vw-sw)/2,(vh-sh)/2,sw,sh,x-r,y-r,2*r,2*r);}catch(_){}
+      ctx.restore();
+    }else{
+      ctx.fillStyle=hsl(hue);ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();
+      ctx.fillStyle='#0b1019';ctx.font='700 16px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(isMe?'Y':(name[0]||'?'),x,y+1);
+    }
+    ctx.lineWidth=3;ctx.strokeStyle=isMe?'#fff':'rgba(255,255,255,.7)';ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.stroke();
+    if(status){ctx.beginPath();ctx.fillStyle=status==='available'?'#39d3a6':status==='busy'?'#ffb454':'#8a96b3';ctx.arc(x+12,y-12,5,0,7);ctx.fill();ctx.strokeStyle='#141b2c';ctx.lineWidth=2;ctx.stroke();}
+    ctx.textBaseline='alphabetic';ctx.font='600 12px sans-serif';const tw=ctx.measureText(name).width;
+    ctx.fillStyle='rgba(8,11,18,.7)';rr(x-tw/2-7,y+21,tw+14,18,7);ctx.fill();ctx.fillStyle='#e8edf7';ctx.textAlign='center';ctx.fillText(name,x,y+34);ctx.globalAlpha=1;}
+  function drawMinimap(){if(!world)return;const W=mini.width,H=mini.height,sx=W/WORLD.w,sy=H/WORLD.h;
+    mctx.clearRect(0,0,W,H);mctx.fillStyle='#0d1424';mctx.fillRect(0,0,W,H);
+    for(const r of world.rooms){const b=r.bounds;mctx.fillStyle=hexA(r.color,.3);mctx.fillRect(b.x*sx,b.y*sy,b.w*sx,b.h*sy);}
+    mctx.fillStyle='#2a3552';for(const o of world.obstacles)mctx.fillRect(o.x*sx,o.y*sy,Math.max(1,o.w*sx),Math.max(1,o.h*sy));
+    mctx.fillStyle='#5b8cff';mctx.fillRect(world.mediaWall.x*sx,world.mediaWall.y*sy,world.mediaWall.w*sx,3);
+    for(const [id,e] of peers){mctx.fillStyle=e.bcast?'#ff5d6c':hsl(hueOf(id));mctx.beginPath();mctx.arc(e.rx*sx,e.ry*sy,2.4,0,7);mctx.fill();}
+    mctx.fillStyle='#fff';mctx.beginPath();mctx.arc(me.x*sx,me.y*sy,3,0,7);mctx.fill();}
+
+  // ---------- Banner / knock ----------
+  const banner=document.getElementById('banner'),bannerText=document.getElementById('bannerText');
+  const knockEl=document.getElementById('knock'),knockText=document.getElementById('knockText'),knockBtn=document.getElementById('knockBtn');
+  let activeDoor=null;
+  function updateUI(){
+    // banner: who's broadcasting
+    let bc=[...peers.values()].filter(e=>e.bcast).map(e=>e.name);if(myBcast)bc.unshift('You');
+    if(bc.length){banner.style.display='flex';bannerText.textContent=bc.join(', ')+(bc.length>1?' are':' is')+' broadcasting to the floor';}
+    else banner.style.display='none';
+    // knock prompt
+    if(!world){knockEl.style.display='none';return;}
+    const myRoom=roomAtPt(me.x,me.y);let found=null;
+    for(const r of world.rooms){const d=r.door,cx=d.x+d.w/2,cy=d.y+d.h/2,dist=Math.hypot(me.x-cx,me.y-cy),st=doors[r.id]||'closed';
+      if(dist<90){if(myRoom===r&&st==='open')found={r,a:'close'};else if(myRoom!==r&&st!=='open')found={r,a:'knock'};else if(myRoom===r&&st!=='open')found={r,a:'open'};}}
+    activeDoor=found;
+    if(!found){knockEl.style.display='none';return;}
+    knockEl.style.display='flex';const st=doors[found.r.id]||'closed';
+    if(found.a==='knock'){knockText.innerHTML='🚪 <b>'+found.r.name+'</b> is '+st+'.';knockBtn.textContent='Knock';}
+    else if(found.a==='close'){knockText.innerHTML='🚪 You\'re in <b>'+found.r.name+'</b>.';knockBtn.textContent='Close door';}
+    else{knockText.innerHTML='🚪 <b>'+found.r.name+'</b> door.';knockBtn.textContent='Open door';}
+  }
+  knockBtn.addEventListener('click',()=>{if(!activeDoor||!ws||ws.readyState!==1)return;const {r,a}=activeDoor;
+    if(a==='close')ws.send(JSON.stringify({t:'door',roomId:r.id,state:'closed'}));
+    else if(a==='open')ws.send(JSON.stringify({t:'door',roomId:r.id,state:'open'}));
+    else{ws.send(JSON.stringify({t:'knock',roomId:r.id}));toast('🔔 You knocked on '+r.name);}});
+  function toast(msg){const t=document.getElementById('toasts'),d=document.createElement('div');d.className='toast';d.textContent=msg;
+    t.appendChild(d);setTimeout(()=>d.style.opacity='0',2400);setTimeout(()=>d.remove(),3000);}
+
+  // ---------- Toolbar ----------
+  document.getElementById('btnMic').addEventListener('click',function(){muted=!muted;this.textContent=muted?'🔇':'🔊';this.classList.toggle('danger',muted);this.classList.toggle('active',muted);});
+  document.getElementById('btnLinks').addEventListener('click',function(){showLinks=!showLinks;this.classList.toggle('active',showLinks);});
+  document.querySelectorAll('#rangeSeg button').forEach(b=>b.addEventListener('click',function(){
+    document.querySelectorAll('#rangeSeg button').forEach(x=>x.classList.remove('active'));this.classList.add('active');mode=this.dataset.m;applyRange();}));
+  document.getElementById('btnBroadcast').addEventListener('click',function(){myBcast=!myBcast;this.classList.toggle('active',myBcast);
+    if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'broadcast',on:myBcast}));toast(myBcast?'📢 You are live to the whole floor':'Broadcast ended');});
+  document.getElementById('btnMicPub').addEventListener('click',function(){if(!lkActive||!lkRoom)return;
+    const on=!lkRoom.localParticipant.isMicrophoneEnabled;lkRoom.localParticipant.setMicrophoneEnabled(on);this.classList.toggle('active',on);toast(on?'🎤 Mic on':'🎤 Mic off');});
+  document.getElementById('btnCam').addEventListener('click',function(){if(!lkActive||!lkRoom)return;
+    const on=!lkRoom.localParticipant.isCameraEnabled;lkRoom.localParticipant.setCameraEnabled(on);this.classList.toggle('active',on);if(!on)localVideoEl=null;toast(on?'🎥 Camera on':'🎥 Camera off');});
+
+  // ---------- Start ----------
+  let last=performance.now(),acc=0;
+  function loop(now){const dt=Math.min(0.05,(now-last)/1000);last=now;frame++;
+    step(dt);sendMove(now);updateAudio();draw();acc+=dt;if(acc>0.1){updateUI();acc=0;}requestAnimationFrame(loop);}
+  document.getElementById('go').addEventListener('click',()=>{const name=(document.getElementById('name').value||'Guest').slice(0,16);myName=name;
+    document.getElementById('overlay').style.display='none';startAudio();if(actx&&actx.state==='suspended')actx.resume();connect(name);requestAnimationFrame(loop);});
+  document.getElementById('name').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('go').click();});
+})();
+</script>
+</body>
+</html>
