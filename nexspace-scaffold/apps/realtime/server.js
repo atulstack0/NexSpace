@@ -76,9 +76,35 @@ const clients = new Map(); // ws -> player
 let nextId = 1;
 let recording = { on: false, by: null, egressId: null }; // shared recording indicator (spec 6.17)
 
+// ---------- Analytics (spec 6.20) ----------
+const A = { startedAt: Date.now(), sessions: 0, peak: 0, totalMs: 0, closed: 0 };
+const roomSeconds = { open: 0 };
+for (const r of rooms) roomSeconds[r.id] = 0;
+function analyticsSnapshot() {
+  const occ = { open: 0 }; for (const r of rooms) occ[r.id] = 0;
+  for (const p of clients.values()) { const r = rooms.find((rm) => inRoom(p, rm)); occ[r ? r.id : "open"]++; }
+  const roomUsageMin = {}; for (const k in roomSeconds) roomUsageMin[k] = +(roomSeconds[k] / 60).toFixed(1);
+  return {
+    online: clients.size,
+    sessionsTotal: A.sessions,
+    peakConcurrency: A.peak,
+    avgSessionMin: A.closed ? +(A.totalMs / A.closed / 60000).toFixed(1) : 0,
+    uptimeMin: +((Date.now() - A.startedAt) / 60000).toFixed(1),
+    roomUsageMin,
+    currentOccupancy: occ,
+    generatedAt: Date.now(),
+  };
+}
+
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".ico": "image/x-icon" };
 const server = http.createServer((req, res) => {
   const urlPath = (req.url === "/" || !req.url) ? "/index.html" : req.url.split("?")[0];
+  if (urlPath === "/analytics") { // admin-gated metrics JSON (spec 6.20)
+    const token = (req.headers.authorization || "").replace(/^Bearer /, "") || (new URL(req.url, "http://x").searchParams.get("token") || "");
+    const claims = verifyJWT(token);
+    if (!claims || rank(claims.role) < RANK.admin) { res.writeHead(403, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "admin required" })); return; }
+    res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify(analyticsSnapshot())); return;
+  }
   const safe = path.normalize(urlPath).replace(/^(\.\.[/\\])+/, "");
   const file = path.join(WEB_DIR, safe);
   if (!file.startsWith(WEB_DIR)) { res.writeHead(403); res.end("Forbidden"); return; }
@@ -108,10 +134,11 @@ wss.on("connection", (ws) => {
       const claims = verifyJWT(m.token);
       const role = claims?.role || "guest";
       const name = claims?.name || String(m.name || "Guest").slice(0, 16) || "Guest";
-      const player = { id, name, role,
+      const player = { id, name, role, joinedAt: Date.now(),
         x: 820 + Math.random() * 140, y: 860 + Math.random() * 120, facing: 0,
         status: "available", talking: m.talking !== false, bcast: false };
       clients.set(ws, player);
+      A.sessions++; if (clients.size > A.peak) A.peak = clients.size;
       send(ws, { t: "welcome", id, world: worldForClient(), you: { ...player } });
       console.log(`+ ${player.name} (${id}) [${role}] — ${clients.size} online`);
       return;
@@ -152,6 +179,7 @@ wss.on("connection", (ws) => {
 
   ws.on("close", () => {
     const p = clients.get(ws);
+    if (p && p.joinedAt) { A.totalMs += Date.now() - p.joinedAt; A.closed++; }
     clients.delete(ws);
     if (p) console.log(`- ${p.name} (${p.id}) — ${clients.size} online`);
   });
@@ -168,6 +196,11 @@ setInterval(() => {
   const snap = JSON.stringify({ t: "snapshot", players, doors, media: { playing: mediaWall.playing, pos: Math.round(mediaWall.pos) }, recording });
   for (const ws of clients.keys()) if (ws.readyState === 1) ws.send(snap);
 }, 1000 / TICK_HZ);
+
+// analytics sampler — accumulate occupant-seconds per zone every 5s (spec 6.20)
+setInterval(() => {
+  for (const p of clients.values()) { const r = rooms.find((rm) => inRoom(p, rm)); const k = r ? r.id : "open"; roomSeconds[k] = (roomSeconds[k] || 0) + 5; }
+}, 5000);
 
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 function deny(ws, action, need) { send(ws, { t: "denied", action, need }); } // RBAC refusal feedback

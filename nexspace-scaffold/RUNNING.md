@@ -88,6 +88,10 @@ Click **⏺ Rec** in the toolbar. Everyone instantly sees a 🔴 **REC** indicat
 For the actual MP4 to be written, recording uses **LiveKit Egress**, which needs storage:
 add `S3_*` (S3 / Cloudflare R2 / MinIO) to `apps\api\.env` — on **LiveKit Cloud** egress is built-in, so the bucket is all that's missing. Without it, the indicator still works but no file is saved (you'll get a toast). Details in `apps/api/README.md`.
 
+## 3c. Analytics (optional)
+
+Log in as **admin** in the office (so the admin token is stored), then click **📊** in the toolbar or open **http://localhost:8787/analytics.html**. It shows online/peak/total sessions, average time-in-office, and per-zone occupancy, auto-refreshing every 5s, with a **CSV export**. The `/analytics` endpoint is admin-gated (guests get 403).
+
 ## 4. Editor (optional)
 
 Open **http://localhost:8787/editor.html**, drag furniture / move rooms, **Save to API** (writes to SQLite).

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NexSpace — Analytics</title>
+<style>
+  :root{--bg:#0e1320;--panel:#161d2e;--panel2:#1e2740;--line:#2b3654;--text:#e8edf7;--muted:#8a96b3;--accent:#5b8cff;--accent2:#39d3a6;--danger:#ff5d6c}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;padding:24px}
+  header{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+  .orb{width:30px;height:30px;border-radius:50%;background:conic-gradient(from 200deg,var(--accent),var(--accent2),var(--accent))}
+  h1{font-size:20px;margin:0}
+  .muted{color:var(--muted);font-size:13px}
+  .btn{margin-left:auto;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:13px;cursor:pointer}
+  .btn:hover{border-color:var(--accent)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;margin-bottom:22px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .card .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+  .card .val{font-size:30px;font-weight:800;margin-top:6px}
+  .section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:18px}
+  .section h2{font-size:14px;margin:0 0 14px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px}
+  .bar{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:13px}
+  .bar .name{width:120px;text-transform:capitalize}
+  .bar .track{flex:1;height:14px;background:var(--panel2);border-radius:7px;overflow:hidden}
+  .bar .fill{height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent))}
+  .bar .num{width:96px;text-align:right;color:var(--muted)}
+  #err{display:none;background:rgba(255,93,108,.14);border:1px solid var(--danger);color:#ffd2d7;border-radius:12px;padding:16px;font-size:14px}
+</style>
+</head>
+<body>
+<header>
+  <span class="orb"></span>
+  <div><h1>NexSpace Analytics</h1><div class="muted" id="sub">live · auto-refresh 5s</div></div>
+  <button class="btn" id="csv">⬇ Export CSV</button>
+</header>
+<div id="err">🔒 Admin only. Log in as <b>admin@nexspace.dev</b> in the office tab (so the admin token is stored), then reload this page.</div>
+<div id="content" style="display:none">
+  <div class="grid" id="cards"></div>
+  <div class="section"><h2>Zone usage (occupant-minutes)</h2><div id="usage"></div></div>
+  <div class="section"><h2>Currently in each zone</h2><div id="occ"></div></div>
+</div>
+
+<script>
+"use strict";
+(function(){
+  let latest=null;
+  const token=()=>localStorage.getItem('nexspace_token')||'';
+  function bars(el,obj,unit){
+    const max=Math.max(1,...Object.values(obj));
+    el.innerHTML=Object.keys(obj).map(k=>`<div class="bar"><span class="name">${k}</span>
+      <span class="track"><span class="fill" style="width:${Math.round((obj[k]/max)*100)}%"></span></span>
+      <span class="num">${obj[k]} ${unit}</span></div>`).join('');
+  }
+  function render(d){
+    latest=d;
+    document.getElementById('err').style.display='none';
+    document.getElementById('content').style.display='';
+    const cards=[
+      ['Online now',d.online],['Peak concurrency',d.peakConcurrency],['Total sessions',d.sessionsTotal],
+      ['Avg session (min)',d.avgSessionMin],['Uptime (min)',d.uptimeMin],
+    ];
+    document.getElementById('cards').innerHTML=cards.map(([l,v])=>`<div class="card"><div class="label">${l}</div><div class="val">${v}</div></div>`).join('');
+    bars(document.getElementById('usage'),d.roomUsageMin,'min');
+    bars(document.getElementById('occ'),d.currentOccupancy,'');
+    document.getElementById('sub').textContent='updated '+new Date(d.generatedAt).toLocaleTimeString()+' · auto-refresh 5s';
+  }
+  async function load(){
+    try{const r=await fetch('/analytics?token='+encodeURIComponent(token()));
+      if(r.status===403){document.getElementById('err').style.display='';document.getElementById('content').style.display='none';return;}
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      render(await r.json());}
+    catch(e){document.getElementById('sub').textContent='Could not reach the realtime server — is it running?';}
+  }
+  document.getElementById('csv').addEventListener('click',()=>{
+    if(!latest)return;
+    const rows=[['metric','value'],
+      ['online',latest.online],['peakConcurrency',latest.peakConcurrency],['sessionsTotal',latest.sessionsTotal],
+      ['avgSessionMin',latest.avgSessionMin],['uptimeMin',latest.uptimeMin]];
+    for(const k in latest.roomUsageMin)rows.push(['usageMin_'+k,latest.roomUsageMin[k]]);
+    for(const k in latest.currentOccupancy)rows.push(['occupancy_'+k,latest.currentOccupancy[k]]);
+    const csv=rows.map(r=>r.join(',')).join('\n');
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+    a.download='nexspace-analytics-'+Date.now()+'.csv';a.click();URL.revokeObjectURL(a.href);
+  });
+  load();setInterval(load,5000);
+})();
+</script>
+</body>
+</html>

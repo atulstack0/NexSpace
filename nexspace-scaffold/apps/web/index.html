@@ -74,6 +74,7 @@
     <option value="away">⚪ Away</option>
   </select>
   <button class="btn active" id="btnLinks">◠ Links</button>
+  <button class="btn" id="btnAnalytics" title="Analytics dashboard (admin)">📊</button>
 </div>
 <div id="banner"><span class="l"></span><span id="bannerText"></span></div>
 <div id="recind"></div>
@@ -486,6 +487,7 @@
   // ---------- Toolbar ----------
   document.getElementById('btnMic').addEventListener('click',function(){muted=!muted;this.textContent=muted?'🔇':'🔊';this.classList.toggle('danger',muted);this.classList.toggle('active',muted);});
   document.getElementById('btnLinks').addEventListener('click',function(){showLinks=!showLinks;this.classList.toggle('active',showLinks);});
+  document.getElementById('btnAnalytics').addEventListener('click',()=>window.open('/analytics.html','_blank'));
   function setStatus(s){myStatus=s;const sel=document.getElementById('statusSel');if(sel)sel.value=s;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'state',status:s}));}
   document.getElementById('statusSel').addEventListener('change',function(){autoAway=false;setStatus(this.value);});
   ['mousemove','keydown','mousedown','wheel'].forEach(ev=>addEventListener(ev,()=>{lastActivity=Date.now();if(autoAway){autoAway=false;setStatus('available');}}));

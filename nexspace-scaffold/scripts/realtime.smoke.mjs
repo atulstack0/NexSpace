@@ -100,6 +100,13 @@ try {
   await wait(450);
   (worldMsgs === before && guest.denied.includes("reload the world")) ? ok("guest denied world reload") : bad("guest reload was NOT blocked");
 
+  // analytics (6.20) — admin gets metrics, guest is denied
+  const aRes = await fetch(`http://localhost:${PORT}/analytics?token=${adminToken}`);
+  const aJson = aRes.ok ? await aRes.json() : {};
+  (aRes.status === 200 && aJson.sessionsTotal >= 2 && aJson.peakConcurrency >= 2) ? ok("admin /analytics returns metrics") : bad("admin /analytics failed");
+  const gRes = await fetch(`http://localhost:${PORT}/analytics`);
+  (gRes.status === 403) ? ok("guest /analytics denied (403)") : bad("guest /analytics not denied");
+
   admin.ws.close(); guest.ws.close(); await wait(250);
 } catch (e) {
   bad("exception: " + e.message);
