@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nexspace-scaffold
+    env:
+      DATABASE_URL: "file:./dev.db"
+      JWT_SECRET: "nexspace-dev-secret-change-me"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # installs all workspaces (apps/* + packages/*) and the test harness (ws)
+      - name: Install
+        run: npm install
+
+      # generate the Prisma client so the API type-check has its types
+      - name: Prisma generate
+        run: npx prisma generate --schema apps/api/prisma/schema.prisma
+
+      # verify (syntax + tsc) and the realtime smoke test (RBAC, sync, reload, analytics)
+      - name: Verify + smoke test
+        run: npm run check

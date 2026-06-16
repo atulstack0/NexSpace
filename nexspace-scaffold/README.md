@@ -1,5 +1,9 @@
 # NexSpace — Monorepo Scaffold (Phase 0 + Realtime Sync Slice)
 
+[![CI](https://github.com/atulstack0/NexSpace/actions/workflows/ci.yml/badge.svg)](https://github.com/atulstack0/NexSpace/actions/workflows/ci.yml)
+
+> Every push runs `npm run check` (syntax + API type-check + realtime smoke test) automatically via GitHub Actions — see the badge above.
+
 A runnable foundation for the spatial virtual office. Two browser tabs now share the **same full office** — rooms, doors, a media wall, collisions, and presence — synced through an authoritative server, with distance-based **proximity + room + broadcast spatial audio**. It's the multiplayer version of the single-file prototype.
 
 > Status: scaffold. It implements the realtime/state server and a thin web client. The full stack (API + Postgres + Redis + LiveKit SFU + 2D/3D renderers) is laid out in the build plan and is added in later phases.
