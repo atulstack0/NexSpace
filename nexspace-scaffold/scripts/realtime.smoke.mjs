@@ -49,7 +49,7 @@ await new Promise((res, rej) => {
 function join(name, token) {
   return new Promise((resolve) => {
     const ws = new WebSocket(`ws://localhost:${PORT}`);
-    const st = { ws, name, id: null, role: null, last: null, denied: [], rateLimited: false };
+    const st = { ws, name, id: null, role: null, last: null, denied: [], rateLimited: false, chats: [] };
     ws.on("open", () => ws.send(JSON.stringify({ t: "join", name, token })));
     ws.on("message", (d) => {
       const m = JSON.parse(d.toString());
@@ -57,6 +57,7 @@ function join(name, token) {
       if (m.t === "snapshot") st.last = m;
       if (m.t === "denied") st.denied.push(m.action);
       if (m.t === "rateLimited") st.rateLimited = true;
+      if (m.t === "chat") st.chats.push(m);
     });
     ws.on("error", (e) => bad("ws error: " + e.message));
   });
@@ -76,6 +77,14 @@ try {
   admin.ws.send(JSON.stringify({ t: "move", x: 500, y: 500, facing: 0 }));
   await wait(450);
   (guest.last?.players?.some((p) => p.id === admin.id && Math.abs(p.x - 500) < 5)) ? ok("position syncs between clients") : bad("position not synced");
+
+  // chat (6.9) — admin is now inside the Focus Room at 500,500; guest is far at spawn
+  admin.ws.send(JSON.stringify({ t: "chat", scope: "floor", body: "hello-floor" }));
+  await wait(300);
+  (guest.chats.some((c) => c.body === "hello-floor")) ? ok("floor chat reaches other clients") : bad("floor chat not delivered");
+  admin.ws.send(JSON.stringify({ t: "chat", scope: "nearby", body: "hello-near" }));
+  await wait(300);
+  (admin.chats.some((c) => c.body === "hello-near") && !guest.chats.some((c) => c.body === "hello-near")) ? ok("nearby chat delivered in-range only") : bad("nearby chat routing wrong");
 
   // presence/status sync (6.19) — valid status applies, invalid is ignored
   admin.ws.send(JSON.stringify({ t: "state", status: "busy" }));

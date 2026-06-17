@@ -23,6 +23,7 @@ const TICK_HZ = 15;
 const MAX_SPEED = 520;   // px/s — server-authoritative movement cap (> client sprint; anti-teleport, §8)
 const RATE_LIMIT = 80;   // max messages/sec per connection (abuse protection, §8)
 const MAX_CLIENTS = Number(process.env.MAX_CLIENTS) || 200; // connection cap per node (§8)
+const CHAT_NEARBY = 350; // px radius for 'nearby' chat on the open floor (§6.9)
 const WEB_DIR = path.join(__dirname, "..", "web");
 
 // ---------- Auth (RBAC) — verifies the dependency-free JWT minted by the API ----------
@@ -135,6 +136,7 @@ function applyEvent(event, data) {
   else if (event === "media") { mediaWall.playing = !!data.playing; }
   else if (event === "recording") { recording = data.on ? { on: true, by: data.by, egressId: data.egressId || null } : { on: false, by: null, egressId: null }; }
   else if (event === "worldReload") { reloadAndBroadcast(); }
+  else if (event === "chat") { deliverChat(data); }
 }
 if (REDIS_URL) {
   const Redis = require("ioredis");
@@ -260,6 +262,12 @@ wss.on("connection", (ws) => {
       if (rank(p.role) < RANK.admin) return deny(ws, "record", "admin");
       recording = m.on ? { on: true, by: p.name, egressId: m.egressId || null } : { on: false, by: null, egressId: null };
       publishEvent("recording", recording);
+    } else if (m.t === "chat") {
+      const body = String(m.body || "").slice(0, 500); if (!body.trim()) return;
+      const scope = m.scope === "floor" ? "floor" : "nearby";
+      const r = rooms.find((rm) => inRoom(p, rm));
+      const payload = { from: p.id, name: p.name, scope, body, x: p.x, y: p.y, roomId: r ? r.id : null, ts: Date.now() };
+      deliverChat(payload); publishEvent("chat", payload); // local + cross-node
     }
   });
 
@@ -295,6 +303,17 @@ const heartbeat = setInterval(() => {
 
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 function json(res, obj, code = 200) { res.writeHead(code, { "Content-Type": "application/json" }); res.end(JSON.stringify(obj)); }
+// chat routing (§6.9): floor = everyone; nearby = same room, or within radius on the open floor
+function deliverChat(d) {
+  for (const [ws, p] of clients) {
+    let target = d.scope === "floor";
+    if (!target) {
+      const pr = rooms.find((r) => inRoom(p, r)), prId = pr ? pr.id : null;
+      target = d.roomId ? (prId === d.roomId) : (!prId && Math.hypot(p.x - d.x, p.y - d.y) < CHAT_NEARBY);
+    }
+    if (target) send(ws, { t: "chat", from: d.from, name: d.name, scope: d.scope, body: d.body, ts: d.ts });
+  }
+}
 function deny(ws, action, need) { send(ws, { t: "denied", action, need }); } // RBAC refusal feedback
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 

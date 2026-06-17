@@ -32,6 +32,13 @@
   #banner .l{width:9px;height:9px;border-radius:50%;background:var(--danger);animation:pulse 1.2s infinite}
   #recind{position:fixed;top:72px;left:12px;z-index:19;display:none;background:rgba(255,93,108,.16);border:1px solid var(--danger);color:#ffd2d7;border-radius:20px;padding:6px 12px;font-size:12px;font-weight:700}
   #statusSel{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:6px 8px;font-size:13px;cursor:pointer}
+  #chat{position:fixed;bottom:14px;left:14px;z-index:16;width:300px;max-width:46vw;display:none;flex-direction:column;background:rgba(22,29,46,.96);border:1px solid var(--line);border-radius:12px;overflow:hidden;backdrop-filter:blur(8px)}
+  #chat .chead{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted);font-weight:600}
+  #chat .chead select{margin-left:auto;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:3px 6px;font-size:12px}
+  #chatMsgs{height:190px;overflow-y:auto;padding:8px 10px;display:flex;flex-direction:column;gap:6px;font-size:13px}
+  #chatMsgs .cm .who{font-weight:700} #chatMsgs .cm .sc{font-size:10px;color:var(--muted);margin-left:5px}
+  #chatRow{display:flex;gap:6px;padding:8px;border-top:1px solid var(--line)}
+  #chatText{flex:1;background:#0d1424;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:7px 9px;font-size:13px}
   #knock{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);z-index:18;display:none;align-items:center;gap:12px;
     background:rgba(22,29,46,.96);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:13px}
   #knock b{color:#fff}
@@ -79,6 +86,15 @@
   </select>
   <button class="btn active" id="btnLinks">◠ Links</button>
   <button class="btn" id="btnAnalytics" title="Analytics dashboard (admin)">📊</button>
+  <button class="btn" id="btnChat" title="Chat (6.9)">💬</button>
+</div>
+<div id="chat">
+  <div class="chead">Chat
+    <select id="chatScope"><option value="nearby">Nearby</option><option value="floor">Floor</option></select>
+    <button class="btn" id="chatClose" style="padding:2px 8px">✕</button>
+  </div>
+  <div id="chatMsgs"></div>
+  <div id="chatRow"><input id="chatText" maxlength="500" placeholder="Message…" /><button class="btn" id="chatSend">Send</button></div>
 </div>
 <div id="banner"><span class="l"></span><span id="bannerText"></span></div>
 <div id="recind"></div>
@@ -166,6 +182,7 @@
       }
       else if(m.t==='world'){world=m.world;WORLD={w:world.w,h:world.h};world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});if(threeMode)Three3D.rebuild();toast('🛠️ Office layout updated');}
       else if(m.t==='denied')toast('🔒 You need '+m.need+' role to '+m.action+'.');
+      else if(m.t==='chat')addChat(m);
     };
   }
   function sendMove(now){if(ws&&ws.readyState===1&&now-lastSend>60){lastSend=now;
@@ -174,7 +191,7 @@
 
   // ---------- Input ----------
   const keys=new Set();let target=null;
-  addEventListener('keydown',e=>{const k=e.key.toLowerCase();
+  addEventListener('keydown',e=>{const tg=e.target; if(tg&&(tg.tagName==='INPUT'||tg.tagName==='TEXTAREA'))return; const k=e.key.toLowerCase();
     if(viewMode==='3d'&&k==='v'){cameraMode=cameraMode==='thirdPerson'?'firstPerson':'thirdPerson';toast(cameraMode==='firstPerson'?'👁️ First-person':'🎥 Third-person');return;}
     if(viewMode==='3d'&&k===' '){if(jumpZ<=0.5)jumpV=220;e.preventDefault();return;} // cosmetic jump
     if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','shift'].includes(k)){keys.add(k);if(k!=='shift')target=null;e.preventDefault();}});
@@ -570,11 +587,20 @@
     else{ws.send(JSON.stringify({t:'knock',roomId:r.id}));toast('🔔 You knocked on '+r.name);}});
   function toast(msg){const t=document.getElementById('toasts'),d=document.createElement('div');d.className='toast';d.textContent=msg;
     t.appendChild(d);setTimeout(()=>d.style.opacity='0',2400);setTimeout(()=>d.remove(),3000);}
+  function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function addChat(m){const box=document.getElementById('chatMsgs');const d=document.createElement('div');d.className='cm';const mine=(m.from===myId);
+    d.innerHTML='<span class="who" style="color:'+(mine?'#fff':hsl(hueOf(m.from)))+'">'+escapeHtml(m.name)+'</span><span class="sc">'+escapeHtml(m.scope)+'</span><br>'+escapeHtml(m.body);
+    box.appendChild(d);while(box.children.length>100)box.removeChild(box.firstChild);box.scrollTop=box.scrollHeight;}
 
   // ---------- Toolbar ----------
   document.getElementById('btnMic').addEventListener('click',function(){muted=!muted;this.textContent=muted?'🔇':'🔊';this.classList.toggle('danger',muted);this.classList.toggle('active',muted);});
   document.getElementById('btnLinks').addEventListener('click',function(){showLinks=!showLinks;this.classList.toggle('active',showLinks);});
   document.getElementById('btnAnalytics').addEventListener('click',()=>window.open('/analytics.html','_blank'));
+  document.getElementById('btnChat').addEventListener('click',()=>{const c=document.getElementById('chat');c.style.display=(c.style.display==='flex')?'none':'flex';if(c.style.display==='flex')document.getElementById('chatText').focus();});
+  document.getElementById('chatClose').addEventListener('click',()=>document.getElementById('chat').style.display='none');
+  function sendChat(){const t=document.getElementById('chatText');const body=t.value.trim();if(!body||!ws||ws.readyState!==1)return;ws.send(JSON.stringify({t:'chat',scope:document.getElementById('chatScope').value,body}));t.value='';}
+  document.getElementById('chatSend').addEventListener('click',sendChat);
+  document.getElementById('chatText').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
   function setStatus(s){myStatus=s;const sel=document.getElementById('statusSel');if(sel)sel.value=s;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'state',status:s}));}
   document.getElementById('statusSel').addEventListener('change',function(){autoAway=false;setStatus(this.value);});
   ['mousemove','keydown','mousedown','wheel'].forEach(ev=>addEventListener(ev,()=>{lastActivity=Date.now();if(autoAway){autoAway=false;setStatus('available');}}));
