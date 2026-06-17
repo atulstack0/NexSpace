@@ -39,6 +39,10 @@
   #chatMsgs .cm .who{font-weight:700} #chatMsgs .cm .sc{font-size:10px;color:var(--muted);margin-left:5px}
   #chatRow{display:flex;gap:6px;padding:8px;border-top:1px solid var(--line)}
   #chatText{flex:1;background:#0d1424;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:7px 9px;font-size:13px}
+  #screenshare{position:fixed;inset:5% 5% 8% 5%;z-index:30;display:none;flex-direction:column;background:rgba(10,15,28,.97);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  #screenshare .shead{display:flex;gap:6px;align-items:center;padding:8px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  #screenView{flex:1;display:flex;align-items:center;justify-content:center;background:#000;min-height:0}
+  #screenView video{max-width:100%;max-height:100%}
   #knock{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);z-index:18;display:none;align-items:center;gap:12px;
     background:rgba(22,29,46,.96);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:13px}
   #knock b{color:#fff}
@@ -74,6 +78,8 @@
   <button class="btn" id="btnMic" title="Deafen (mute everyone you hear)">🔊</button>
   <button class="btn" id="btnMicPub" title="Your microphone (LiveKit)" style="display:none">🎤</button>
   <button class="btn" id="btnCam" title="Your camera (LiveKit)" style="display:none">🎥</button>
+  <button class="btn" id="btnScreen" title="Share your screen (LiveKit)" style="display:none">🖥️ Share</button>
+  <button class="btn" id="btnScreens" title="View shared screens" style="display:none">🖥️ Screens (0)</button>
   <div class="seg" id="rangeSeg"><button data-m="quiet">Quiet</button><button data-m="normal" class="active">Normal</button><button data-m="megaphone">Mega</button></div>
   <button class="btn live" id="btnBroadcast">📢 Broadcast</button>
   <button class="btn" id="btnRec" title="Record the room (LiveKit Egress)">⏺ Rec</button>
@@ -95,6 +101,11 @@
   </div>
   <div id="chatMsgs"></div>
   <div id="chatRow"><input id="chatText" maxlength="500" placeholder="Message…" /><button class="btn" id="chatSend">Send</button></div>
+</div>
+<div id="screenHolder" style="display:none"></div>
+<div id="screenshare">
+  <div class="shead"><span id="screenTabs"></span><button class="btn" id="screenClose" style="margin-left:auto">✕ Close</button></div>
+  <div id="screenView"></div>
 </div>
 <div id="banner"><span class="l"></span><span id="bannerText"></span></div>
 <div id="recind"></div>
@@ -137,7 +148,7 @@
   const API_BASE=location.protocol+'//'+location.hostname+':3001';
   let lkRoom=null,lkActive=false,localVideoEl=null,myToken=null,myRole='guest';
   let myStatus='available',lastActivity=Date.now(),autoAway=false;
-  const lkAudio=new Map(),lkVideo=new Map();
+  const lkAudio=new Map(),lkVideo=new Map(),lkScreens=new Map();let screenFocus=null;
   const hsl=h=>'hsl('+h+' 70% 60%)';
   const STATUS_COLOR={available:'#39d3a6',away:'#8a96b3',busy:'#ffb454',dnd:'#ff5d6c',inMeeting:'#5b8cff'};
   const hueOf=id=>{let h=0;for(let i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))%360;return h;};
@@ -275,14 +286,14 @@
       const room=new LK.Room({adaptiveStream:true,dynacast:true});
       room.on(LK.RoomEvent.TrackSubscribed,onTrack);
       room.on(LK.RoomEvent.TrackUnsubscribed,offTrack);
-      room.on(LK.RoomEvent.LocalTrackPublished,(pub)=>{if(pub.track&&pub.track.kind==='video'){
+      room.on(LK.RoomEvent.LocalTrackPublished,(pub)=>{if(pub.track&&pub.track.kind==='video'&&pub.track.source!==LK.Track.Source.ScreenShare){
         const el=pub.track.attach();el.muted=true;el.playsInline=true;el.style.display='none';document.body.appendChild(el);localVideoEl=el;}});
       await room.connect(url,token);
       lkRoom=room;lkActive=true;
       await room.localParticipant.setMicrophoneEnabled(true);
       await room.localParticipant.setCameraEnabled(true);
       const mb=document.getElementById('btnMicPub'),cb=document.getElementById('btnCam');
-      mb.style.display='';cb.style.display='';mb.classList.add('active');cb.classList.add('active');
+      mb.style.display='';cb.style.display='';document.getElementById('btnScreen').style.display='';mb.classList.add('active');cb.classList.add('active');
       toast('🎙️ LiveKit connected — real voice & video');
     }catch(e){lkActive=false;toast('LiveKit connect failed — using synth audio');}
   }
@@ -293,11 +304,15 @@
         src.connect(voice);voice.connect(pan);pan.connect(master);
         const el=track.attach();el.muted=true;el.style.display='none';document.body.appendChild(el); // keeps the track pulling in some browsers
         lkAudio.set(id,{src,voice,pan,el});}catch(e){}
-    }else if(track.kind==='video'){const el=track.attach();el.muted=true;el.playsInline=true;el.style.display='none';document.body.appendChild(el);lkVideo.set(id,{el});}
+    }else if(track.kind==='video'){const el=track.attach();el.muted=true;el.playsInline=true;el.style.display='none';
+      if(LK&&track.source===LK.Track.Source.ScreenShare){document.getElementById('screenHolder').appendChild(el);lkScreens.set(id,{el,name:(participant.name||id)});updateScreens();}
+      else{document.body.appendChild(el);lkVideo.set(id,{el});}}
   }
   function offTrack(track,pub,participant){const id=participant.identity;
     if(track.kind==='audio'){const a=lkAudio.get(id);if(a){try{a.src.disconnect();a.voice.disconnect();a.pan.disconnect();}catch(e){}if(a.el)a.el.remove();lkAudio.delete(id);}}
-    else if(track.kind==='video'){const v=lkVideo.get(id);if(v&&v.el)v.el.remove();lkVideo.delete(id);}
+    else if(track.kind==='video'){
+      if(LK&&track.source===LK.Track.Source.ScreenShare){const s=lkScreens.get(id);if(s&&s.el)s.el.remove();lkScreens.delete(id);if(screenFocus===id)screenFocus=null;updateScreens();}
+      else{const v=lkVideo.get(id);if(v&&v.el)v.el.remove();lkVideo.delete(id);}}
     try{track.detach&&track.detach();}catch(e){}
   }
 
@@ -629,6 +644,23 @@
     const on=!lkRoom.localParticipant.isMicrophoneEnabled;lkRoom.localParticipant.setMicrophoneEnabled(on);this.classList.toggle('active',on);toast(on?'🎤 Mic on':'🎤 Mic off');});
   document.getElementById('btnCam').addEventListener('click',function(){if(!lkActive||!lkRoom)return;
     const on=!lkRoom.localParticipant.isCameraEnabled;lkRoom.localParticipant.setCameraEnabled(on);this.classList.toggle('active',on);if(!on)localVideoEl=null;toast(on?'🎥 Camera on':'🎥 Camera off');});
+  document.getElementById('btnScreen').addEventListener('click',async function(){
+    if(!lkActive||!lkRoom){toast('Screen share needs LiveKit (set creds in apps/api/.env)');return;}
+    const on=!lkRoom.localParticipant.isScreenShareEnabled;
+    try{await lkRoom.localParticipant.setScreenShareEnabled(on);this.classList.toggle('active',on);toast(on?'🖥️ Sharing your screen':'Stopped sharing');}
+    catch(e){toast('Screen share canceled');}});
+  function updateScreens(){const ids=[...lkScreens.keys()];const sb=document.getElementById('btnScreens'),ov=document.getElementById('screenshare'),tabs=document.getElementById('screenTabs');
+    sb.style.display=ids.length?'':'none';sb.textContent='🖥️ Screens ('+ids.length+')';
+    if(!ids.length){ov.style.display='none';screenFocus=null;}
+    tabs.innerHTML='';ids.forEach(id=>{const b=document.createElement('button');b.className='btn'+(id===screenFocus?' active':'');b.textContent=lkScreens.get(id).name;b.style.padding='4px 9px';b.onclick=()=>focusScreen(id);tabs.appendChild(b);});}
+  function focusScreen(id){const holder=document.getElementById('screenHolder'),view=document.getElementById('screenView');
+    if(screenFocus&&lkScreens.get(screenFocus)){const c=lkScreens.get(screenFocus).el;c.style.display='none';holder.appendChild(c);}
+    const s=lkScreens.get(id);if(!s)return;screenFocus=id;s.el.style.display='block';view.innerHTML='';view.appendChild(s.el);
+    document.getElementById('screenshare').style.display='flex';updateScreens();}
+  document.getElementById('btnScreens').addEventListener('click',()=>{const ov=document.getElementById('screenshare');
+    if(ov.style.display==='flex')ov.style.display='none';else{const ids=[...lkScreens.keys()];if(ids.length)focusScreen(lkScreens.has(screenFocus)?screenFocus:ids[0]);}});
+  document.getElementById('screenClose').addEventListener('click',()=>{const ov=document.getElementById('screenshare');ov.style.display='none';
+    if(screenFocus&&lkScreens.get(screenFocus)){const c=lkScreens.get(screenFocus).el;c.style.display='none';document.getElementById('screenHolder').appendChild(c);}screenFocus=null;updateScreens();});
   btnRec.addEventListener('click',async function(){
     const turningOn=!recording.on;
     if(turningOn){
