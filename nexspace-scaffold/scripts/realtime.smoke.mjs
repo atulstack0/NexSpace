@@ -85,6 +85,17 @@ try {
   admin.ws.send(JSON.stringify({ t: "chat", scope: "nearby", body: "hello-near" }));
   await wait(300);
   (admin.chats.some((c) => c.body === "hello-near") && !guest.chats.some((c) => c.body === "hello-near")) ? ok("nearby chat delivered in-range only") : bad("nearby chat routing wrong");
+  // channel chat reaches everyone (open channels)
+  admin.ws.send(JSON.stringify({ t: "chat", scope: "channel", channel: "general", body: "chan-hi" }));
+  await wait(300);
+  (guest.chats.some((c) => c.body === "chan-hi" && c.channel === "general")) ? ok("channel chat reaches all clients") : bad("channel chat not delivered");
+  // DM reaches the recipient, and excludes non-recipients
+  admin.ws.send(JSON.stringify({ t: "chat", scope: "dm", to: guest.id, body: "dm-hi" }));
+  await wait(300);
+  (guest.chats.some((c) => c.body === "dm-hi")) ? ok("DM reaches the recipient") : bad("DM not delivered to recipient");
+  admin.ws.send(JSON.stringify({ t: "chat", scope: "dm", to: "nobody", body: "dm-secret" }));
+  await wait(300);
+  (!guest.chats.some((c) => c.body === "dm-secret")) ? ok("DM excludes non-recipients") : bad("DM leaked to a non-recipient");
 
   // presence/status sync (6.19) — valid status applies, invalid is ignored
   admin.ws.send(JSON.stringify({ t: "state", status: "busy" }));

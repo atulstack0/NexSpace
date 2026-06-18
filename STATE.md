@@ -42,7 +42,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Rooms, doors (open/closed/locked) + knock-to-enter | ✅ | realtime + web |
 | Broadcast mode | ✅ | realtime + web |
 | Media wall — synced play/pause, distance-faded audio | ✅ | realtime + web |
-| Text chat — multi-scope (nearby/floor), room-aware, cross-node, XSS-safe | ✅ | realtime + web |
+| Text chat — nearby / floor / #channels / private DMs, room-aware, cross-node, XSS-safe | ✅ | realtime + web |
 | Screen sharing (LiveKit) — publish + multi-share focus viewer | ✅ opt-in | `apps/web` |
 | 2D ⇄ 3D toggle — pseudo-3D **and** real Three.js WebGL | ✅ | `apps/web/index.html` |
 | PUBG-style 3D camera — third/first person, mouse-look, sprint, jump, camera collision | ✅ | `apps/web/index.html` |
@@ -59,7 +59,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 
 ## What's not built yet (the honest list)
 
-- **Chat channels & private DMs** (multi-scope nearby/floor chat *is* built; named channels and 1:1 DMs aren't), **whiteboards**, **remote screen control** — not in the build.
+- **Whiteboards** and **remote screen control** — not in the build. (Chat now covers nearby / floor / #channels / DMs.)
 - **glTF art** — 3D uses primitives (boxes/cylinders/billboards), not modeled assets.
 - **Multi-floor / portals / outdoor "chai stall"**, extra interactive objects (games, Spotify, YouTube TV beyond the media wall).
 - **Calendar / Teams / SSO+SCIM** (need OAuth + accounts); invites/guest links/CSV import; branding/white-label; moderation tooling.

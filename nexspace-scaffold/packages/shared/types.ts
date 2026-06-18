@@ -98,7 +98,7 @@ export interface DoorMsg      { t: "door"; roomId: string; state: DoorState; } /
 export interface KnockMsg     { t: "knock"; roomId: string; }              // request entry; occupant admits (6.4)
 export interface RecordingMsg { t: "recording"; on: boolean; egressId?: string; } // start/stop room recording (6.17)
 export interface AdminReloadMsg { t: "adminReload"; token: string; } // admin re-pushes the world to everyone live (6.10/6.14)
-export interface ChatSendMsg  { t: "chat"; scope: "nearby" | "floor"; body: string; } // multi-scope chat (6.9)
+export interface ChatSendMsg  { t: "chat"; scope: "nearby" | "floor" | "channel" | "dm"; channel?: string; to?: string; body: string; } // multi-scope chat (6.9)
 export type ClientMsg = JoinMsg | MoveMsg | StateMsg | BroadcastMsg | MediaMsg | DoorMsg | KnockMsg | RecordingMsg | AdminReloadMsg | ChatSendMsg;
 
 // ---- Server → Client ----
@@ -118,7 +118,7 @@ export interface DeniedMsg   { t: "denied"; action: string; need: string; }   //
 export interface WorldUpdateMsg { t: "world"; world: WorldBlob; }              // live layout reload pushed to clients (6.10)
 export interface RateLimitedMsg { t: "rateLimited"; }                          // connection exceeded the message rate (§8)
 export interface FullMsg        { t: "full"; }                                 // server at capacity, join refused (§8)
-export interface ChatMessage    { t: "chat"; from: string; name: string; scope: "nearby" | "floor"; body: string; ts: number; } // (6.9)
+export interface ChatMessage    { t: "chat"; from: string; name: string; scope: "nearby" | "floor" | "channel" | "dm"; channel?: string | null; to?: string | null; body: string; ts: number; } // (6.9)
 export interface SnapshotMsg {
   t: "snapshot";
   players: PlayerSnapshot[];

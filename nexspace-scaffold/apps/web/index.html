@@ -604,16 +604,26 @@
     t.appendChild(d);setTimeout(()=>d.style.opacity='0',2400);setTimeout(()=>d.remove(),3000);}
   function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function addChat(m){const box=document.getElementById('chatMsgs');const d=document.createElement('div');d.className='cm';const mine=(m.from===myId);
-    d.innerHTML='<span class="who" style="color:'+(mine?'#fff':hsl(hueOf(m.from)))+'">'+escapeHtml(m.name)+'</span><span class="sc">'+escapeHtml(m.scope)+'</span><br>'+escapeHtml(m.body);
+    const tag=m.scope==='channel'?('#'+(m.channel||'')):m.scope==='dm'?'DM':m.scope;
+    d.innerHTML='<span class="who" style="color:'+(mine?'#fff':hsl(hueOf(m.from)))+'">'+escapeHtml(m.name)+'</span><span class="sc">'+escapeHtml(tag)+'</span><br>'+escapeHtml(m.body);
     box.appendChild(d);while(box.children.length>100)box.removeChild(box.firstChild);box.scrollTop=box.scrollHeight;}
 
   // ---------- Toolbar ----------
   document.getElementById('btnMic').addEventListener('click',function(){muted=!muted;this.textContent=muted?'🔇':'🔊';this.classList.toggle('danger',muted);this.classList.toggle('active',muted);});
   document.getElementById('btnLinks').addEventListener('click',function(){showLinks=!showLinks;this.classList.toggle('active',showLinks);});
   document.getElementById('btnAnalytics').addEventListener('click',()=>window.open('/analytics.html','_blank'));
-  document.getElementById('btnChat').addEventListener('click',()=>{const c=document.getElementById('chat');c.style.display=(c.style.display==='flex')?'none':'flex';if(c.style.display==='flex')document.getElementById('chatText').focus();});
+  function rebuildChatScopes(){const sel=document.getElementById('chatScope');const cur=sel.value;
+    let html='<option value="nearby">Nearby</option><option value="floor">Floor</option><option value="channel:general">#general</option><option value="channel:random">#random</option>';
+    for(const [id,e] of peers)html+='<option value="dm:'+id+'">DM → '+escapeHtml(e.name||'Guest')+'</option>';
+    sel.innerHTML=html;if([...sel.options].some(o=>o.value===cur))sel.value=cur;}
+  document.getElementById('btnChat').addEventListener('click',()=>{const c=document.getElementById('chat');c.style.display=(c.style.display==='flex')?'none':'flex';if(c.style.display==='flex'){rebuildChatScopes();document.getElementById('chatText').focus();}});
   document.getElementById('chatClose').addEventListener('click',()=>document.getElementById('chat').style.display='none');
-  function sendChat(){const t=document.getElementById('chatText');const body=t.value.trim();if(!body||!ws||ws.readyState!==1)return;ws.send(JSON.stringify({t:'chat',scope:document.getElementById('chatScope').value,body}));t.value='';}
+  function sendChat(){const t=document.getElementById('chatText');const body=t.value.trim();if(!body||!ws||ws.readyState!==1)return;
+    const v=document.getElementById('chatScope').value;let msg;
+    if(v.indexOf('dm:')===0)msg={t:'chat',scope:'dm',to:v.slice(3),body};
+    else if(v.indexOf('channel:')===0)msg={t:'chat',scope:'channel',channel:v.slice(8),body};
+    else msg={t:'chat',scope:v,body};
+    ws.send(JSON.stringify(msg));t.value='';}
   document.getElementById('chatSend').addEventListener('click',sendChat);
   document.getElementById('chatText').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
   function setStatus(s){myStatus=s;const sel=document.getElementById('statusSel');if(sel)sel.value=s;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'state',status:s}));}

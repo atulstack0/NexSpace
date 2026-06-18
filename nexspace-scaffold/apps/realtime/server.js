@@ -264,9 +264,12 @@ wss.on("connection", (ws) => {
       publishEvent("recording", recording);
     } else if (m.t === "chat") {
       const body = String(m.body || "").slice(0, 500); if (!body.trim()) return;
-      const scope = m.scope === "floor" ? "floor" : "nearby";
+      let scope = ["nearby", "floor", "channel", "dm"].includes(m.scope) ? m.scope : "nearby";
+      let channel = null, to = null;
+      if (scope === "channel") channel = String(m.channel || "general").slice(0, 32);
+      else if (scope === "dm") { to = String(m.to || ""); if (!to) return; }
       const r = rooms.find((rm) => inRoom(p, rm));
-      const payload = { from: p.id, name: p.name, scope, body, x: p.x, y: p.y, roomId: r ? r.id : null, ts: Date.now() };
+      const payload = { from: p.id, name: p.name, scope, channel, to, body, x: p.x, y: p.y, roomId: r ? r.id : null, ts: Date.now() };
       deliverChat(payload); publishEvent("chat", payload); // local + cross-node
     }
   });
@@ -306,12 +309,14 @@ function json(res, obj, code = 200) { res.writeHead(code, { "Content-Type": "app
 // chat routing (§6.9): floor = everyone; nearby = same room, or within radius on the open floor
 function deliverChat(d) {
   for (const [ws, p] of clients) {
-    let target = d.scope === "floor";
-    if (!target) {
+    let target;
+    if (d.scope === "floor" || d.scope === "channel") target = true;        // floor + open channels reach all
+    else if (d.scope === "dm") target = (p.id === d.from || p.id === d.to); // DM: sender + recipient only
+    else { // nearby: same room, or within radius on the open floor
       const pr = rooms.find((r) => inRoom(p, r)), prId = pr ? pr.id : null;
       target = d.roomId ? (prId === d.roomId) : (!prId && Math.hypot(p.x - d.x, p.y - d.y) < CHAT_NEARBY);
     }
-    if (target) send(ws, { t: "chat", from: d.from, name: d.name, scope: d.scope, body: d.body, ts: d.ts });
+    if (target) send(ws, { t: "chat", from: d.from, name: d.name, scope: d.scope, channel: d.channel, to: d.to, body: d.body, ts: d.ts });
   }
 }
 function deny(ws, action, need) { send(ws, { t: "denied", action, need }); } // RBAC refusal feedback
