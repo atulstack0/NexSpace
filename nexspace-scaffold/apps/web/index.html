@@ -43,6 +43,12 @@
   #screenshare .shead{display:flex;gap:6px;align-items:center;padding:8px;border-bottom:1px solid var(--line);flex-wrap:wrap}
   #screenView{flex:1;display:flex;align-items:center;justify-content:center;background:#000;min-height:0}
   #screenView video{max-width:100%;max-height:100%}
+  #wb{position:fixed;inset:6% 6% 9% 6%;z-index:30;display:none;flex-direction:column;background:rgba(14,19,32,.98);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  #wb .wbhead{display:flex;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted);flex-wrap:wrap}
+  #wbColors{display:flex;gap:6px} #wb .sw{width:20px;height:20px;border-radius:50%;border:2px solid #0b1019;cursor:pointer}
+  #wb .sw.active{outline:2px solid #fff}
+  #wbWrap{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;background:#0a0f1c;min-height:0}
+  #wbCanvas{background:#101725;cursor:crosshair;touch-action:none;border:1px solid var(--line)}
   #knock{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);z-index:18;display:none;align-items:center;gap:12px;
     background:rgba(22,29,46,.96);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:13px}
   #knock b{color:#fff}
@@ -93,6 +99,7 @@
   <button class="btn active" id="btnLinks">◠ Links</button>
   <button class="btn" id="btnAnalytics" title="Analytics dashboard (admin)">📊</button>
   <button class="btn" id="btnChat" title="Chat (6.9)">💬</button>
+  <button class="btn" id="btnWb" title="Whiteboard (6.8)">🖊️</button>
 </div>
 <div id="chat">
   <div class="chead">Chat
@@ -106,6 +113,13 @@
 <div id="screenshare">
   <div class="shead"><span id="screenTabs"></span><button class="btn" id="screenClose" style="margin-left:auto">✕ Close</button></div>
   <div id="screenView"></div>
+</div>
+<div id="wb">
+  <div class="wbhead">Whiteboard <span id="wbColors"></span>
+    <button class="btn" id="wbClear" style="margin-left:auto">Clear</button>
+    <button class="btn" id="wbClose">✕ Close</button>
+  </div>
+  <div id="wbWrap"><canvas id="wbCanvas" width="900" height="520"></canvas></div>
 </div>
 <div id="banner"><span class="l"></span><span id="bannerText"></span></div>
 <div id="recind"></div>
@@ -181,6 +195,7 @@
       if(m.t==='welcome'){myId=m.id;world=m.world;WORLD={w:world.w,h:world.h};me.x=m.you.x;me.y=m.you.y;cam.x=me.x;cam.y=me.y;
         world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});
         if(m.you&&m.you.role){myRole=m.you.role;const rp=document.getElementById('rolePill');if(rp)rp.textContent='you: '+myRole;}
+        if(m.whiteboard)wbStrokes=m.whiteboard.slice();
         initLiveKit();}
       else if(m.t==='snapshot'){
         doors=m.doors||doors; if(m.media)media=m.media; if(m.recording)recording=m.recording;
@@ -194,6 +209,8 @@
       else if(m.t==='world'){world=m.world;WORLD={w:world.w,h:world.h};world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});if(threeMode)Three3D.rebuild();toast('🛠️ Office layout updated');}
       else if(m.t==='denied')toast('🔒 You need '+m.need+' role to '+m.action+'.');
       else if(m.t==='chat')addChat(m);
+      else if(m.t==='draw'){wbStrokes.push(m.stroke);if(document.getElementById('wb').style.display==='flex')wbDrawStroke(m.stroke);}
+      else if(m.t==='wbclear'){wbStrokes=[];if(document.getElementById('wb').style.display==='flex')wbRender();}
     };
   }
   function sendMove(now){if(ws&&ws.readyState===1&&now-lastSend>60){lastSend=now;
@@ -202,7 +219,7 @@
 
   // ---------- Input ----------
   const keys=new Set();let target=null;
-  addEventListener('keydown',e=>{const tg=e.target; if(tg&&(tg.tagName==='INPUT'||tg.tagName==='TEXTAREA'))return; const k=e.key.toLowerCase();
+  addEventListener('keydown',e=>{const tg=e.target; if(tg&&(tg.tagName==='INPUT'||tg.tagName==='TEXTAREA'))return; const _wb=document.getElementById('wb'); if(_wb&&_wb.style.display==='flex')return; const k=e.key.toLowerCase();
     if(viewMode==='3d'&&k==='v'){cameraMode=cameraMode==='thirdPerson'?'firstPerson':'thirdPerson';toast(cameraMode==='firstPerson'?'👁️ First-person':'🎥 Third-person');return;}
     if(viewMode==='3d'&&k===' '){if(jumpZ<=0.5)jumpV=220;e.preventDefault();return;} // cosmetic jump
     if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','shift'].includes(k)){keys.add(k);if(k!=='shift')target=null;e.preventDefault();}});
@@ -626,6 +643,22 @@
     ws.send(JSON.stringify(msg));t.value='';}
   document.getElementById('chatSend').addEventListener('click',sendChat);
   document.getElementById('chatText').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+  // ---------- Whiteboard (§6.8) ----------
+  let wbStrokes=[],wbColor='#5b8cff',wbDrawing=false,wbCur=null;
+  const wbCanvas=document.getElementById('wbCanvas');
+  function wbCtx(){return wbCanvas.getContext('2d');}
+  function wbDrawStroke(s,x){x=x||wbCtx();if(!s||!s.pts||!s.pts.length)return;x.strokeStyle=s.color||'#fff';x.lineWidth=s.width||3;x.lineJoin=x.lineCap='round';
+    x.beginPath();x.moveTo(s.pts[0][0],s.pts[0][1]);for(let i=1;i<s.pts.length;i++)x.lineTo(s.pts[i][0],s.pts[i][1]);if(s.pts.length===1)x.lineTo(s.pts[0][0]+0.1,s.pts[0][1]);x.stroke();}
+  function wbRender(){const x=wbCtx();x.fillStyle='#101725';x.fillRect(0,0,wbCanvas.width,wbCanvas.height);for(const s of wbStrokes)wbDrawStroke(s,x);}
+  function wbPos(e){const r=wbCanvas.getBoundingClientRect();return [Math.round((e.clientX-r.left)*(wbCanvas.width/r.width)),Math.round((e.clientY-r.top)*(wbCanvas.height/r.height))];}
+  wbCanvas.addEventListener('pointerdown',e=>{wbDrawing=true;wbCur={color:wbColor,width:3,pts:[wbPos(e)]};try{wbCanvas.setPointerCapture(e.pointerId);}catch(_){}});
+  wbCanvas.addEventListener('pointermove',e=>{if(!wbDrawing)return;wbCur.pts.push(wbPos(e));const x=wbCtx(),n=wbCur.pts.length;x.strokeStyle=wbCur.color;x.lineWidth=wbCur.width;x.lineJoin=x.lineCap='round';x.beginPath();x.moveTo(wbCur.pts[n-2][0],wbCur.pts[n-2][1]);x.lineTo(wbCur.pts[n-1][0],wbCur.pts[n-1][1]);x.stroke();});
+  function wbEnd(){if(!wbDrawing)return;wbDrawing=false;if(wbCur&&wbCur.pts.length){wbStrokes.push(wbCur);if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'draw',stroke:wbCur}));}wbCur=null;}
+  wbCanvas.addEventListener('pointerup',wbEnd);wbCanvas.addEventListener('pointercancel',wbEnd);
+  (function(){const el=document.getElementById('wbColors');['#5b8cff','#39d3a6','#ffb454','#ff5d6c','#e8edf7','#0b1019'].forEach((c,i)=>{const s=document.createElement('span');s.className='sw'+(i===0?' active':'');s.style.background=c;s.onclick=()=>{wbColor=c;[...el.children].forEach(ch=>ch.classList.remove('active'));s.classList.add('active');};el.appendChild(s);});})();
+  document.getElementById('btnWb').addEventListener('click',()=>{const w=document.getElementById('wb');w.style.display=(w.style.display==='flex')?'none':'flex';if(w.style.display==='flex')wbRender();});
+  document.getElementById('wbClose').addEventListener('click',()=>document.getElementById('wb').style.display='none');
+  document.getElementById('wbClear').addEventListener('click',()=>{if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'wbclear'}));});
   function setStatus(s){myStatus=s;const sel=document.getElementById('statusSel');if(sel)sel.value=s;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'state',status:s}));}
   document.getElementById('statusSel').addEventListener('change',function(){autoAway=false;setStatus(this.value);});
   ['mousemove','keydown','mousedown','wheel'].forEach(ev=>addEventListener(ev,()=>{lastActivity=Date.now();if(autoAway){autoAway=false;setStatus('available');}}));

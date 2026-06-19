@@ -49,7 +49,7 @@ await new Promise((res, rej) => {
 function join(name, token) {
   return new Promise((resolve) => {
     const ws = new WebSocket(`ws://localhost:${PORT}`);
-    const st = { ws, name, id: null, role: null, last: null, denied: [], rateLimited: false, chats: [] };
+    const st = { ws, name, id: null, role: null, last: null, denied: [], rateLimited: false, chats: [], draws: [], cleared: false };
     ws.on("open", () => ws.send(JSON.stringify({ t: "join", name, token })));
     ws.on("message", (d) => {
       const m = JSON.parse(d.toString());
@@ -58,6 +58,8 @@ function join(name, token) {
       if (m.t === "denied") st.denied.push(m.action);
       if (m.t === "rateLimited") st.rateLimited = true;
       if (m.t === "chat") st.chats.push(m);
+      if (m.t === "draw") st.draws.push(m.stroke);
+      if (m.t === "wbclear") st.cleared = true;
     });
     ws.on("error", (e) => bad("ws error: " + e.message));
   });
@@ -96,6 +98,14 @@ try {
   admin.ws.send(JSON.stringify({ t: "chat", scope: "dm", to: "nobody", body: "dm-secret" }));
   await wait(300);
   (!guest.chats.some((c) => c.body === "dm-secret")) ? ok("DM excludes non-recipients") : bad("DM leaked to a non-recipient");
+
+  // whiteboard (6.8) — strokes broadcast to peers; clear propagates
+  admin.ws.send(JSON.stringify({ t: "draw", stroke: { color: "#fff", width: 3, pts: [[10, 10], [20, 20]] } }));
+  await wait(300);
+  (guest.draws.some((s) => s.pts && s.pts.length === 2)) ? ok("whiteboard stroke broadcasts to peers") : bad("whiteboard draw not synced");
+  admin.ws.send(JSON.stringify({ t: "wbclear" }));
+  await wait(300);
+  (guest.cleared === true) ? ok("whiteboard clear propagates") : bad("whiteboard clear not synced");
 
   // presence/status sync (6.19) — valid status applies, invalid is ignored
   admin.ws.send(JSON.stringify({ t: "state", status: "busy" }));

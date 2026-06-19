@@ -96,6 +96,7 @@ function worldForClient() {
 const clients = new Map(); // ws -> player
 let nextId = 1;
 let recording = { on: false, by: null, egressId: null }; // shared recording indicator (spec 6.17)
+const whiteboard = { strokes: [] }; // collaborative whiteboard (spec 6.8)
 
 // ---------- Analytics (spec 6.20) ----------
 const A = { startedAt: Date.now(), sessions: 0, peak: 0, totalMs: 0, closed: 0 };
@@ -137,6 +138,8 @@ function applyEvent(event, data) {
   else if (event === "recording") { recording = data.on ? { on: true, by: data.by, egressId: data.egressId || null } : { on: false, by: null, egressId: null }; }
   else if (event === "worldReload") { reloadAndBroadcast(); }
   else if (event === "chat") { deliverChat(data); }
+  else if (event === "draw") { whiteboard.strokes.push(data); if (whiteboard.strokes.length > 3000) whiteboard.strokes.shift(); broadcastLocal({ t: "draw", stroke: data }); }
+  else if (event === "wbclear") { whiteboard.strokes = []; broadcastLocal({ t: "wbclear" }); }
 }
 if (REDIS_URL) {
   const Redis = require("ioredis");
@@ -214,7 +217,7 @@ wss.on("connection", (ws) => {
       A.sessions++; if (clients.size > A.peak) A.peak = clients.size;
       fireWebhook("user.joined", { id, name, role });
       notifySlack("👋 " + name + " entered the office");
-      send(ws, { t: "welcome", id, world: worldForClient(), you: { ...player } });
+      send(ws, { t: "welcome", id, world: worldForClient(), you: { ...player }, whiteboard: whiteboard.strokes });
       console.log(`+ ${player.name} (${id}) [${role}] — ${clients.size} online`);
       return;
     }
@@ -271,6 +274,12 @@ wss.on("connection", (ws) => {
       const r = rooms.find((rm) => inRoom(p, rm));
       const payload = { from: p.id, name: p.name, scope, channel, to, body, x: p.x, y: p.y, roomId: r ? r.id : null, ts: Date.now() };
       deliverChat(payload); publishEvent("chat", payload); // local + cross-node
+    } else if (m.t === "draw") {
+      const stroke = m.stroke; if (!stroke || !Array.isArray(stroke.pts) || stroke.pts.length > 2000) return;
+      whiteboard.strokes.push(stroke); if (whiteboard.strokes.length > 3000) whiteboard.strokes.shift();
+      broadcastLocal({ t: "draw", stroke }); publishEvent("draw", stroke);
+    } else if (m.t === "wbclear") {
+      whiteboard.strokes = []; broadcastLocal({ t: "wbclear" }); publishEvent("wbclear", {});
     }
   });
 
@@ -306,6 +315,7 @@ const heartbeat = setInterval(() => {
 
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 function json(res, obj, code = 200) { res.writeHead(code, { "Content-Type": "application/json" }); res.end(JSON.stringify(obj)); }
+function broadcastLocal(msg) { const s = JSON.stringify(msg); for (const ws of clients.keys()) if (ws.readyState === 1) ws.send(s); }
 // chat routing (§6.9): floor = everyone; nearby = same room, or within radius on the open floor
 function deliverChat(d) {
   for (const [ws, p] of clients) {

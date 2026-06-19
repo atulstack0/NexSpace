@@ -44,6 +44,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Media wall — synced play/pause, distance-faded audio | ✅ | realtime + web |
 | Text chat — nearby / floor / #channels / private DMs, room-aware, cross-node, XSS-safe | ✅ | realtime + web |
 | Screen sharing (LiveKit) — publish + multi-share focus viewer | ✅ opt-in | `apps/web` |
+| Collaborative whiteboard — synced strokes + clear, late-joiner state, cross-node | ✅ | realtime + web |
 | 2D ⇄ 3D toggle — pseudo-3D **and** real Three.js WebGL | ✅ | `apps/web/index.html` |
 | PUBG-style 3D camera — third/first person, mouse-look, sprint, jump, camera collision | ✅ | `apps/web/index.html` |
 | Presence & status (5 states) + idle auto-away | ✅ | realtime + web |
@@ -59,7 +60,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 
 ## What's not built yet (the honest list)
 
-- **Whiteboards** and **remote screen control** — not in the build. (Chat now covers nearby / floor / #channels / DMs.)
+- **Remote screen control** — not in the build. (Chat covers nearby / floor / #channels / DMs; whiteboard is collaborative.)
 - **glTF art** — 3D uses primitives (boxes/cylinders/billboards), not modeled assets.
 - **Multi-floor / portals / outdoor "chai stall"**, extra interactive objects (games, Spotify, YouTube TV beyond the media wall).
 - **Calendar / Teams / SSO+SCIM** (need OAuth + accounts); invites/guest links/CSV import; branding/white-label; moderation tooling.

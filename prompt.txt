@@ -1,0 +1,436 @@
+# Master Build Prompt — "OrbitSpace": A Kumospace-Style Virtual Office Platform
+
+> **What this is:** A complete, build-ready specification you can hand to an AI coding assistant (Claude Code, Cursor, v0, Lovable, Bolt) or a dev team to build a faithful Kumospace clone. It is written as a single master prompt but is organized into modules so you can paste it **phase by phase** — a product this large cannot be one-shot generated.
+>
+> **How to use it:**
+> 1. Start with Sections 1–5 (vision, stack, architecture, data models) to scaffold the project.
+> 2. Then feed one feature block from Section 6 at a time. Each block is self-contained with acceptance criteria.
+> 3. Use Section 9 (build phases) as your milestone roadmap.
+> 4. Replace `OrbitSpace` with your own product name.
+
+---
+
+## 1. Product Vision & Scope
+
+Build a **persistent, browser-based virtual office** where remote teams "show up" daily. Users appear as avatars carrying their live webcam feed inside a 2D, game-like top-down office. They walk around; whoever is near them is who they can see and hear (**proximity/spatial audio**). The space is always-on — it is a daily HQ, not a one-off meeting tool.
+
+**Primary goals**
+- Recreate the feeling of a physical office: visibility, spontaneous "watercooler" conversations, accountability, and culture.
+- Support both **daily collaboration** (small teams, persistent rooms) and **large events** (conferences, all-hands, job fairs, 1,000+ attendees).
+- Work in-browser with **no install required for guests**, plus desktop and mobile apps.
+
+**Non-goals (v1)**
+- Photorealistic 3D / VR. The world is stylized 2D.
+- Native AI features at launch (note-takers/agents are a Phase 4 differentiator — see Section 6.21).
+
+---
+
+## 2. Core Concept — The Spatial Model
+
+This is the heart of the product. Get it right before building anything else.
+
+- The office is a **2D coordinate grid** (a "floor"). Every user, object, and zone has an `(x, y)` position.
+- Each user is an **avatar** with their **live video** attached to it (a circular "bubble").
+- **Proximity audio:** A user hears and is heard by only those inside their audio radius. Walking closer raises volume; walking away lowers it and signals a desire for privacy. This lets dozens of simultaneous conversations happen on one floor with no manual breakout rooms.
+- **Rooms** are bounded zones that override proximity: everyone inside a room hears everyone else in it, and no one outside hears in. Rooms can have **doors** (closable/lockable, knockable).
+- **Persistence:** Spaces, furniture layouts, and floors are saved server-side and always available.
+- **Guest join:** Anyone with a link can enter as an unregistered guest (subject to access controls and a configurable time cap).
+
+---
+
+## 3. Recommended Tech Stack
+
+> Mirrors Kumospace's real architecture (React + a game engine + a managed WebRTC SFU + WebSockets) while favoring open-source, self-hostable components.
+
+**Frontend**
+- **React 18 + TypeScript** — app shell, UI, panels.
+- **Phaser 3** (or **PixiJS**) — WebGL rendering of the 2D world, avatars, movement, tilemaps. (Kumospace uses Phaser.)
+- **Zustand** (or Redux Toolkit) — client state.
+- **Tailwind CSS** + **Radix UI**/**shadcn/ui** — UI components.
+- **Web Audio API** — spatial audio panning/attenuation (critical, see 6.3).
+
+**Real-time media (audio/video/screenshare)**
+- **LiveKit** (open-source SFU, self-hostable) — primary recommendation. Handles WebRTC, track subscription, simulcast, and **LiveKit Egress** for recording. Scales to large rooms.
+- Managed alternatives: **Daily.co** (what Kumospace migrated to) or **Agora** (for >1,000-person calls).
+
+**Real-time state sync (position, presence, world state)**
+- **Colyseus** (Node.js authoritative multiplayer game server) — ideal for room-based position sync, OR
+- **Socket.IO / native WebSockets** on Node.js with **Redis** pub/sub for fan-out.
+
+**Backend**
+- **Node.js** with **NestJS** (or Express/Fastify) — REST + WebSocket gateways.
+- **PostgreSQL** — relational data (users, spaces, floors, objects, memberships).
+- **Redis** — ephemeral presence, position cache, pub/sub, rate limiting.
+- **S3-compatible object storage** (AWS S3 / Cloudflare R2 / MinIO) — recordings, uploaded images/assets.
+
+**Auth & identity**
+- **Clerk** / **Auth0** / custom JWT for core auth.
+- **SAML 2.0 + OIDC** for enterprise SSO; SCIM for auto user provisioning.
+
+**Infra & ops**
+- **Docker** + **Kubernetes** (or managed: Fly.io / Render / GCP App Engine — Kumospace used App Engine + Firebase).
+- **Statsig** or **PostHog** — feature flags + product analytics + experimentation.
+- **Sentry** — error monitoring.
+
+**Security**
+- End-to-end encrypted media (WebRTC/DTLS-SRTP). Build toward **SOC 2**, **GDPR**, and **HIPAA** (BAA) compliance.
+
+---
+
+## 4. System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                          CLIENT (Browser)                          │
+│  React UI shell  │  Phaser world canvas  │  Web Audio engine       │
+│         │                  │                       │               │
+│   REST/HTTPS         WebSocket (state)        WebRTC (media)        │
+└─────────┼──────────────────┼───────────────────────┼──────────────┘
+          │                  │                        │
+   ┌──────▼──────┐   ┌────────▼─────────┐    ┌─────────▼──────────┐
+   │  API Server │   │ Realtime/State   │    │   Media SFU         │
+   │  (NestJS)   │   │ Server (Colyseus │    │   (LiveKit)         │
+   │             │   │  / Socket.IO)    │    │  + Egress (record)  │
+   └──────┬──────┘   └────────┬─────────┘    └─────────┬──────────┘
+          │                   │                        │
+   ┌──────▼───────┐    ┌──────▼──────┐         ┌────────▼─────────┐
+   │  PostgreSQL  │    │    Redis    │         │  S3 / R2 storage  │
+   │ (persistent) │    │ (presence,  │         │ (recordings,      │
+   │              │    │  pub/sub)   │         │  assets)          │
+   └──────────────┘    └─────────────┘         └──────────────────┘
+```
+
+**Key responsibilities**
+- **API server:** auth, CRUD for spaces/floors/objects, memberships, invites, billing, integrations.
+- **Realtime/state server:** authoritative position sync, presence, room membership, door state, chat fan-out. Tick-based (e.g., 10–20 Hz) position broadcasts to clients in the same floor.
+- **Media SFU:** routes audio/video/screenshare. Clients dynamically subscribe/unsubscribe to tracks based on proximity (see 6.3). One LiveKit "room" per floor (or per audio-room for very large events).
+- **Client:** renders world (Phaser), applies spatial volume via Web Audio, manages local media, draws UI panels.
+
+---
+
+## 5. Core Data Models
+
+```typescript
+// ---------- Identity ----------
+User {
+  id: uuid
+  email: string
+  displayName: string
+  avatarConfig: json        // color, accessory, custom image
+  isGuest: boolean
+  ssoProvider?: string
+  createdAt, updatedAt
+}
+
+// ---------- Space hierarchy ----------
+Space {                      // a company / organization workspace
+  id: uuid
+  name: string
+  slug: string               // custom URL: orbitspace.com/{slug}
+  ownerId: uuid
+  branding: json             // logo, colors, white-label flag
+  plan: 'free' | 'business' | 'enterprise'
+  accessControl: json        // password, allowed domains/emails, SSO required
+  createdAt, updatedAt
+}
+
+Floor {                      // a single map/level within a space
+  id: uuid
+  spaceId: uuid
+  name: string
+  width: int
+  height: int
+  background: string         // tilemap / image reference
+  templateId?: uuid
+  order: int
+}
+
+Room {                       // a private audio zone on a floor
+  id: uuid
+  floorId: uuid
+  name: string
+  bounds: json               // polygon or rect [{x,y}...]
+  hasDoor: boolean
+  doorState: 'open' | 'closed' | 'locked'
+  audioMode: 'room' | 'broadcast'
+  maxOccupancy?: int
+}
+
+PlacedObject {               // furniture & interactive items
+  id: uuid
+  floorId: uuid
+  type: string               // 'chair','table','plant','tv','spotify','whiteboard','game','sign','linkTablet','bar'
+  position: { x, y }
+  rotation: int
+  scale: float
+  config: json               // e.g. youtubeUrl, spotifyUri, imageUrl, embedUrl, gameType, linkUrl
+  collidable: boolean
+}
+
+// ---------- Membership & roles ----------
+Membership {
+  id: uuid
+  spaceId: uuid
+  userId: uuid
+  role: 'owner' | 'admin' | 'floorManager' | 'member' | 'guest'
+  status: 'active' | 'invited' | 'suspended'
+  invitedAt, joinedAt
+}
+
+// ---------- Live / ephemeral (Redis) ----------
+PresenceState {
+  userId: uuid
+  floorId: uuid
+  position: { x, y }
+  roomId?: uuid
+  status: 'available' | 'away' | 'busy' | 'dnd' | 'inMeeting'
+  mediaState: { camOn, micOn, screenSharing }
+  audioRadius: 'quiet' | 'normal' | 'megaphone'
+}
+
+// ---------- Chat ----------
+Channel {
+  id, spaceId, name, type: 'channel' | 'dm' | 'group', memberIds[]
+}
+Message {
+  id, channelId?, scope?: 'nearby'|'floor'|'allFloors', senderId, body, attachments[], createdAt
+}
+
+// ---------- Recording / analytics / integrations ----------
+Recording { id, floorId, startedBy, url, durationSec, createdAt }
+AnalyticsEvent { id, spaceId, userId, type, metadata, ts }
+Integration { id, spaceId, provider: 'slack'|'googleCalendar'|'outlook'|'teams', config: json }
+```
+
+---
+
+## 6. Feature Specifications (build each as a module)
+
+### 6.1 Virtual Space & World Rendering
+- Render a 2D top-down office on a WebGL canvas (Phaser/PixiJS) from a tilemap or background image plus placed objects.
+- Support **camera pan & zoom**; a **mini-map / "Map" view** showing all users and their locations.
+- Smooth scrolling that follows the local user's avatar.
+- Collision detection against `collidable` objects and floor boundaries.
+- **Persistent** layouts loaded from `Floor` + `PlacedObject`.
+- **Acceptance:** A user loads a saved floor, sees all furniture and other present users in correct positions, can pan/zoom, and cannot walk through walls.
+
+### 6.2 Avatars & Movement
+- Each user = avatar sprite with a **circular live-video bubble** (falls back to initials/photo when cam off).
+- Movement via **WASD/arrow keys** and **click-to-move** (pathfinding around obstacles, e.g., A* on a nav grid).
+- Avatar customization: color, accessory, or uploaded image.
+- Position broadcast to other clients on the same floor at 10–20 Hz via the realtime server; interpolate remote avatars for smoothness.
+- Show name label and status indicator on each avatar.
+- **Acceptance:** Two users in the same floor see each other move in near-real-time (<150 ms perceived); collisions respected; video bubble tracks the avatar.
+
+### 6.3 Spatial / Proximity Audio  ⭐ (core technical challenge)
+- Every user publishes an audio track to the SFU.
+- Each user has an **audio radius** (circle). Default rolloff: full volume within an inner radius, linear/inverse falloff to zero at the outer radius.
+- **Client implementation:** For each remote audio track → `MediaStreamSource` → **`PannerNode`** (positioned by the *relative* vector between local and remote avatars) → destination. Update panner position every frame/tick.
+  - Use distance-based gain attenuation; optionally stereo-pan left/right based on relative X.
+- **Bandwidth optimization:** Unsubscribe from (or do not request) audio/video tracks of users far outside the radius; resubscribe as they approach. (This is how Kumospace keeps large floors performant.)
+- **Adjustable range** (host-settable per user/space): `Quiet` / `Normal` / `Megaphone`.
+- **Acceptance:** As User A walks toward User B, B's audio fades in and pans correctly; walking away fades it out; users outside range are inaudible and their media tracks are not consuming bandwidth.
+
+### 6.4 Room Audio & Doors
+- Define **rooms** as bounded zones. When a user enters a room's bounds, switch their audio context: hear **everyone in the room at full volume regardless of distance**, and mute/unsubscribe everyone outside.
+- People outside cannot hear inside the room.
+- **Doors:** rooms can have a door with state `open` / `closed` / `locked`. Closed door = visual privacy + audio isolation; outsiders can **"knock"** (sends a request notification to occupants); locked door blocks entry except for permitted roles.
+- **Acceptance:** Entering a room isolates audio to room members; a closed door prevents uninvited audio bleed; knocking notifies occupants who can admit the knocker.
+
+### 6.5 Broadcast Mode
+- A host can **broadcast** to an entire floor (or room): their audio/video overrides all proximity rules so everyone on the floor hears them — used for presentations, panels, all-hands.
+- Support **multiple simultaneous broadcasts** in different rooms (multitrack conference scenario).
+- Optional "stage" concept: designated speakers broadcast; audience listens.
+- **Acceptance:** When broadcast is active, all targeted users hear the broadcaster at full volume regardless of position; ending broadcast restores proximity audio.
+
+### 6.6 Video
+- Live webcam per user, shown in the avatar bubble and optionally in a **gallery/grid view** toggle.
+- Simulcast/adaptive quality (downscale for distant or many participants).
+- Camera/mic device selection, mute/unmute, virtual background (optional), and reaction emojis floating above the avatar.
+- **Acceptance:** Video starts within ~2 s of joining, can be toggled, and degrades gracefully under load/bandwidth limits.
+
+### 6.7 Screen Sharing
+- **Simultaneous screensharing** — more than one person can share at once (each share appears as a viewable surface/object near the sharer).
+- Click a shared screen to enlarge/focus; optional **remote screen control** request flow.
+- **Acceptance:** Two users share screens concurrently; others nearby can view both and focus either; remote-control requests are explicitly approved before granting input.
+
+### 6.8 Whiteboards
+- Embeddable collaborative **whiteboard** objects placed on the floor (use **tldraw** or **Excalidraw** for fast implementation).
+- Real-time multi-user drawing, sticky notes, shapes, text; state persisted to the object's `config`.
+- **Acceptance:** Multiple users edit the same whiteboard live; reopening the space restores the drawing.
+
+### 6.9 Chat
+- Multi-scope text chat:
+  - **Nearby** (people in audio range), **Floor** (everyone on the floor), **All-Floors** (whole space).
+  - **Channels** and **Group DMs** and **1:1 DMs** (paid tiers).
+- Unlimited history (paid), attachments, emoji, @mentions, link previews, unread badges.
+- **"Nudge"** — ping a specific user to get their attention.
+- **Acceptance:** Messages route to the correct audience by scope; DMs are private; history persists; mentions notify.
+
+### 6.10 Space Customization & Builder (Editor Mode)
+- **Drag-and-drop editor** to place/move/rotate/scale/delete furniture and objects on a floor.
+- Asset library: flooring/tiles, seating, tables, plants, decor, walls/dividers, signs, sticky notes, uploaded **images/GIFs**.
+- Create rooms by drawing zone boundaries; assign door + audio mode.
+- Save/duplicate/version layouts; start from **templates** (office, lounge, conference hall, classroom, event hall).
+- Grid snapping, undo/redo, multi-select.
+- **Acceptance:** A space admin builds a custom floor from scratch or a template, defines rooms, and the layout persists for all members.
+
+### 6.11 Interactive Objects
+Each is a `PlacedObject` with type-specific `config` and behavior when a nearby user activates it:
+- **YouTube "TV"** — shared synced video playback for everyone nearby.
+- **Spotify / music object** — shared/ambient audio.
+- **Games** — embedded mini-games (chess, Codenames-style, puzzles, etc.).
+- **Virtual bar / social spots** — themed gathering zones.
+- **Custom link tablet** — embeds an external URL (Figma, roadmap, PRD, dashboard) viewable in-world.
+- **Custom signs / images / GIFs** — decorative or informational.
+- **Acceptance:** Activating an object near it triggers its function (e.g., synced YouTube plays for all nearby users); embeds render securely in an iframe sandbox.
+
+### 6.12 Branding / White-label
+- Custom **space slug/URL** on all tiers (`orbitspace.com/acme`).
+- Logo, color theme, and optional **custom domain** (enterprise).
+- **White-label** toggle to remove platform branding (higher tiers).
+- **Acceptance:** A branded space shows the customer's logo/colors; enterprise spaces can be served on a custom domain.
+
+### 6.13 Multi-Floor Spaces
+- A space can contain **many floors** (unlimited on paid). Recreate multi-site/multi-department offices.
+- Floor switcher UI; each floor is its own coordinate space and (optionally) its own media room.
+- **Acceptance:** Users navigate between floors; presence and audio scope correctly to the current floor.
+
+### 6.14 User Management, Roles & Permissions
+- Role hierarchy: **Owner → Admin → Floor Manager → Member → Guest.**
+- Permission matrix (configurable):
+
+| Capability | Owner | Admin | Floor Mgr | Member | Guest |
+|---|---|---|---|---|---|
+| Manage billing/plan | ✓ | – | – | – | – |
+| Manage members & roles | ✓ | ✓ | – | – | – |
+| Create/edit floors | ✓ | ✓ | ✓ (own) | – | – |
+| Edit furniture/objects | ✓ | ✓ | ✓ | ✓ | – |
+| Close/lock doors, set status | ✓ | ✓ | ✓ | ✓ | – |
+| Mute/block/remove guests | ✓ | ✓ | ✓ | ✓ | – |
+| Start broadcast/recording | ✓ | ✓ | ✓ | config | – |
+| Join space | ✓ | ✓ | ✓ | ✓ | ✓ (limited) |
+
+- **Acceptance:** Actions are gated by role; UI hides unavailable controls; server enforces permissions independently of client.
+
+### 6.15 Invitations & Guest Access
+- Invite via **space / floor / room links** and email invites.
+- **Guests join via URL without an account** (if the space allows), with a **configurable time cap** (default 4 hrs/week) and limited permissions.
+- Bulk guest lists via **CSV import** (up to ~1,000 emails) for events.
+- **Acceptance:** A link recipient enters as guest with no signup; guest hits the time cap and is prompted to register; CSV import provisions a guest list.
+
+### 6.16 Privacy & Access Controls
+- Per-space: **password protection**, **email/domain allowlists**, require **SSO**, public vs. private toggle.
+- Per-room: locked doors, occupancy limits, role-restricted entry.
+- Moderation: mute, block, remove user; report.
+- **Acceptance:** A domain-restricted space rejects outside emails; password-protected spaces require the password; moderators can mute/remove disruptive users instantly.
+
+### 6.17 Recording
+- Record a floor/room session (audio + video + screenshare) via **SFU egress**; store to S3; provide a shareable link and download.
+- Show a **recording indicator** to all participants (consent/transparency).
+- *(Improvement over Kumospace's single-session limit:)* support **multiple concurrent recordings** per space.
+- **Acceptance:** A host starts/stops a recording; participants see an indicator; the finished file is retrievable from storage.
+
+### 6.18 Integrations
+- **Slack** — sync presence/status; send notifications (e.g., "X entered the office"); slash command to get a join link.
+- **Google Calendar** + **Outlook Calendar** — in-app calendar, meeting reminders, **auto-status** ("In a meeting") based on events; one-click join to a designated room.
+- **Microsoft Teams** — auto-status when on a Teams call.
+- **Embeds** — YouTube, Spotify, Google Drive; ability to **embed OrbitSpace itself** into another website (iframe).
+- *(Improvements:)* expose a **public REST API + webhooks** and a **Zapier** app (Kumospace's thin integration ecosystem is a known weakness — close this gap).
+- **Acceptance:** Connecting Slack/Google Calendar updates status automatically and delivers notifications; embeds render; API endpoints are documented.
+
+### 6.19 Presence & Status
+- Status states: **Available / Away / Busy / Do-Not-Disturb / In a meeting** (manual + calendar-driven + idle-auto-away).
+- Visible on avatar and in member roster; affects whether others can nudge/interrupt.
+- **Acceptance:** Status reflects manual choice, calendar events, and inactivity; others see it in real time.
+
+### 6.20 Analytics
+- **Space/people analytics** for admins: active users, time-in-office, room usage, peak concurrency, event attendance.
+- Export to CSV; dashboard view.
+- **Acceptance:** Admins view usage trends and per-floor/room engagement; data is exportable.
+
+### 6.21 AI Layer *(Phase 4 differentiator — what Kumospace skipped)*
+- **AI note-taker / transcription / summaries** for recorded meetings and rooms.
+- **AI assistant** for in-space Q&A, scheduling, and catch-up ("what did I miss?").
+- Optional **AI agents/NPCs** (greeter, guide).
+- Use the Anthropic API (Claude) or equivalent; transcription via Whisper/Deepgram.
+- **Acceptance:** A recorded meeting yields an accurate transcript + summary + action items; the assistant answers questions about space activity.
+
+---
+
+## 7. UI / UX Requirements
+- **Three-layer UI:** (1) full-screen world canvas, (2) floating top/side toolbars (mic, cam, screenshare, reactions, status, settings), (3) collapsible side panels (chat, members, floors, settings, editor).
+- **Pop-out window** — detach the call/screen so users can multitask in another window.
+- **Gallery view** toggle for meeting-style grids.
+- Fast, low-friction **join flow** (guest: name + cam/mic check → in).
+- Onboarding tooltips for first-time users (there's a learning curve vs. Zoom — minimize it).
+- Responsive: full desktop web, plus desktop app (Electron/Tauri) and mobile apps (React Native) reusing the core.
+- Accessibility: keyboard navigation, captions, screen-reader labels.
+
+---
+
+## 8. Non-Functional Requirements
+
+**Performance & scale**
+- Smooth on mid-range laptops; degrade gracefully on low bandwidth/old devices (a noted Kumospace pain point — prioritize this).
+- Targets: small floors **30–50 concurrent**; large events **1,000+** via SFU scaling and audio/video subscription culling; multi-room conferences (e.g., 8 rooms × 30 video = ~240).
+- Prefer Chromium but support Firefox/Safari; test WebRTC across browsers.
+- Tick-based state sync with interpolation; cull off-screen/out-of-range media subscriptions.
+
+**Security & compliance**
+- E2E-encrypted media (DTLS-SRTP); TLS everywhere.
+- RBAC enforced server-side; never trust the client.
+- Build toward **SOC 2 Type II**, **GDPR**, and **HIPAA** (with BAA).
+- Sandboxed iframes for all third-party embeds; CSP headers.
+
+**Reliability**
+- Zero-downtime deploys; horizontal scaling of WebSocket/state servers behind sticky-session-aware load balancing; Redis pub/sub for cross-node fan-out.
+- Uptime SLA target for enterprise (≥99.9%).
+
+---
+
+## 9. Suggested Build Phases (Milestone Roadmap)
+
+**Phase 0 — Scaffold**
+- Repo, monorepo (frontend/backend/realtime), CI, Docker, auth, Postgres/Redis, base data models.
+
+**Phase 1 — The World & Movement (MVP core)**
+- Phaser canvas, tilemap/floor rendering, avatars, WASD + click-to-move, position sync via realtime server, camera pan/zoom, mini-map. (No media yet.)
+
+**Phase 2 — Media & Spatial Audio (the killer feature)**
+- LiveKit integration, video bubbles, **proximity audio with Web Audio PannerNode**, subscription culling, mic/cam controls, gallery view.
+
+**Phase 3 — Rooms, Doors, Broadcast, Screenshare, Chat**
+- Room zones + audio isolation, doors (open/close/lock/knock), broadcast mode, simultaneous screenshare, multi-scope chat + DMs, nudge, reactions.
+
+**Phase 4 — Customization & Multi-floor**
+- Drag-and-drop editor, asset library, templates, interactive objects (YouTube/Spotify/whiteboard/games/link tablets), multiple floors, branding/white-label.
+
+**Phase 5 — Org Management, Access, Recording, Integrations**
+- Roles & permissions, invites & guest links, CSV guest lists, access controls (password/domain/SSO), recording + egress, Slack/Calendar/Teams integrations, analytics.
+
+**Phase 6 — Polish, Scale, Apps, AI**
+- Performance hardening for large events, desktop/mobile apps, public API + webhooks + Zapier, **AI note-taker/assistant** (Section 6.21), compliance (SOC2/HIPAA).
+
+---
+
+## 10. Definition of Done (global)
+- Every feature in Section 6 is implemented with its stated acceptance criteria.
+- A new user can: receive a link → join as guest → walk around → have proximity conversations → enter a room → join a broadcast → chat → and (if a member) edit the space.
+- Server-enforced permissions, encrypted media, persistent spaces, and graceful performance on a mid-range device under a 30-person floor are all verified.
+- Automated tests cover: position sync, audio subscription logic, room/door state transitions, permission gating, and integration webhooks.
+
+---
+
+### Appendix A — Known Kumospace weaknesses to deliberately fix
+1. **Thin integrations** → ship a public API, webhooks, and Zapier from Phase 5/6.
+2. **Single concurrent recording** → support multiple concurrent recordings.
+3. **Performance on low-end devices / Chrome dependency** → aggressive media culling, adaptive quality, cross-browser QA.
+4. **Learning curve vs. Zoom** → first-run onboarding, sensible defaults, one-click guest join.
+5. **No AI** → make AI meeting intelligence a first-class differentiator (Section 6.21).
+
+### Appendix B — Build-prompt usage tips for AI coding tools
+- Paste Sections 1–5 first as the "system context," then prompt: *"Scaffold the monorepo and data models per this spec."*
+- For each feature: *"Implement Section 6.X exactly, including its acceptance criteria. Use the stack in Section 3."*
+- Keep the realtime/state server and media SFU concerns separate — don't let an AI collapse them into one service.
+- Treat spatial audio (6.3) and room/door audio (6.4) as the highest-risk modules; build and test them in isolation with two browser tabs before integrating.
