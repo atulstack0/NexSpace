@@ -49,4 +49,25 @@ export class AuthService {
     if (!u || u.password !== password) throw new UnauthorizedException("Invalid email or password");
     return { token: this.sign({ sub: u.id, name: u.name, role: u.role }), user: { id: u.id, name: u.name, role: u.role } };
   }
+
+  // ---- SSO / OIDC (spec §6.16). Real provider when configured; built-in mock otherwise. ----
+  ssoConfigured() {
+    return !!(process.env.OIDC_ISSUER && process.env.OIDC_CLIENT_ID && process.env.OIDC_CLIENT_SECRET && process.env.OIDC_REDIRECT_URI);
+  }
+  mapRole(email: string) {
+    const admins = (process.env.OIDC_ADMIN_EMAILS || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+    return admins.includes((email || "").toLowerCase()) ? "admin" : "member";
+  }
+  mockUser() { return { sub: "sso|mock", email: "sso.user@example.com", name: "SSO User" }; }
+  async exchangeCode(code: string) {
+    const body = new URLSearchParams({
+      grant_type: "authorization_code", code,
+      client_id: process.env.OIDC_CLIENT_ID, client_secret: process.env.OIDC_CLIENT_SECRET, redirect_uri: process.env.OIDC_REDIRECT_URI,
+    } as any);
+    const res = await fetch(process.env.OIDC_ISSUER.replace(/\/$/, "") + "/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
+    const json: any = await res.json();
+    const payload = (json.id_token || "").split(".")[1];
+    const claims = payload ? JSON.parse(Buffer.from(payload, "base64").toString()) : {};
+    return { sub: claims.sub || "sso", email: claims.email || "", name: claims.name || claims.email || "SSO User" };
+  }
 }

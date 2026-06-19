@@ -13,6 +13,7 @@
     "verify": "node scripts/verify.mjs",
     "test": "node scripts/realtime.smoke.mjs",
     "test:redis": "node scripts/redis.smoke.mjs",
+    "test:api": "node scripts/api.smoke.mjs",
     "check": "npm run verify && npm test"
   },
   "devDependencies": {

@@ -50,6 +50,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | PUBG-style 3D camera — third/first person, mouse-look, sprint, jump, camera collision | ✅ | `apps/web/index.html` |
 | Presence & status (5 states) + idle auto-away | ✅ | realtime + web |
 | Auth (JWT login) + server-enforced RBAC | ✅ | `apps/api/src/auth`, realtime |
+| SSO (OIDC authorization-code) with built-in mock IdP; real provider via env | ✅ | `apps/api/src/auth/sso`, web |
 | Recording — 🔴 indicator + LiveKit Egress start/stop | ✅ (egress needs storage) | `apps/api/src/livekit`, realtime, web |
 | Drag-and-drop floor editor → persists to API → live reload to everyone | ✅ | `apps/web/editor.html`, `apps/api`, realtime |
 | Analytics — admin dashboard + CSV | ✅ | realtime `/analytics`, `apps/web/analytics.html` |
@@ -64,7 +65,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 - **Remote screen control** — not in the build. (Chat covers nearby / floor / #channels / DMs; whiteboard is collaborative.)
 - **glTF art** — 3D uses primitives (boxes/cylinders/billboards), not modeled assets.
 - **Multi-floor / portals / outdoor "chai stall"**, extra interactive objects (games, Spotify, YouTube TV beyond the media wall).
-- **Calendar / Teams / SSO+SCIM** (need OAuth + accounts); invites/guest links/CSV import; branding/white-label.
+- **Calendar / Teams** (need OAuth + accounts) and **SCIM** auto-provisioning (SSO sign-in itself is built — mock IdP now, real provider via env); invites/guest links/CSV import; branding/white-label.
 - **AI layer** (note-taker/assistant), **mobile/desktop apps**, **SOC2/GDPR/HIPAA** compliance.
 - **Scale follow-ups**: spatial-hash interest management, Redis-persisted boot state.
 

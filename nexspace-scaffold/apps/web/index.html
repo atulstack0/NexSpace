@@ -143,6 +143,7 @@
   <input id="email" placeholder="Email (optional — blank = guest)" />
   <input id="password" type="password" placeholder="Password (optional)" />
   <button id="go">Enter →</button>
+  <button id="sso" style="width:100%;margin-top:8px;padding:11px;border:1px solid var(--line);border-radius:12px;background:var(--panel2);color:var(--text);font-size:14px;cursor:pointer">Sign in with SSO</button>
   <div class="tip">🎧 Headphones recommended. Demo logins: <b>admin@nexspace.dev / admin1234</b> · <b>member@nexspace.dev / member1234</b> — or leave blank to join as guest.</div>
 </div></div>
 
@@ -761,6 +762,9 @@
     document.getElementById('rolePill').textContent='you: '+myRole;
     document.getElementById('overlay').style.display='none';startAudio();if(actx&&actx.state==='suspended')actx.resume();connect(myName);requestAnimationFrame(loop);});
   document.getElementById('name').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('go').click();});
+  // SSO (§6.16): if we came back from the IdP with ?sso=<token>, use it; else offer the button
+  (function(){const tok=new URLSearchParams(location.search).get('sso');if(tok){myToken=tok;const tip=document.querySelector('#card .tip');if(tip)tip.textContent='✅ Signed in via SSO — click Enter to join.';try{history.replaceState({},'',location.pathname);}catch(_){}}})();
+  document.getElementById('sso').addEventListener('click',()=>{location.href=API_BASE+'/auth/sso/login?redirect='+encodeURIComponent(location.origin+location.pathname);});
 })();
 </script>
 </body>

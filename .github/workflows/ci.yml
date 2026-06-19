@@ -64,3 +64,24 @@ jobs:
       # two server instances + Redis: cross-node presence and event propagation
       - name: Multi-node Redis test
         run: npm run test:redis
+
+  api-smoke:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nexspace-scaffold
+    env:
+      DATABASE_URL: "file:./dev.db"
+      JWT_SECRET: "nexspace-dev-secret-change-me"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install
+        run: npm install
+      - name: Prisma generate
+        run: npx prisma generate --schema apps/api/prisma/schema.prisma
+      # boots the NestJS API and walks the mock SSO flow end-to-end
+      - name: API SSO smoke test
+        run: npm run test:api
