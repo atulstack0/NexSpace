@@ -102,7 +102,10 @@ export interface ChatSendMsg  { t: "chat"; scope: "nearby" | "floor" | "channel"
 export interface WhiteboardStroke { color: string; width: number; pts: [number, number][]; } // (6.8)
 export interface DrawMsg       { t: "draw"; stroke: WhiteboardStroke; } // collaborative whiteboard stroke (6.8)
 export interface WbClearMsg    { t: "wbclear"; }                        // clear the whiteboard (6.8)
-export type ClientMsg = JoinMsg | MoveMsg | StateMsg | BroadcastMsg | MediaMsg | DoorMsg | KnockMsg | RecordingMsg | AdminReloadMsg | ChatSendMsg | DrawMsg | WbClearMsg;
+export interface ReactSendMsg  { t: "react"; emoji: string; }          // emoji reaction (6.6)
+export interface NudgeSendMsg  { t: "nudge"; to: string; }             // ping a user (6.9)
+export interface ModerateMsg   { t: "moderate"; action: "mute" | "unmute" | "kick"; target: string; } // moderation (6.16)
+export type ClientMsg = JoinMsg | MoveMsg | StateMsg | BroadcastMsg | MediaMsg | DoorMsg | KnockMsg | RecordingMsg | AdminReloadMsg | ChatSendMsg | DrawMsg | WbClearMsg | ReactSendMsg | NudgeSendMsg | ModerateMsg;
 
 // ---- Server → Client ----
 export interface PlayerSnapshot {
@@ -129,7 +132,10 @@ export interface SnapshotMsg {
   media: { playing: boolean; pos: number };  // shared media-wall playback (synced)
   recording: { on: boolean; by: string | null; egressId?: string | null }; // shared recording indicator (6.17)
 }
-export type ServerMsg = WelcomeMsg | SnapshotMsg | DeniedMsg | WorldUpdateMsg | RateLimitedMsg | FullMsg | ChatMessage | DrawMsg | WbClearMsg;
+export interface ReactMsg      { t: "react"; from: string; emoji: string; } // broadcast reaction (6.6)
+export interface NudgeMsg      { t: "nudge"; from: string; name: string; }   // nudge delivered (6.9)
+export interface KickedMsg     { t: "kicked"; }                              // you were removed (6.16)
+export type ServerMsg = WelcomeMsg | SnapshotMsg | DeniedMsg | WorldUpdateMsg | RateLimitedMsg | FullMsg | ChatMessage | DrawMsg | WbClearMsg | ReactMsg | NudgeMsg | KickedMsg;
 
 // ====================================================================
 // Public API + webhooks (spec §6.18). See docs/PUBLIC_API.md.

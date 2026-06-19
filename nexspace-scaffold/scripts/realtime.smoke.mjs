@@ -49,7 +49,7 @@ await new Promise((res, rej) => {
 function join(name, token) {
   return new Promise((resolve) => {
     const ws = new WebSocket(`ws://localhost:${PORT}`);
-    const st = { ws, name, id: null, role: null, last: null, denied: [], rateLimited: false, chats: [], draws: [], cleared: false };
+    const st = { ws, name, id: null, role: null, last: null, denied: [], rateLimited: false, chats: [], draws: [], cleared: false, reacts: [], nudged: false, kicked: false };
     ws.on("open", () => ws.send(JSON.stringify({ t: "join", name, token })));
     ws.on("message", (d) => {
       const m = JSON.parse(d.toString());
@@ -60,6 +60,9 @@ function join(name, token) {
       if (m.t === "chat") st.chats.push(m);
       if (m.t === "draw") st.draws.push(m.stroke);
       if (m.t === "wbclear") st.cleared = true;
+      if (m.t === "react") st.reacts.push(m);
+      if (m.t === "nudge") st.nudged = true;
+      if (m.t === "kicked") st.kicked = true;
     });
     ws.on("error", (e) => bad("ws error: " + e.message));
   });
@@ -195,6 +198,25 @@ try {
     setTimeout(() => { try { ws.close(); } catch {} resolve(r); }, 900);
   });
   (third.full && !third.welcomed) ? ok("connection cap rejects 3rd client (MAX_CLIENTS=2)") : bad("connection cap not enforced");
+
+  // reactions (6.6)
+  admin.ws.send(JSON.stringify({ t: "react", emoji: "🎉" }));
+  await wait(300);
+  (guest.reacts.some((r) => r.emoji === "🎉" && r.from === admin.id)) ? ok("reaction broadcasts to peers") : bad("reaction not broadcast");
+  // nudge (6.9)
+  admin.ws.send(JSON.stringify({ t: "nudge", to: guest.id }));
+  await wait(300);
+  (guest.nudged === true) ? ok("nudge reaches the target") : bad("nudge not delivered");
+  // moderation (6.16) — mute blocks the muted user's chat
+  admin.ws.send(JSON.stringify({ t: "moderate", action: "mute", target: guest.id }));
+  await wait(200);
+  guest.ws.send(JSON.stringify({ t: "chat", scope: "floor", body: "after-mute" }));
+  await wait(300);
+  (!admin.chats.some((c) => c.body === "after-mute")) ? ok("muted user's chat is blocked") : bad("mute not enforced");
+  // moderation (6.16) — kick removes the user
+  admin.ws.send(JSON.stringify({ t: "moderate", action: "kick", target: guest.id }));
+  await wait(300);
+  (guest.kicked === true) ? ok("admin kick removes the user") : bad("kick not delivered");
 
   admin.ws.close(); guest.ws.close(); await wait(250);
 } catch (e) {

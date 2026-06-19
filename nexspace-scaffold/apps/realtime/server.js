@@ -97,6 +97,12 @@ const clients = new Map(); // ws -> player
 let nextId = 1;
 let recording = { on: false, by: null, egressId: null }; // shared recording indicator (spec 6.17)
 const whiteboard = { strokes: [] }; // collaborative whiteboard (spec 6.8)
+const mutedIds = new Set(); // moderation: muted user ids (spec 6.16)
+function applyModerate(action, target) {
+  if (action === "mute") mutedIds.add(target);
+  else if (action === "unmute") mutedIds.delete(target);
+  else if (action === "kick") { for (const [ws2, q] of clients) if (q.id === target) { send(ws2, { t: "kicked" }); setTimeout(() => { try { ws2.close(); } catch {} }, 50); } }
+}
 
 // ---------- Analytics (spec 6.20) ----------
 const A = { startedAt: Date.now(), sessions: 0, peak: 0, totalMs: 0, closed: 0 };
@@ -140,6 +146,9 @@ function applyEvent(event, data) {
   else if (event === "chat") { deliverChat(data); }
   else if (event === "draw") { whiteboard.strokes.push(data); if (whiteboard.strokes.length > 3000) whiteboard.strokes.shift(); broadcastLocal({ t: "draw", stroke: data }); }
   else if (event === "wbclear") { whiteboard.strokes = []; broadcastLocal({ t: "wbclear" }); }
+  else if (event === "react") { broadcastLocal({ t: "react", from: data.from, emoji: data.emoji }); }
+  else if (event === "nudge") { for (const [ws2, q] of clients) if (q.id === data.to) send(ws2, { t: "nudge", from: data.from, name: data.name }); }
+  else if (event === "moderate") { applyModerate(data.action, data.target); }
 }
 if (REDIS_URL) {
   const Redis = require("ioredis");
@@ -244,6 +253,7 @@ wss.on("connection", (ws) => {
       if ("talking" in m) p.talking = !!m.talking;
     } else if (m.t === "broadcast") {
       if (m.on && rank(p.role) < RANK.member) return deny(ws, "broadcast", "member");
+      if (m.on && mutedIds.has(p.id)) return deny(ws, "broadcast", "unmuted");
       p.bcast = !!m.on;
     } else if (m.t === "media") {
       mediaWall.playing = !!m.playing; publishEvent("media", { playing: mediaWall.playing });
@@ -267,6 +277,7 @@ wss.on("connection", (ws) => {
       publishEvent("recording", recording);
     } else if (m.t === "chat") {
       const body = String(m.body || "").slice(0, 500); if (!body.trim()) return;
+      if (mutedIds.has(p.id)) return deny(ws, "chat", "unmuted");
       let scope = ["nearby", "floor", "channel", "dm"].includes(m.scope) ? m.scope : "nearby";
       let channel = null, to = null;
       if (scope === "channel") channel = String(m.channel || "general").slice(0, 32);
@@ -280,6 +291,17 @@ wss.on("connection", (ws) => {
       broadcastLocal({ t: "draw", stroke }); publishEvent("draw", stroke);
     } else if (m.t === "wbclear") {
       whiteboard.strokes = []; broadcastLocal({ t: "wbclear" }); publishEvent("wbclear", {});
+    } else if (m.t === "react") {
+      if (mutedIds.has(p.id)) return deny(ws, "react", "unmuted");
+      const emoji = String(m.emoji || "").slice(0, 8); if (!emoji) return;
+      broadcastLocal({ t: "react", from: p.id, emoji }); publishEvent("react", { from: p.id, emoji });
+    } else if (m.t === "nudge") {
+      const to = String(m.to || ""); for (const [ws2, q] of clients) if (q.id === to) send(ws2, { t: "nudge", from: p.id, name: p.name });
+      publishEvent("nudge", { from: p.id, name: p.name, to });
+    } else if (m.t === "moderate") {
+      if (rank(p.role) < RANK.admin) return deny(ws, "moderate", "admin");
+      const action = m.action, target = String(m.target || "");
+      applyModerate(action, target); publishEvent("moderate", { action, target });
     }
   });
 
