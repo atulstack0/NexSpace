@@ -87,7 +87,12 @@ function makeDefaultFloor() {
     title: "Lo-fi Beats — Focus Radio", playing: true, pos: 74, dur: 213 };
   obstacles.push({ x: mediaWall.x, y: mediaWall.y, w: mediaWall.w, h: mediaWall.base });
   const portals = [{ id: "to-rooftop", x: 2030, y: 1290, w: 96, h: 96, to: "rooftop", label: "Rooftop ↑", color: "#ffb454" }];
-  return { slug: "default", name: "HQ — Ground Floor", w: W, h: H, obstacles, rooms, mediaWall, portals,
+  const widgets = [
+    { id: "w-tv", type: "embed", x: 1180, y: 700, w: 300, h: 170, kind: "youtube", url: "https://www.youtube.com/embed/jfKfPfyJRdk", title: "Lofi TV" },
+    { id: "w-note", type: "note", x: 360, y: 980, w: 190, h: 130, text: "Welcome to NexSpace! Click the TV ▶ or pop up to the rooftop 🌇", color: "#ffd166" },
+    { id: "w-timer", type: "timer", x: 980, y: 300, w: 180, h: 96, label: "Standup ends", endsAt: Date.now() + 30 * 60000 },
+  ];
+  return { slug: "default", name: "HQ — Ground Floor", w: W, h: H, obstacles, rooms, mediaWall, portals, widgets,
     branding: { name: "NexSpace", color: "#5b8cff", logo: "", whiteLabel: false }, spawn: { x: 890, y: 920 } };
 }
 
@@ -107,7 +112,10 @@ function makeRooftopFloor() {
     title: "Sunset Set — Rooftop Radio", playing: true, pos: 12, dur: 240 };
   obstacles.push({ x: mediaWall.x, y: mediaWall.y, w: mediaWall.w, h: mediaWall.base });
   const portals = [{ id: "to-default", x: 90, y: 960, w: 96, h: 96, to: "default", label: "Ground ↓", color: "#5b8cff" }];
-  return { slug: "rooftop", name: "Rooftop Garden", w: W, h: H, obstacles, rooms, mediaWall, portals,
+  const widgets = [
+    { id: "w-rnote", type: "note", x: 1180, y: 250, w: 190, h: 120, text: "Rooftop vibes ☕ — grab a seat by the cabana", color: "#39d3a6" },
+  ];
+  return { slug: "rooftop", name: "Rooftop Garden", w: W, h: H, obstacles, rooms, mediaWall, portals, widgets,
     branding: { name: "NexSpace", color: "#39d3a6", logo: "", whiteLabel: false }, spawn: { x: 800, y: 600 } };
 }
 
@@ -129,6 +137,7 @@ function worldForClient(slug) {
     rooms: f.rooms.map(r => ({ id: r.id, name: r.name, color: r.color, bounds: r.bounds, door: { x: r.door.x, y: r.door.y, w: r.door.w, h: r.door.h, state: r.door.state } })),
     mediaWall: f.mediaWall ? { x: f.mediaWall.x, y: f.mediaWall.y, w: f.mediaWall.w, base: f.mediaWall.base, screenH: f.mediaWall.screenH, title: f.mediaWall.title, dur: f.mediaWall.dur } : null,
     portals: f.portals.map(pt => ({ id: pt.id, x: pt.x, y: pt.y, w: pt.w, h: pt.h, to: pt.to, label: pt.label, color: pt.color })),
+    widgets: (f.widgets || []).map(wd => ({ ...wd })),
     branding: f.branding,
     floors: floorsList(),
   };
@@ -432,7 +441,8 @@ function buildFloorFromBlob(slug, w) {
   const mediaWall = w.mediaWall ? { x: w.mediaWall.x, y: w.mediaWall.y, w: w.mediaWall.w, base: w.mediaWall.base,
     screenH: w.mediaWall.screenH, title: w.mediaWall.title, playing: true, pos: 0, dur: w.mediaWall.dur } : null;
   const portals = (w.portals || []).map((pt) => ({ id: pt.id, x: pt.x, y: pt.y, w: pt.w, h: pt.h, to: pt.to, label: pt.label, color: pt.color }));
-  return { slug, name: w.name || slug, w: w.w, h: w.h, obstacles: (w.obstacles || []).slice(), rooms, mediaWall, portals,
+  const widgets = (w.widgets || []).map((wd) => ({ ...wd }));
+  return { slug, name: w.name || slug, w: w.w, h: w.h, obstacles: (w.obstacles || []).slice(), rooms, mediaWall, portals, widgets,
     branding: w.branding || { name: "NexSpace", color: "#5b8cff", logo: "", whiteLabel: false },
     spawn: w.spawn || { x: Math.round((w.w || 2000) * 0.4), y: Math.round((w.h || 1400) * 0.6) } };
 }

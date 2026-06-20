@@ -13,10 +13,11 @@ type RoomDef = { key: string; name: string; color: string; x: number; y: number;
   doorX: number; doorY: number; doorW: number; doorH: number; doorState: string };
 type MediaDef = { x: number; y: number; w: number; base: number; screenH: number; title: string; dur: number };
 type PortalDef = { x: number; y: number; w: number; h: number; to: string; label: string; color: string };
+type WidgetDef = { type: "note" | "embed" | "timer"; x: number; y: number; config: Record<string, any> };
 type FloorDef = {
   slug: string; name: string; width: number; height: number; supports3d: boolean;
   branding: { name: string; color: string; logo: string; whiteLabel: boolean };
-  walls: Wall[]; furniture: Furn[]; rooms: RoomDef[]; media: MediaDef | null; portals: PortalDef[];
+  walls: Wall[]; furniture: Furn[]; rooms: RoomDef[]; media: MediaDef | null; portals: PortalDef[]; widgets: WidgetDef[];
 };
 
 const DEFAULT_FLOOR: FloorDef = {
@@ -42,6 +43,11 @@ const DEFAULT_FLOOR: FloorDef = {
   ],
   media: { x: 1180, y: 980, w: 300, base: 16, screenH: 150, title: "Lo-fi Beats — Focus Radio", dur: 213 },
   portals: [{ x: 2030, y: 1290, w: 96, h: 96, to: "rooftop", label: "Rooftop ↑", color: "#ffb454" }],
+  widgets: [
+    { type: "embed", x: 1180, y: 700, config: { w: 300, h: 170, kind: "youtube", url: "https://www.youtube.com/embed/jfKfPfyJRdk", title: "Lofi TV" } },
+    { type: "note", x: 360, y: 980, config: { w: 190, h: 130, text: "Welcome to NexSpace! Click the TV ▶ or pop up to the rooftop 🌇", color: "#ffd166" } },
+    { type: "timer", x: 980, y: 300, config: { w: 180, h: 96, label: "Standup ends", endsAt: Date.now() + 30 * 60000 } },
+  ],
 };
 
 const ROOFTOP_FLOOR: FloorDef = {
@@ -61,6 +67,9 @@ const ROOFTOP_FLOOR: FloorDef = {
   ],
   media: { x: 660, y: 720, w: 280, base: 16, screenH: 140, title: "Sunset Set — Rooftop Radio", dur: 240 },
   portals: [{ x: 90, y: 960, w: 96, h: 96, to: "default", label: "Ground ↓", color: "#5b8cff" }],
+  widgets: [
+    { type: "note", x: 1180, y: 250, config: { w: 190, h: 120, text: "Rooftop vibes ☕ — grab a seat by the cabana", color: "#39d3a6" } },
+  ],
 };
 
 async function seedFloor(def: FloorDef) {
@@ -80,7 +89,9 @@ async function seedFloor(def: FloorDef) {
   for (const pt of def.portals)
     await prisma.placedObject.create({ data: { floorId: floor.id, type: "portal", x: pt.x, y: pt.y, collidable: false,
       config: JSON.stringify({ w: pt.w, h: pt.h, to: pt.to, label: pt.label, color: pt.color }) } });
-  console.log(`Seeded floor '${def.slug}' — ${def.rooms.length} room(s), ${def.walls.length + def.furniture.length} obstacle(s), ${def.portals.length} portal(s)${def.media ? " + media wall" : ""}.`);
+  for (const wd of def.widgets)
+    await prisma.placedObject.create({ data: { floorId: floor.id, type: wd.type, x: wd.x, y: wd.y, collidable: false, config: JSON.stringify(wd.config) } });
+  console.log(`Seeded floor '${def.slug}' — ${def.rooms.length} room(s), ${def.walls.length + def.furniture.length} obstacle(s), ${def.portals.length} portal(s), ${def.widgets.length} widget(s)${def.media ? " + media wall" : ""}.`);
 }
 
 async function main() {

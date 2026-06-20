@@ -77,6 +77,7 @@ try {
   (guest.role === "guest") ? ok("no token → guest role") : bad("guest role not applied");
   (admin.world?.branding && typeof admin.world.branding.name === "string" && typeof admin.world.branding.color === "string") ? ok("welcome carries branding (name+color)") : bad("welcome world.branding missing/malformed");
   (admin.world?.floors?.length >= 2 && admin.world?.portals?.some((p) => p.to === "rooftop")) ? ok("welcome lists floors + portals (multi-floor)") : bad("multi-floor world blob missing floors/portals");
+  (admin.world?.widgets?.some((wd) => wd.type === "embed") && admin.world?.widgets?.some((wd) => wd.type === "note") && admin.world?.widgets?.some((wd) => wd.type === "timer")) ? ok("welcome carries interactive widgets (embed+note+timer)") : bad("interactive widgets missing from world");
 
   // walk into the Focus Room at (500,500). The server-authoritative speed cap (MAX_SPEED) only
   // allows ~one step of travel per update since this client's last move, and spawn is ~570-665px

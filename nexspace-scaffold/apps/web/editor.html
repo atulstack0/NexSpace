@@ -38,12 +38,18 @@
   <button class="btn" data-add="couch">＋ Couch</button>
   <button class="btn" data-add="plant">＋ Plant</button>
   <span class="sep"></span>
+  <span class="lbl">Widgets</span>
+  <button class="btn" data-add="note">＋ Note</button>
+  <button class="btn" data-add="embed">＋ Embed</button>
+  <button class="btn" data-add="timer">＋ Timer</button>
+  <span class="sep"></span>
+  <button class="btn" id="edit">✎ Edit</button>
   <button class="btn warn" id="del">🗑 Delete</button>
   <button class="btn" id="reload">↻ Reload</button>
   <button class="btn primary" id="save">💾 Save to API</button>
 </div>
 <div id="status">Loading…</div>
-<div id="hint">Click furniture to select · <b>drag</b> to move (snaps to grid) · drag a room to move it · <kbd>Del</kbd> removes · <b>Save</b> writes to Postgres via the API.</div>
+<div id="hint">Click to select · <b>drag</b> to move (snaps to grid) · add <b>Note/Embed/Timer</b> widgets, then <b>✎ Edit</b> their text/URL/minutes · <kbd>Del</kbd> removes · <b>Save</b> writes to the API + pushes live.</div>
 <div id="toast"></div>
 
 <script>
@@ -80,6 +86,10 @@
 
   // ---------- Geometry ----------
   const PRESETS={table:{w:160,h:90,r:12},desk:{w:120,h:60,r:8},couch:{w:160,h:70,r:18},plant:{w:60,h:60,r:30}};
+  const WIDGETS={ // interactive objects (§6); placed non-collidable
+    note:{w:180,h:120,text:'New note',color:'#ffd166'},
+    embed:{w:280,h:160,kind:'youtube',url:'https://www.youtube.com/embed/jfKfPfyJRdk',title:'Video'},
+    timer:{w:170,h:96,label:'Timer'} };
   function objRect(o){const c=o.config||{};
     if(o.type==='mediaWall')return{x:o.x,y:o.y-(c.screenH||150),w:c.w||300,h:(c.screenH||150)+(c.base||16)};
     return{x:o.x,y:o.y,w:c.w||60,h:c.h||60};}
@@ -93,7 +103,10 @@
   // ---------- Interaction ----------
   let sel=null,drag=null,pendingAdd=null;
   cv.addEventListener('mousedown',e=>{const w=toW(e.clientX,e.clientY);
-    if(pendingAdd){const id='new-'+Date.now();objects.push({id,type:'furniture',x:snap(w.x-PRESETS[pendingAdd].w/2),y:snap(w.y-PRESETS[pendingAdd].h/2),z:0,rotation:0,scale:1,collidable:true,config:{...PRESETS[pendingAdd]}});
+    if(pendingAdd){const id='new-'+Date.now();
+      if(WIDGETS[pendingAdd]){const cfg={...WIDGETS[pendingAdd]};if(pendingAdd==='timer')cfg.endsAt=Date.now()+10*60000;
+        objects.push({id,type:pendingAdd,x:snap(w.x-cfg.w/2),y:snap(w.y-cfg.h/2),z:0,rotation:0,scale:1,collidable:false,config:cfg});}
+      else{const p=PRESETS[pendingAdd];objects.push({id,type:'furniture',x:snap(w.x-p.w/2),y:snap(w.y-p.h/2),z:0,rotation:0,scale:1,collidable:true,config:{...p}});}
       sel=objects[objects.length-1];pendingAdd=null;cv.style.cursor='default';dirty=true;setStatus();return;}
     const hit=pick(w.x,w.y);sel=hit?(hit.kind==='obj'?hit.obj:hit.room):null;
     if(hit){const ox=hit.kind==='obj'?hit.obj.x:hit.room.x,oy=hit.kind==='obj'?hit.obj.y:hit.room.y;
@@ -109,6 +122,13 @@
 
   document.querySelectorAll('[data-add]').forEach(b=>b.addEventListener('click',function(){pendingAdd=this.dataset.add;cv.style.cursor='crosshair';toast('Click the floor to place a '+pendingAdd);}));
   document.getElementById('del').addEventListener('click',()=>{if(sel&&sel.type&&sel.type!=='wall'){const i=objects.indexOf(sel);if(i>=0){objects.splice(i,1);sel=null;dirty=true;setStatus();}}});
+  document.getElementById('edit').addEventListener('click',()=>{
+    if(!sel||!sel.config){toast('Select a note / embed / timer first');return;}
+    const c=sel.config;
+    if(sel.type==='note'){const t=prompt('Note text:',c.text||'');if(t!=null){c.text=t;dirty=true;setStatus();toast('Note updated — Save to push live');}}
+    else if(sel.type==='embed'){const u=prompt('Embed URL (YouTube embed / Spotify / web page):',c.url||'');if(u!=null)c.url=u;const ti=prompt('Title:',c.title||'Embed');if(ti!=null)c.title=ti;dirty=true;setStatus();toast('Embed updated — Save to push live');}
+    else if(sel.type==='timer'){const l=prompt('Timer label:',c.label||'Timer');if(l!=null)c.label=l;const mins=prompt('Countdown minutes from now:','10');if(mins!=null)c.endsAt=Date.now()+(parseFloat(mins)||10)*60000;dirty=true;setStatus();toast('Timer updated — Save to push live');}
+    else toast('That object has no editable fields');});
   document.getElementById('reload').addEventListener('click',load);
   document.getElementById('save').addEventListener('click',async function(){
     const payload={objects:objects.map(o=>({type:o.type,x:o.x,y:o.y,z:o.z||0,rotation:o.rotation||0,scale:o.scale||1,collidable:o.collidable!==false,config:o.config||{}})),
@@ -140,6 +160,18 @@
       if(o.type==='mediaWall'){const sy=o.y-(c.screenH||150);ctx.fillStyle='#222c44';ctx.fillRect(o.x,o.y,c.w||300,c.base||16);
         ctx.fillStyle='#0a0f1c';rr(o.x,sy,c.w||300,c.screenH||150,8);ctx.fill();ctx.strokeStyle=hexA('#5b8cff',sel===o?.95:.6);ctx.lineWidth=(sel===o?3:2)/scale;rr(o.x,sy,c.w||300,c.screenH||150,8);ctx.stroke();
         ctx.fillStyle='#9fb8ff';ctx.font='600 13px sans-serif';ctx.textAlign='center';ctx.fillText('📺 '+(c.title||'Media Wall'),o.x+(c.w||300)/2,sy+(c.screenH||150)/2);continue;}
+      if(o.type==='note'){ctx.fillStyle=hexA(c.color||'#ffd166',.93);rr(o.x,o.y,c.w||180,c.h||120,8);ctx.fill();
+        ctx.strokeStyle=sel===o?'#fff':hexA('#000000',.25);ctx.lineWidth=(sel===o?3:1)/scale;rr(o.x,o.y,c.w||180,c.h||120,8);ctx.stroke();
+        ctx.fillStyle='#1a1205';ctx.font='600 13px sans-serif';ctx.textAlign='left';ctx.fillText('📝 '+String(c.text||'').slice(0,20),o.x+10,o.y+24);continue;}
+      if(o.type==='embed'){ctx.fillStyle='#0a0f1c';rr(o.x,o.y,c.w||280,c.h||160,8);ctx.fill();
+        ctx.strokeStyle=sel===o?'#fff':hexA('#ff5d6c',.6);ctx.lineWidth=(sel===o?3:2)/scale;rr(o.x,o.y,c.w||280,c.h||160,8);ctx.stroke();
+        ctx.fillStyle='#cdd8f3';ctx.font='600 13px sans-serif';ctx.textAlign='center';ctx.fillText('▶ '+(c.title||'Embed'),o.x+(c.w||280)/2,o.y+(c.h||160)/2);continue;}
+      if(o.type==='timer'){ctx.fillStyle=hexA('#5b8cff',.16);rr(o.x,o.y,c.w||170,c.h||96,10);ctx.fill();
+        ctx.strokeStyle=sel===o?'#fff':hexA('#5b8cff',.6);ctx.lineWidth=(sel===o?3:2)/scale;rr(o.x,o.y,c.w||170,c.h||96,10);ctx.stroke();
+        ctx.fillStyle='#9fb8ff';ctx.font='600 13px sans-serif';ctx.textAlign='center';ctx.fillText('⏱ '+(c.label||'Timer'),o.x+(c.w||170)/2,o.y+(c.h||96)/2);continue;}
+      if(o.type==='portal'){ctx.fillStyle=hexA(c.color||'#ffb454',.3);ctx.beginPath();ctx.arc(o.x+(c.w||90)/2,o.y+(c.h||90)/2,(c.w||90)/2,0,7);ctx.fill();
+        ctx.strokeStyle=sel===o?'#fff':hexA(c.color||'#ffb454',.8);ctx.lineWidth=(sel===o?3:2)/scale;ctx.stroke();
+        ctx.fillStyle=hexA(c.color||'#ffb454',.95);ctx.font='600 12px sans-serif';ctx.textAlign='center';ctx.fillText(c.label||'Portal',o.x+(c.w||90)/2,o.y-6);continue;}
       // furniture
       ctx.fillStyle=sel===o?'#34406b':'#2a3552';rr(o.x,o.y,c.w||60,c.h||60,c.r||10);ctx.fill();
       ctx.strokeStyle=sel===o?'#5b8cff':'rgba(255,255,255,.12)';ctx.lineWidth=(sel===o?3:1)/scale;rr(o.x,o.y,c.w||60,c.h||60,c.r||10);ctx.stroke();}

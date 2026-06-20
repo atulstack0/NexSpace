@@ -46,8 +46,14 @@ export class WorldService {
       return { id: c.id || o.id, x: o.x, y: o.y, w: c.w ?? 90, h: c.h ?? 90, to: c.to, label: c.label || "Portal", color: c.color || "#ffb454" };
     });
 
+    // interactive widgets (spec §6) — embeds / notes / timers; flattened config so the client renders them directly
+    const widgets = floor.objects.filter((o) => ["note", "embed", "timer"].includes(o.type)).map((o) => {
+      const c = this.parse(o.config);
+      return { ...c, id: o.id, type: o.type, x: o.x, y: o.y, w: c.w ?? 180, h: c.h ?? 120 };
+    });
+
     const branding = { name: "NexSpace", color: "#5b8cff", logo: "", whiteLabel: false, ...(floor.branding ? this.parse(floor.branding) : {}) };
-    return { slug: floor.slug, name: floor.name, w: floor.width, h: floor.height, environment: floor.environment, supports3d: floor.supports3d, obstacles, rooms, mediaWall, portals, branding };
+    return { slug: floor.slug, name: floor.name, w: floor.width, h: floor.height, environment: floor.environment, supports3d: floor.supports3d, obstacles, rooms, mediaWall, portals, widgets, branding };
   }
 
   /** List every floor (slug + name) — feeds the realtime server's multi-floor loader and the client switcher. */

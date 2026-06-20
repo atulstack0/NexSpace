@@ -79,6 +79,9 @@ export type DoorState = "open" | "closed" | "locked";
 
 /** Static geometry sent once in `welcome` (authoritative; from the API/DB in prod). */
 export interface PortalObject { id: string; x: number; y: number; w: number; h: number; to: string; label: string; color: string } // links to another floor's slug (§6 multi-floor)
+// Interactive widgets placed on a floor (§6): embeds (YouTube/Spotify/web), sticky notes, shared countdowns.
+export interface WidgetObject { id: string; type: "note" | "embed" | "timer"; x: number; y: number; w: number; h: number;
+  text?: string; color?: string; url?: string; kind?: string; title?: string; label?: string; endsAt?: number }
 export interface WorldBlob {
   slug?: string;   // which floor this is
   name?: string;   // human floor name (e.g. "Rooftop Garden")
@@ -90,6 +93,7 @@ export interface WorldBlob {
     door: { x: number; y: number; w: number; h: number; state?: DoorState } }>;
   mediaWall: { x: number; y: number; w: number; base: number; screenH: number; title: string; dur: number } | null;
   portals?: PortalObject[];                                  // doorways to other floors (§6 multi-floor)
+  widgets?: WidgetObject[];                                  // interactive objects: embeds, notes, timers (§6)
   branding?: { name: string; color: string; logo: string; whiteLabel: boolean }; // per-space white-label (6.12)
   floors?: Array<{ slug: string; name: string }>;            // every floor, for the switcher (§6 multi-floor)
 }
