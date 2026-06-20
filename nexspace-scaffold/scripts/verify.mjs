@@ -36,6 +36,10 @@ checkInline("apps/web/index.html", "apps/web/index.html");
 checkInline("apps/web/editor.html", "apps/web/editor.html");
 
 console.log("Types — API (tsc --noEmit)");
+// Regenerate the Prisma client first so the typecheck always matches the current schema.prisma
+// (otherwise adding a column leaves the generated @prisma/client types stale → false TS errors).
+// Best-effort: if generation fails (e.g. offline), fall through and let tsc report the real state.
+try { execSync("npx prisma generate --schema prisma/schema.prisma", { cwd: "apps/api", stdio: "pipe" }); } catch {}
 try { execSync("npx tsc --noEmit", { cwd: "apps/api", stdio: "pipe" }); ok("apps/api typecheck"); }
 catch (e) { bad("apps/api typecheck", (e.stdout?.toString() || "") + (e.stderr?.toString() || "")); }
 
