@@ -51,6 +51,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Presence & status (5 states) + idle auto-away | ✅ | realtime + web |
 | Auth (JWT login) + server-enforced RBAC | ✅ | `apps/api/src/auth`, realtime |
 | SSO (OIDC authorization-code) with built-in mock IdP; real provider via env | ✅ | `apps/api/src/auth/sso`, web |
+| Google sign-in — real OAuth run by the realtime server (single-service, no DB); role mapping via env | ✅ | realtime `/auth/google/*`, web |
 | Invites & guest links + CSV bulk import (admin-minted, time-boxed) | ✅ | `apps/api/src/auth`, web |
 | Recording — 🔴 indicator + LiveKit Egress start/stop | ✅ (egress needs storage) | `apps/api/src/livekit`, realtime, web |
 | Drag-and-drop floor editor → persists to API → live reload to everyone | ✅ | `apps/web/editor.html`, `apps/api`, realtime |

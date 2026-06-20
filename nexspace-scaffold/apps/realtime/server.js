@@ -22,7 +22,7 @@ const crypto = require("crypto");
 // environment (whitelisted so a stray PORT/DATABASE_URL in apps/api/.env can't hijack this server).
 // In production (Render etc.) these come from the dashboard and the file reads simply no-op.
 (function loadEnv() {
-  const want = /^(LIVEKIT_|S3_)/;
+  const want = /^(LIVEKIT_|S3_|GOOGLE_|JWT_SECRET)/;
   for (const f of [path.join(__dirname, ".env"), path.join(__dirname, "..", "api", ".env")]) {
     try {
       for (const line of fs.readFileSync(f, "utf8").split(/\r?\n/)) {
@@ -91,6 +91,26 @@ function mintLivekitToken(room, identity, name) {
   const data = header + "." + payload;
   return data + "." + crypto.createHmac("sha256", LIVEKIT_API_SECRET).update(data).digest("base64url");
 }
+
+// ---------- Google sign-in (OIDC) — real login with no separate API/DB. The server runs the OAuth
+// code flow and mints an app JWT (same HS256/JWT_SECRET the join handler verifies). Configure with
+// GOOGLE_CLIENT_ID/SECRET; map roles with GOOGLE_OWNER_EMAILS / GOOGLE_ADMIN_EMAILS (comma-separated). ----------
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
+const googleConfigured = () => !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
+const emailList = (s) => (s || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+const OWNER_EMAILS = emailList(process.env.GOOGLE_OWNER_EMAILS);
+const ADMIN_EMAILS = emailList(process.env.GOOGLE_ADMIN_EMAILS);
+function googleRole(email) { const e = (email || "").toLowerCase(); if (OWNER_EMAILS.includes(e)) return "owner"; if (ADMIN_EMAILS.includes(e)) return "admin"; return "member"; }
+function mintAppToken(payload, ttlSec = 7200) {
+  const now = Math.floor(Date.now() / 1000);
+  const b = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+  const data = b({ alg: "HS256", typ: "JWT" }) + "." + b({ ...payload, iat: now, exp: now + ttlSec });
+  return data + "." + crypto.createHmac("sha256", JWT_SECRET).update(data).digest("base64url");
+}
+const fwdBase = (req) => ((req.headers["x-forwarded-proto"] || "https").split(",")[0]) + "://" + req.headers.host;
+const googleRedirectUri = (req) => process.env.GOOGLE_REDIRECT_URI || (fwdBase(req) + "/auth/google/callback");
+function parseCookies(req) { return Object.fromEntries((req.headers.cookie || "").split(";").map((c) => c.trim().split("=")).filter((a) => a[0])); }
 
 // ---------- Authoritative world(s) — multi-floor (spec §6: multiple maps + portals) ----------
 // Each floor is an independent world; a player belongs to exactly one floor at a time, and
@@ -276,6 +296,38 @@ const server = http.createServer((req, res) => {
       try { json(res, await stopEgress(String(b.egressId || ""))); }
       catch (e) { json(res, { error: "egress stop failed: " + (e && e.message || e) }, 503); }
     });
+  }
+  if (urlPath === "/auth/google/login") { // step 1: bounce to Google's consent screen
+    if (!googleConfigured()) { res.writeHead(503, { "Content-Type": "text/plain" }); res.end("Google login not configured (set GOOGLE_CLIENT_ID/SECRET)"); return; }
+    const state = crypto.randomBytes(16).toString("hex");
+    const u = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+    u.searchParams.set("client_id", GOOGLE_CLIENT_ID);
+    u.searchParams.set("redirect_uri", googleRedirectUri(req));
+    u.searchParams.set("response_type", "code");
+    u.searchParams.set("scope", "openid email profile");
+    u.searchParams.set("state", state);
+    u.searchParams.set("prompt", "select_account");
+    res.writeHead(302, { "Set-Cookie": `g_state=${state}; HttpOnly; Path=/; Max-Age=600; SameSite=Lax`, Location: u.toString() });
+    res.end(); return;
+  }
+  if (urlPath === "/auth/google/callback") { // step 2: exchange code, mint app JWT, bounce back with ?sso=
+    const q = new URL(req.url, "http://x").searchParams, code = q.get("code"), state = q.get("state");
+    if (!code || !state || parseCookies(req).g_state !== state) { res.writeHead(400, { "Content-Type": "text/plain" }); res.end("Login failed (bad state) — try again."); return; }
+    (async () => {
+      try {
+        const body = new URLSearchParams({ code, client_id: GOOGLE_CLIENT_ID, client_secret: GOOGLE_CLIENT_SECRET, redirect_uri: googleRedirectUri(req), grant_type: "authorization_code" });
+        const tr = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
+        const tj = await tr.json();
+        if (!tj.id_token) throw new Error(tj.error_description || tj.error || "no id_token");
+        const claims = JSON.parse(Buffer.from(tj.id_token.split(".")[1], "base64url").toString());
+        const email = claims.email || "", name = claims.name || email.split("@")[0] || "User";
+        const token = mintAppToken({ sub: claims.sub || ("g-" + email), name, role: googleRole(email), email });
+        res.writeHead(302, { "Set-Cookie": "g_state=; Path=/; Max-Age=0", Location: "/?sso=" + encodeURIComponent(token) });
+        res.end();
+        console.log(`✓ Google login: ${name} <${email}> → ${googleRole(email)}`);
+      } catch (e) { res.writeHead(502, { "Content-Type": "text/plain" }); res.end("Google login failed: " + (e && e.message || e)); }
+    })();
+    return;
   }
   if (urlPath === "/analytics") { // admin-gated metrics JSON (spec 6.20)
     const token = (req.headers.authorization || "").replace(/^Bearer /, "") || (new URL(req.url, "http://x").searchParams.get("token") || "");
