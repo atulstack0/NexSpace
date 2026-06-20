@@ -357,12 +357,17 @@
         const el=pub.track.attach();el.muted=true;el.playsInline=true;el.style.display='none';document.body.appendChild(el);localVideoEl=el;}});
       await room.connect(url,token);
       lkRoom=room;lkActive=true;
-      await room.localParticipant.setMicrophoneEnabled(true);
-      setupMicMeter();                                          // measure my own mic loudness for accurate self-waves
-      await room.localParticipant.setCameraEnabled(true);
       const mb=document.getElementById('btnMicPub'),cb=document.getElementById('btnCam');
-      mb.style.display='';cb.style.display='';document.getElementById('btnScreen').style.display='';mb.classList.add('active');cb.classList.add('active');
+      mb.style.display='';cb.style.display='';document.getElementById('btnScreen').style.display='';
+      // Mic/cam are isolated: if permission is blocked they must NOT drop the whole room to synth audio.
+      let micOn=false;
+      try{await room.localParticipant.setMicrophoneEnabled(true);micOn=true;}catch(e){toast('🎤 Allow microphone access, then click the 🎤 button');}
+      mb.classList.toggle('active',micOn);
+      setupMicMeter();                                          // measure my own mic loudness for accurate self-waves
+      try{await room.localParticipant.setCameraEnabled(true);cb.classList.add('active');}catch(e){}
       toast('🎙️ LiveKit connected — real voice & video');
+      try{await room.startAudio();}catch(_){}                   // unblock playback (autoplay policy)
+      if(actx&&actx.state==='suspended')toast('🔊 Move or click anywhere to enable sound');
     }catch(e){lkActive=false;toast('LiveKit connect failed — using synth audio');}
   }
   function onTrack(track,pub,participant){const id=participant.identity;
@@ -817,7 +822,7 @@
   document.getElementById('chatKick').addEventListener('click',()=>{const id=dmTarget();if(!id){toast('Pick a DM target');return;}if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'moderate',action:'kick',target:id}));toast('⛔ Kicked');});
   function setStatus(s){myStatus=s;const sel=document.getElementById('statusSel');if(sel)sel.value=s;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'state',status:s}));}
   document.getElementById('statusSel').addEventListener('change',function(){autoAway=false;setStatus(this.value);});
-  ['mousemove','keydown','mousedown','wheel','touchstart'].forEach(ev=>addEventListener(ev,()=>{lastActivity=Date.now();if(actx&&actx.state==='suspended')actx.resume();if(autoAway){autoAway=false;setStatus('available');}})); // also resume audio on first interaction (needed after an auto-join)
+  ['mousemove','keydown','mousedown','wheel','touchstart'].forEach(ev=>addEventListener(ev,()=>{lastActivity=Date.now();if(actx&&actx.state==='suspended')actx.resume();if(lkRoom&&lkRoom.startAudio)lkRoom.startAudio().catch(()=>{});if(autoAway){autoAway=false;setStatus('available');}})); // resume audio + LiveKit playback on first interaction (needed after an auto-join)
   document.querySelectorAll('#rangeSeg button').forEach(b=>b.addEventListener('click',function(){
     document.querySelectorAll('#rangeSeg button').forEach(x=>x.classList.remove('active'));this.classList.add('active');mode=this.dataset.m;applyRange();}));
   const cv2d=document.getElementById('game'), cv3d=document.getElementById('game3d');
@@ -839,8 +844,11 @@
   addEventListener('resize',()=>{if(threeMode)Three3D.resize();});
   document.getElementById('btnBroadcast').addEventListener('click',function(){myBcast=!myBcast;this.classList.toggle('active',myBcast);
     if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'broadcast',on:myBcast}));toast(myBcast?'📢 You are live to the whole floor':'Broadcast ended');});
-  document.getElementById('btnMicPub').addEventListener('click',function(){if(!lkActive||!lkRoom)return;
-    const on=!lkRoom.localParticipant.isMicrophoneEnabled;lkRoom.localParticipant.setMicrophoneEnabled(on);this.classList.toggle('active',on);toast(on?'🎤 Mic on':'🎤 Mic off');});
+  document.getElementById('btnMicPub').addEventListener('click',async function(){if(!lkActive||!lkRoom)return;
+    if(actx&&actx.state==='suspended')actx.resume();try{if(lkRoom.startAudio)await lkRoom.startAudio();}catch(_){}
+    const on=!lkRoom.localParticipant.isMicrophoneEnabled;
+    try{await lkRoom.localParticipant.setMicrophoneEnabled(on);this.classList.toggle('active',on);toast(on?'🎤 Mic on':'🎤 Mic off');}
+    catch(e){this.classList.remove('active');toast('🎤 Microphone blocked — allow it via the 🔒 icon in the address bar, then click 🎤 again');}});
   document.getElementById('btnCam').addEventListener('click',function(){if(!lkActive||!lkRoom)return;
     const on=!lkRoom.localParticipant.isCameraEnabled;lkRoom.localParticipant.setCameraEnabled(on);this.classList.toggle('active',on);if(!on)localVideoEl=null;toast(on?'🎥 Camera on':'🎥 Camera off');});
   document.getElementById('btnScreen').addEventListener('click',async function(){
