@@ -10,6 +10,11 @@
   "scripts": {
     "start": "npm --workspace @nexspace/realtime start",
     "dev": "npm --workspace @nexspace/realtime run dev",
+    "api": "npm --workspace @nexspace/api run dev",
+    "api:setup": "npm --workspace @nexspace/api run prisma:generate && npm --workspace @nexspace/api run migrate && npm --workspace @nexspace/api run seed",
+    "prisma:generate": "npm --workspace @nexspace/api run prisma:generate",
+    "migrate": "npm --workspace @nexspace/api run migrate",
+    "seed": "npm --workspace @nexspace/api run seed",
     "verify": "node scripts/verify.mjs",
     "test": "node scripts/realtime.smoke.mjs",
     "test:redis": "node scripts/redis.smoke.mjs",
