@@ -110,7 +110,9 @@ function mintAppToken(payload, ttlSec = 7200) {
 }
 const fwdBase = (req) => ((req.headers["x-forwarded-proto"] || "https").split(",")[0]) + "://" + req.headers.host;
 const googleRedirectUri = (req) => process.env.GOOGLE_REDIRECT_URI || (fwdBase(req) + "/auth/google/callback");
-function parseCookies(req) { return Object.fromEntries((req.headers.cookie || "").split(";").map((c) => c.trim().split("=")).filter((a) => a[0])); }
+// Stateless CSRF state: a nonce signed with JWT_SECRET — no cookie needed (cookies are flaky across the OAuth redirect).
+function signState() { const n = crypto.randomBytes(12).toString("hex"); return n + "." + crypto.createHmac("sha256", JWT_SECRET).update(n).digest("base64url"); }
+function verifyState(s) { if (!s || s.indexOf(".") < 0) return false; const n = s.slice(0, s.indexOf(".")), sig = s.slice(s.indexOf(".") + 1); const exp = crypto.createHmac("sha256", JWT_SECRET).update(n).digest("base64url"); try { return sig.length === exp.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(exp)); } catch { return false; } }
 
 // ---------- Authoritative world(s) — multi-floor (spec §6: multiple maps + portals) ----------
 // Each floor is an independent world; a player belongs to exactly one floor at a time, and
@@ -274,7 +276,8 @@ if (REDIS_URL) {
 
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".ico": "image/x-icon" };
 const server = http.createServer((req, res) => {
-  const urlPath = (req.url === "/" || !req.url) ? "/index.html" : req.url.split("?")[0];
+  let urlPath = (req.url || "/").split("?")[0];   // strip query first, so "/?sso=…" still serves the app
+  if (urlPath === "/" || urlPath === "") urlPath = "/index.html";
   if (urlPath === "/livekit/token" && req.method === "POST") { // real voice/video, no separate API needed
     if (!livekitConfigured()) return json(res, { error: "LiveKit not configured" }, 503);
     return readJsonBody(req, (b) => {
@@ -299,20 +302,19 @@ const server = http.createServer((req, res) => {
   }
   if (urlPath === "/auth/google/login") { // step 1: bounce to Google's consent screen
     if (!googleConfigured()) { res.writeHead(503, { "Content-Type": "text/plain" }); res.end("Google login not configured (set GOOGLE_CLIENT_ID/SECRET)"); return; }
-    const state = crypto.randomBytes(16).toString("hex");
     const u = new URL("https://accounts.google.com/o/oauth2/v2/auth");
     u.searchParams.set("client_id", GOOGLE_CLIENT_ID);
     u.searchParams.set("redirect_uri", googleRedirectUri(req));
     u.searchParams.set("response_type", "code");
     u.searchParams.set("scope", "openid email profile");
-    u.searchParams.set("state", state);
+    u.searchParams.set("state", signState());
     u.searchParams.set("prompt", "select_account");
-    res.writeHead(302, { "Set-Cookie": `g_state=${state}; HttpOnly; Path=/; Max-Age=600; SameSite=Lax`, Location: u.toString() });
+    res.writeHead(302, { Location: u.toString() });
     res.end(); return;
   }
   if (urlPath === "/auth/google/callback") { // step 2: exchange code, mint app JWT, bounce back with ?sso=
     const q = new URL(req.url, "http://x").searchParams, code = q.get("code"), state = q.get("state");
-    if (!code || !state || parseCookies(req).g_state !== state) { res.writeHead(400, { "Content-Type": "text/plain" }); res.end("Login failed (bad state) — try again."); return; }
+    if (!code || !verifyState(state)) { res.writeHead(400, { "Content-Type": "text/plain" }); res.end("Login failed (bad state) — start again from the Sign in button."); return; }
     (async () => {
       try {
         const body = new URLSearchParams({ code, client_id: GOOGLE_CLIENT_ID, client_secret: GOOGLE_CLIENT_SECRET, redirect_uri: googleRedirectUri(req), grant_type: "authorization_code" });
@@ -322,7 +324,7 @@ const server = http.createServer((req, res) => {
         const claims = JSON.parse(Buffer.from(tj.id_token.split(".")[1], "base64url").toString());
         const email = claims.email || "", name = claims.name || email.split("@")[0] || "User";
         const token = mintAppToken({ sub: claims.sub || ("g-" + email), name, role: googleRole(email), email });
-        res.writeHead(302, { "Set-Cookie": "g_state=; Path=/; Max-Age=0", Location: "/?sso=" + encodeURIComponent(token) });
+        res.writeHead(302, { Location: "/?sso=" + encodeURIComponent(token) });
         res.end();
         console.log(`✓ Google login: ${name} <${email}> → ${googleRole(email)}`);
       } catch (e) { res.writeHead(502, { "Content-Type": "text/plain" }); res.end("Google login failed: " + (e && e.message || e)); }
