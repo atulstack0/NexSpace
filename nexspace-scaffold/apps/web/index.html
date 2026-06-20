@@ -856,19 +856,19 @@
   document.getElementById('screenClose').addEventListener('click',()=>{const ov=document.getElementById('screenshare');ov.style.display='none';
     if(screenFocus&&lkScreens.get(screenFocus)){const c=lkScreens.get(screenFocus).el;c.style.display='none';document.getElementById('screenHolder').appendChild(c);}screenFocus=null;updateScreens();});
   btnRec.addEventListener('click',async function(){
-    const turningOn=!recording.on;
+    const turningOn=!myEgressId;  // track my own capture (works for guests too; the shared 🔴 indicator stays admin-gated)
     if(turningOn){
       if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'recording',on:true}));  // instant 🔴 indicator for everyone
       toast('⏺ Recording — everyone now sees the indicator');
-      try{const res=await fetch(API_BASE+'/livekit/egress/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({room:'floor:default'})});
+      try{const res=await fetch('/livekit/egress/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({room:'floor:'+myFloor})}); // same-origin: realtime server runs egress
         if(!res.ok)throw new Error(await res.text());const j=await res.json();myEgressId=j.egressId;
         if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'recording',on:true,egressId:j.egressId}));
         toast('🔴 Capturing to '+(j.filepath||'storage'));}
-      catch(e){toast('Indicator on — file capture needs egress storage (LiveKit Cloud + S3). See README.');}
+      catch(e){toast('Indicator on — file capture needs egress storage (set S3_* env). '+(e&&e.message||''));}
     }else{
       if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'recording',on:false}));
       toast('⏹ Recording stopped');
-      if(myEgressId){try{await fetch(API_BASE+'/livekit/egress/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({egressId:myEgressId})});}catch(_){}}
+      if(myEgressId){try{await fetch('/livekit/egress/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({egressId:myEgressId})});}catch(_){}}
       myEgressId=null;
     }
   });

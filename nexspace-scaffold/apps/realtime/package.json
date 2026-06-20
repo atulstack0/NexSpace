@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "ws": "^8.18.0",
-    "ioredis": "^5.4.1"
+    "ioredis": "^5.4.1",
+    "livekit-server-sdk": "^2.9.0"
   },
   "engines": {
     "node": ">=18"

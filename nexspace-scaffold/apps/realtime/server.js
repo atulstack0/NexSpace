@@ -257,15 +257,25 @@ const server = http.createServer((req, res) => {
   const urlPath = (req.url === "/" || !req.url) ? "/index.html" : req.url.split("?")[0];
   if (urlPath === "/livekit/token" && req.method === "POST") { // real voice/video, no separate API needed
     if (!livekitConfigured()) return json(res, { error: "LiveKit not configured" }, 503);
-    let body = ""; req.on("data", (c) => { body += c; if (body.length > 4096) req.destroy(); });
-    req.on("end", () => {
-      let b = {}; try { b = JSON.parse(body || "{}"); } catch {}
+    return readJsonBody(req, (b) => {
       const room = String(b.room || "floor:default").slice(0, 80);
       const identity = String(b.identity || ("u" + Date.now())).slice(0, 64);
       const name = String(b.name || identity).slice(0, 40);
       json(res, { url: LIVEKIT_URL, token: mintLivekitToken(room, identity, name) });
     });
-    return;
+  }
+  if (urlPath === "/livekit/egress/start" && req.method === "POST") { // record the room → S3-compatible storage (e.g. Backblaze B2)
+    if (!livekitConfigured()) return json(res, { error: "LiveKit not configured" }, 503);
+    return readJsonBody(req, async (b) => {
+      try { json(res, await startEgress(String(b.room || "floor:default").slice(0, 80))); }
+      catch (e) { json(res, { error: "egress start failed — check S3_* storage env. " + (e && e.message || e) }, 503); }
+    });
+  }
+  if (urlPath === "/livekit/egress/stop" && req.method === "POST") {
+    return readJsonBody(req, async (b) => {
+      try { json(res, await stopEgress(String(b.egressId || ""))); }
+      catch (e) { json(res, { error: "egress stop failed: " + (e && e.message || e) }, 503); }
+    });
   }
   if (urlPath === "/analytics") { // admin-gated metrics JSON (spec 6.20)
     const token = (req.headers.authorization || "").replace(/^Bearer /, "") || (new URL(req.url, "http://x").searchParams.get("token") || "");
@@ -459,6 +469,32 @@ const heartbeat = setInterval(() => {
 
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 function json(res, obj, code = 200) { res.writeHead(code, { "Content-Type": "application/json" }); res.end(JSON.stringify(obj)); }
+function readJsonBody(req, cb) { let body = ""; req.on("data", (c) => { body += c; if (body.length > 8192) req.destroy(); }); req.on("end", () => { let b = {}; try { b = JSON.parse(body || "{}"); } catch {} cb(b); }); }
+
+// ---- Recording via LiveKit Egress → S3-compatible storage (spec 6.17). Lazy-require the SDK so the
+// server still boots if it isn't installed; configure with S3_* env (Backblaze B2, Cloudflare R2, …). ----
+let _egress = null;
+function egressClient() {
+  if (_egress) return _egress;
+  const { EgressClient } = require("livekit-server-sdk");
+  const host = LIVEKIT_URL.replace("wss://", "https://").replace("ws://", "http://");
+  _egress = new EgressClient(host, LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
+  return _egress;
+}
+async function startEgress(room) {
+  const { EncodedFileOutput, EncodedFileType, S3Upload } = require("livekit-server-sdk");
+  const filepath = room.replace(/[^a-zA-Z0-9_-]/g, "_") + "-" + Date.now() + ".mp4";
+  const file = new EncodedFileOutput({ fileType: EncodedFileType.MP4, filepath });
+  if (process.env.S3_BUCKET) {
+    file.output = { case: "s3", value: new S3Upload({
+      accessKey: process.env.S3_ACCESS_KEY, secret: process.env.S3_SECRET, bucket: process.env.S3_BUCKET,
+      region: process.env.S3_REGION || "auto", endpoint: process.env.S3_ENDPOINT, forcePathStyle: true,
+    }) };
+  }
+  const info = await egressClient().startRoomCompositeEgress(room, { file }, { layout: "grid" });
+  return { egressId: info.egressId, filepath };
+}
+async function stopEgress(egressId) { const info = await egressClient().stopEgress(egressId); return { egressId, status: info.status }; }
 function broadcastLocal(msg) { const s = JSON.stringify(msg); for (const ws of clients.keys()) if (ws.readyState === 1) ws.send(s); }
 // chat routing (§6.9): channels are org-wide (cross-floor); floor + nearby are local to the sender's floor
 function deliverChat(d) {
