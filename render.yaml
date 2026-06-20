@@ -1,0 +1,21 @@
+# Render Blueprint — deploys the NexSpace realtime server, which ALSO serves the web client
+# and the WebSocket office. One free web service, no database required: the office (multi-floor,
+# portals, interactive widgets, chat, spatial audio) is built into the realtime server.
+#
+# Use: push this file, then on render.com → New → Blueprint → pick the NexSpace repo.
+services:
+  - type: web
+    name: nexspace
+    runtime: node
+    plan: free
+    rootDir: nexspace-scaffold
+    buildCommand: npm install
+    startCommand: node apps/realtime/server.js
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      # Optional — only matters once you also deploy the API for real logins:
+      # - key: JWT_SECRET
+      #   generateValue: true
+      # - key: WORLD_API
+      #   value: https://<your-api-service>.onrender.com
