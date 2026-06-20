@@ -179,6 +179,8 @@
   // LiveKit (optional real media). API runs on :3001 (same host as the page).
   const API_BASE=location.protocol+'//'+location.hostname+':3001';
   let lkRoom=null,lkActive=false,localVideoEl=null,myToken=null,myRole='guest';
+  const speakingIds=new Set();let meTalking=false; // active-speaker detection → "speaking" waves
+  function isSpeaking(id,flag){return speakingIds.has(id)||!!flag;} // LiveKit (instant, nearby) OR the synced talking flag
   let myStatus='available',lastActivity=Date.now(),autoAway=false;
   const reactions=new Map(),adminMuted=new Set();
   const lkAudio=new Map(),lkVideo=new Map(),lkScreens=new Map();let screenFocus=null;
@@ -331,10 +333,17 @@
       const room=new LK.Room({adaptiveStream:true,dynacast:true});
       room.on(LK.RoomEvent.TrackSubscribed,onTrack);
       room.on(LK.RoomEvent.TrackUnsubscribed,offTrack);
+      room.on(LK.RoomEvent.ActiveSpeakersChanged,sp=>{                 // who's actually talking → drive the waves
+        speakingIds.clear();
+        for(const p of sp){speakingIds.add(p.isLocal?myId:p.identity);}
+        const meSpk=speakingIds.has(myId);
+        if(meSpk!==meTalking){meTalking=meSpk;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'state',talking:meTalking}));} // tell peers so far avatars wave too
+      });
       room.on(LK.RoomEvent.LocalTrackPublished,(pub)=>{if(pub.track&&pub.track.kind==='video'&&pub.track.source!==LK.Track.Source.ScreenShare){
         const el=pub.track.attach();el.muted=true;el.playsInline=true;el.style.display='none';document.body.appendChild(el);localVideoEl=el;}});
       await room.connect(url,token);
       lkRoom=room;lkActive=true;
+      if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'state',talking:false})); // clear the default-on flag; ActiveSpeakers drives it from here
       await room.localParticipant.setMicrophoneEnabled(true);
       await room.localParticipant.setCameraEnabled(true);
       const mb=document.getElementById('btnMicPub'),cb=document.getElementById('btnCam');
@@ -418,8 +427,8 @@
     if(showLinks&&!muted){for(const e of peers.values()){const v=e.bcast?1:peerVol(e);
       if(v>0.04){ctx.strokeStyle=(e.bcast?'rgba(255,93,108,':'rgba(57,211,166,')+(0.12+v*0.55)+')';ctx.lineWidth=1+v*2.5;
         ctx.beginPath();ctx.moveTo(me.x,me.y);ctx.lineTo(e.rx,e.ry);ctx.stroke();}}}
-    for(const [id,e] of peers){const lv=lkVideo.get(id);const rc=reactions.get(id);const re=(rc&&performance.now()-rc.t<2200)?rc.emoji:null;avatar(e.rx,e.ry,hueOf(id),e.name||'Guest',e.status,e.talking,e.bcast,false,lv&&lv.el,re);}
-    {const rc=reactions.get(myId);const re=(rc&&performance.now()-rc.t<2200)?rc.emoji:null;avatar(me.x,me.y,212,'You',null,false,myBcast,true,localVideoEl,re);}
+    for(const [id,e] of peers){const lv=lkVideo.get(id);const rc=reactions.get(id);const re=(rc&&performance.now()-rc.t<2200)?rc.emoji:null;avatar(e.rx,e.ry,hueOf(id),e.name||'Guest',e.status,e.talking,e.bcast,false,lv&&lv.el,re,isSpeaking(id,e.talking));}
+    {const rc=reactions.get(myId);const re=(rc&&performance.now()-rc.t<2200)?rc.emoji:null;avatar(me.x,me.y,212,'You',null,false,myBcast,true,localVideoEl,re,isSpeaking(myId,meTalking));}
     ctx.restore();
     drawMinimap();
   }
@@ -438,12 +447,14 @@
     ctx.fillStyle='rgba(8,11,18,.8)';rr(sx,sy-24,sw,22,6);ctx.fill();
     ctx.fillStyle='#e8edf7';ctx.font='600 12px sans-serif';ctx.textAlign='left';ctx.fillText((media.playing?'▶ ':'⏸ ')+m.title,sx+8,sy-9);
     ctx.textAlign='right';ctx.fillStyle='#8a96b3';ctx.fillText(fmt(media.pos)+' / '+fmt(m.dur),sx+sw-8,sy-9);}
-  function avatar(x,y,hue,name,status,talking,bcast,isMe,videoEl,reactEmoji){
+  // expanding concentric "sound waves" around a speaking (or broadcasting) avatar
+  function speakWaves(x,y,r,color){for(let i=0;i<3;i++){const t=((frame*0.035)+i/3)%1;const rad=r+4+t*22;
+    ctx.strokeStyle=hexA(color,(1-t)*0.6);ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(x,y,rad,0,7);ctx.stroke();}}
+  function avatar(x,y,hue,name,status,talking,bcast,isMe,videoEl,reactEmoji,speaking){
     let alpha=1;if(!isMe){const sameRoom=roomAtPt(me.x,me.y)&&roomAtPt(me.x,me.y)===roomAtPt(x,y);const d=Math.hypot(x-me.x,y-me.y);
       alpha=(sameRoom||bcast)?1:Math.max(0.32,1-Math.max(0,d-R().inner)/(R().outer*1.25));}
     ctx.globalAlpha=alpha;const r=16;
-    if(!isMe&&(talking||bcast)){ctx.strokeStyle=bcast?'rgba(255,93,108,.7)':'rgba(57,211,166,.6)';ctx.lineWidth=2;
-      ctx.beginPath();ctx.arc(x,y,r+6+Math.sin(frame*.25)*2,0,7);ctx.stroke();}
+    if(speaking||bcast){speakWaves(x,y,r,bcast?'#ff5d6c':'#39d3a6');}
     if(videoEl&&videoEl.readyState>=2&&videoEl.videoWidth>0&&alpha>0.34){ // live video in the bubble (LiveKit)
       ctx.save();ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.clip();
       const vw=videoEl.videoWidth,vh=videoEl.videoHeight,sc=Math.max(2*r/vw,2*r/vh),sw=2*r/sc,sh=2*r/sc;
@@ -505,8 +516,8 @@
     if(world.mediaWall){const cx=world.mediaWall.x+world.mediaWall.w/2,cy=world.mediaWall.y,cz=_dot(_sub([cx,cy,(world.mediaWall.screenH||150)/2],CAM.camPos),CAM.Fc);items.push({cz,k:'media'});}
     if(world.portals)for(const pt of world.portals){const cx=pt.x+pt.w/2,cy=pt.y+pt.h/2,cz=_dot(_sub([cx,cy,30],CAM.camPos),CAM.Fc);items.push({cz,k:'portal',cx,cy,w:pt.w,color:pt.color,label:pt.label});}
     if(world.widgets)for(const wd of world.widgets){const cx=wd.x+wd.w/2,cy=wd.y+wd.h/2,cz=_dot(_sub([cx,cy,40],CAM.camPos),CAM.Fc);items.push({cz,k:'widget',cx,cy,wd});}
-    for(const [id,e] of peers){const cz=_dot(_sub([e.rx,e.ry,30],CAM.camPos),CAM.Fc),lv=lkVideo.get(id);items.push({cz,k:'av',x:e.rx,y:e.ry,zoff:0,hue:hueOf(id),name:e.name||'Guest',talking:e.talking,bcast:e.bcast,isMe:false,vid:lv&&lv.el});}
-    if(cameraMode!=='firstPerson')items.push({cz:_dot(_sub([me.x,me.y,30],CAM.camPos),CAM.Fc),k:'av',x:me.x,y:me.y,zoff:jumpZ,hue:212,name:'You',talking:false,bcast:myBcast,isMe:true,vid:localVideoEl}); // hide own avatar in first-person
+    for(const [id,e] of peers){const cz=_dot(_sub([e.rx,e.ry,30],CAM.camPos),CAM.Fc),lv=lkVideo.get(id);items.push({cz,k:'av',x:e.rx,y:e.ry,zoff:0,hue:hueOf(id),name:e.name||'Guest',talking:e.talking,bcast:e.bcast,spk:isSpeaking(id,e.talking),isMe:false,vid:lv&&lv.el});}
+    if(cameraMode!=='firstPerson')items.push({cz:_dot(_sub([me.x,me.y,30],CAM.camPos),CAM.Fc),k:'av',x:me.x,y:me.y,zoff:jumpZ,hue:212,name:'You',talking:false,bcast:myBcast,spk:isSpeaking(myId,meTalking),isMe:true,vid:localVideoEl}); // hide own avatar in first-person
     items.sort((p,q)=>q.cz-p.cz);
     for(const it of items){if(it.k==='wall')d3wall(it);else if(it.k==='furn')d3box(it.cx,it.cy,it.w,it.boxH);else if(it.k==='media')d3media();else if(it.k==='portal')d3portal(it);else if(it.k==='widget')d3widget(it);else d3av(it);}
     drawMinimap();
@@ -537,7 +548,7 @@
       alpha=(sameRoom||it.bcast)?1:Math.max(0.34,1-Math.max(0,d-R().inner)/(R().outer*1.25));}
     ctx.globalAlpha=alpha;const br=Math.max(4,16*head.s*1.05);
     if(feet){ctx.strokeStyle=hsl(it.hue);ctx.lineWidth=Math.max(3,br*.9);ctx.lineCap='round';ctx.beginPath();ctx.moveTo(feet.x,feet.y);ctx.lineTo(head.x,head.y);ctx.stroke();ctx.lineCap='butt';}
-    if(!it.isMe&&(it.talking||it.bcast)){ctx.strokeStyle=it.bcast?'rgba(255,93,108,.8)':'rgba(57,211,166,.7)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(head.x,head.y,br+4+Math.sin(frame*.25)*2,0,7);ctx.stroke();}
+    if(it.spk||it.bcast){const col=it.bcast?'#ff5d6c':'#39d3a6';for(let i=0;i<3;i++){const t=((frame*0.035)+i/3)%1;ctx.strokeStyle=hexA(col,(1-t)*0.7*alpha);ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(head.x,head.y,br+2+t*(br*1.6),0,7);ctx.stroke();}}
     const v=it.vid;
     if(v&&v.readyState>=2&&v.videoWidth>0&&alpha>0.34){ctx.save();ctx.beginPath();ctx.arc(head.x,head.y,br,0,7);ctx.clip();
       const vw=v.videoWidth,vh=v.videoHeight,sc=Math.max(2*br/vw,2*br/vh),sw=2*br/sc,shh=2*br/sc;try{ctx.drawImage(v,(vw-sw)/2,(vh-shh)/2,sw,shh,head.x-br,head.y-br,2*br,2*br);}catch(_){}ctx.restore();}
