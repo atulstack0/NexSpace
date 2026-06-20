@@ -11,14 +11,14 @@
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
   #game{position:fixed;inset:0;display:block;background:#0b1019;cursor:crosshair}
   #game3d{position:fixed;top:0;left:0;display:none;background:#0e1320;z-index:0}
-  #bar{position:fixed;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:7px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:96vw;
-    background:rgba(22,29,46,.92);border:1px solid var(--line);border-radius:14px;padding:8px 12px;z-index:20;backdrop-filter:blur(8px)}
+  #bar{position:fixed;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:98vw;
+    background:rgba(20,27,44,.94);border:1px solid var(--line);border-radius:14px;padding:7px 11px;z-index:20;backdrop-filter:blur(10px);box-shadow:0 10px 34px rgba(0,0,0,.38)}
   .brand{font-weight:700;display:flex;align-items:center;gap:8px}
   .dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2))}
   .pill{font-size:12px;color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:5px 10px}
   .pill b{color:var(--accent2)} #conn.bad b{color:var(--danger)}
   .sep{width:1px;height:22px;background:var(--line)}
-  .btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:13px;cursor:pointer;transition:.15s;white-space:nowrap}
+  .btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:6px 9px;font-size:13px;cursor:pointer;transition:.15s;white-space:nowrap}
   .btn:hover{border-color:var(--accent);color:#fff}
   .btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
   .btn.danger.active{background:var(--danger);border-color:var(--danger)}
@@ -31,7 +31,8 @@
     background:rgba(255,93,108,.16);border:1px solid var(--danger);color:#ffd2d7;border-radius:12px;padding:8px 15px;font-size:13px;font-weight:600}
   #banner .l{width:9px;height:9px;border-radius:50%;background:var(--danger);animation:pulse 1.2s infinite}
   #recind{position:fixed;top:72px;left:12px;z-index:19;display:none;background:rgba(255,93,108,.16);border:1px solid var(--danger);color:#ffd2d7;border-radius:20px;padding:6px 12px;font-size:12px;font-weight:700}
-  #statusSel{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:6px 8px;font-size:13px;cursor:pointer}
+  #statusSel,#floorSel{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:6px 9px;font-size:13px;cursor:pointer;max-width:170px}
+  #statusSel:hover,#floorSel:hover{border-color:var(--accent)}
   #chat{position:fixed;bottom:14px;left:14px;z-index:16;width:300px;max-width:46vw;display:none;flex-direction:column;background:rgba(22,29,46,.96);border:1px solid var(--line);border-radius:12px;overflow:hidden;backdrop-filter:blur(8px)}
   #chat .chead{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted);font-weight:600}
   #chat .chead select{margin-left:auto;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:3px 6px;font-size:12px}
@@ -179,8 +180,22 @@
   // LiveKit (optional real media). API runs on :3001 (same host as the page).
   const API_BASE=location.protocol+'//'+location.hostname+':3001';
   let lkRoom=null,lkActive=false,localVideoEl=null,myToken=null,myRole='guest';
-  const speakingIds=new Set();let meTalking=false; // active-speaker detection → "speaking" waves
-  function isSpeaking(id,flag){return speakingIds.has(id)||!!flag;} // LiveKit (instant, nearby) OR the synced talking flag
+  // Real speaking detection: read each participant's live mic level from LiveKit (0..1), smoothed.
+  // Silent ⇒ ~0 ⇒ no wave; louder ⇒ bigger wave. No LiveKit ⇒ 0 ⇒ no waves (no false positives).
+  const lvlSmooth=new Map();
+  // My own mic loudness via a Web Audio analyser (reliable self-meter, independent of LiveKit's level feed).
+  let micAnalyser=null,micBuf=null;
+  function micRms(){if(!micAnalyser)return 0;micAnalyser.getByteTimeDomainData(micBuf);let s=0;for(let i=0;i<micBuf.length;i++){const v=(micBuf[i]-128)/128;s+=v*v;}return Math.sqrt(s/micBuf.length);}
+  async function setupMicMeter(){try{if(micAnalyser||!actx)return;let stream=null;
+    try{const lp=lkRoom&&lkRoom.localParticipant,pub=lp&&lp.getTrackPublication&&lp.getTrackPublication(LK.Track.Source.Microphone),tr=pub&&pub.track&&pub.track.mediaStreamTrack;if(tr)stream=new MediaStream([tr]);}catch(_){}
+    if(!stream&&navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    if(!stream)return;const src=actx.createMediaStreamSource(stream);micAnalyser=actx.createAnalyser();micAnalyser.fftSize=512;micBuf=new Uint8Array(micAnalyser.fftSize);src.connect(micAnalyser);}catch(e){}}
+  function rawLevel(id){
+    if(id===myId){const lp=lkActive&&lkRoom&&lkRoom.localParticipant;if(lp&&lp.isMicrophoneEnabled===false)return 0;return Math.max(micRms(),(lp&&lp.audioLevel)||0);}
+    if(!lkActive||!lkRoom)return 0;
+    if(lkRoom.remoteParticipants){for(const p of lkRoom.remoteParticipants.values())if(p.identity===id)return p.audioLevel||0;}
+    return 0;}
+  function speakLevel(id){const s=(lvlSmooth.get(id)||0)*0.6+rawLevel(id)*0.4;lvlSmooth.set(id,s<0.003?0:s);return s;}
   let myStatus='available',lastActivity=Date.now(),autoAway=false;
   const reactions=new Map(),adminMuted=new Set();
   const lkAudio=new Map(),lkVideo=new Map(),lkScreens=new Map();let screenFocus=null;
@@ -333,18 +348,12 @@
       const room=new LK.Room({adaptiveStream:true,dynacast:true});
       room.on(LK.RoomEvent.TrackSubscribed,onTrack);
       room.on(LK.RoomEvent.TrackUnsubscribed,offTrack);
-      room.on(LK.RoomEvent.ActiveSpeakersChanged,sp=>{                 // who's actually talking → drive the waves
-        speakingIds.clear();
-        for(const p of sp){speakingIds.add(p.isLocal?myId:p.identity);}
-        const meSpk=speakingIds.has(myId);
-        if(meSpk!==meTalking){meTalking=meSpk;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'state',talking:meTalking}));} // tell peers so far avatars wave too
-      });
       room.on(LK.RoomEvent.LocalTrackPublished,(pub)=>{if(pub.track&&pub.track.kind==='video'&&pub.track.source!==LK.Track.Source.ScreenShare){
         const el=pub.track.attach();el.muted=true;el.playsInline=true;el.style.display='none';document.body.appendChild(el);localVideoEl=el;}});
       await room.connect(url,token);
       lkRoom=room;lkActive=true;
-      if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'state',talking:false})); // clear the default-on flag; ActiveSpeakers drives it from here
       await room.localParticipant.setMicrophoneEnabled(true);
+      setupMicMeter();                                          // measure my own mic loudness for accurate self-waves
       await room.localParticipant.setCameraEnabled(true);
       const mb=document.getElementById('btnMicPub'),cb=document.getElementById('btnCam');
       mb.style.display='';cb.style.display='';document.getElementById('btnScreen').style.display='';mb.classList.add('active');cb.classList.add('active');
@@ -427,8 +436,8 @@
     if(showLinks&&!muted){for(const e of peers.values()){const v=e.bcast?1:peerVol(e);
       if(v>0.04){ctx.strokeStyle=(e.bcast?'rgba(255,93,108,':'rgba(57,211,166,')+(0.12+v*0.55)+')';ctx.lineWidth=1+v*2.5;
         ctx.beginPath();ctx.moveTo(me.x,me.y);ctx.lineTo(e.rx,e.ry);ctx.stroke();}}}
-    for(const [id,e] of peers){const lv=lkVideo.get(id);const rc=reactions.get(id);const re=(rc&&performance.now()-rc.t<2200)?rc.emoji:null;avatar(e.rx,e.ry,hueOf(id),e.name||'Guest',e.status,e.talking,e.bcast,false,lv&&lv.el,re,isSpeaking(id,e.talking));}
-    {const rc=reactions.get(myId);const re=(rc&&performance.now()-rc.t<2200)?rc.emoji:null;avatar(me.x,me.y,212,'You',null,false,myBcast,true,localVideoEl,re,isSpeaking(myId,meTalking));}
+    for(const [id,e] of peers){const lv=lkVideo.get(id);const rc=reactions.get(id);const re=(rc&&performance.now()-rc.t<2200)?rc.emoji:null;avatar(e.rx,e.ry,hueOf(id),e.name||'Guest',e.status,e.talking,e.bcast,false,lv&&lv.el,re,speakLevel(id));}
+    {const rc=reactions.get(myId);const re=(rc&&performance.now()-rc.t<2200)?rc.emoji:null;avatar(me.x,me.y,212,'You',null,false,myBcast,true,localVideoEl,re,speakLevel(myId));}
     ctx.restore();
     drawMinimap();
   }
@@ -447,14 +456,16 @@
     ctx.fillStyle='rgba(8,11,18,.8)';rr(sx,sy-24,sw,22,6);ctx.fill();
     ctx.fillStyle='#e8edf7';ctx.font='600 12px sans-serif';ctx.textAlign='left';ctx.fillText((media.playing?'▶ ':'⏸ ')+m.title,sx+8,sy-9);
     ctx.textAlign='right';ctx.fillStyle='#8a96b3';ctx.fillText(fmt(media.pos)+' / '+fmt(m.dur),sx+sw-8,sy-9);}
-  // expanding concentric "sound waves" around a speaking (or broadcasting) avatar
-  function speakWaves(x,y,r,color){for(let i=0;i<3;i++){const t=((frame*0.035)+i/3)%1;const rad=r+4+t*22;
-    ctx.strokeStyle=hexA(color,(1-t)*0.6);ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(x,y,rad,0,7);ctx.stroke();}}
-  function avatar(x,y,hue,name,status,talking,bcast,isMe,videoEl,reactEmoji,speaking){
+  // expanding concentric "sound waves"; amp (0..1) scales reach, ring count, width and opacity with volume
+  function speakWaves(x,y,r,color,amp){const reach=8+amp*40,rings=amp>0.55?3:2;
+    for(let i=0;i<rings;i++){const t=((frame*0.045)+i/rings)%1;const rad=r+3+t*reach;
+      ctx.strokeStyle=hexA(color,(1-t)*(0.3+amp*0.5));ctx.lineWidth=2+amp*2.5;ctx.beginPath();ctx.arc(x,y,rad,0,7);ctx.stroke();}}
+  function avatar(x,y,hue,name,status,talking,bcast,isMe,videoEl,reactEmoji,level){
     let alpha=1;if(!isMe){const sameRoom=roomAtPt(me.x,me.y)&&roomAtPt(me.x,me.y)===roomAtPt(x,y);const d=Math.hypot(x-me.x,y-me.y);
       alpha=(sameRoom||bcast)?1:Math.max(0.32,1-Math.max(0,d-R().inner)/(R().outer*1.25));}
     ctx.globalAlpha=alpha;const r=16;
-    if(speaking||bcast){speakWaves(x,y,r,bcast?'#ff5d6c':'#39d3a6');}
+    let amp=Math.min(1,(level||0)*3.4);if(bcast)amp=Math.max(amp,0.6);
+    if(amp>0.14){speakWaves(x,y,r,bcast?'#ff5d6c':'#39d3a6',amp);}
     if(videoEl&&videoEl.readyState>=2&&videoEl.videoWidth>0&&alpha>0.34){ // live video in the bubble (LiveKit)
       ctx.save();ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.clip();
       const vw=videoEl.videoWidth,vh=videoEl.videoHeight,sc=Math.max(2*r/vw,2*r/vh),sw=2*r/sc,sh=2*r/sc;
@@ -516,8 +527,8 @@
     if(world.mediaWall){const cx=world.mediaWall.x+world.mediaWall.w/2,cy=world.mediaWall.y,cz=_dot(_sub([cx,cy,(world.mediaWall.screenH||150)/2],CAM.camPos),CAM.Fc);items.push({cz,k:'media'});}
     if(world.portals)for(const pt of world.portals){const cx=pt.x+pt.w/2,cy=pt.y+pt.h/2,cz=_dot(_sub([cx,cy,30],CAM.camPos),CAM.Fc);items.push({cz,k:'portal',cx,cy,w:pt.w,color:pt.color,label:pt.label});}
     if(world.widgets)for(const wd of world.widgets){const cx=wd.x+wd.w/2,cy=wd.y+wd.h/2,cz=_dot(_sub([cx,cy,40],CAM.camPos),CAM.Fc);items.push({cz,k:'widget',cx,cy,wd});}
-    for(const [id,e] of peers){const cz=_dot(_sub([e.rx,e.ry,30],CAM.camPos),CAM.Fc),lv=lkVideo.get(id);items.push({cz,k:'av',x:e.rx,y:e.ry,zoff:0,hue:hueOf(id),name:e.name||'Guest',talking:e.talking,bcast:e.bcast,spk:isSpeaking(id,e.talking),isMe:false,vid:lv&&lv.el});}
-    if(cameraMode!=='firstPerson')items.push({cz:_dot(_sub([me.x,me.y,30],CAM.camPos),CAM.Fc),k:'av',x:me.x,y:me.y,zoff:jumpZ,hue:212,name:'You',talking:false,bcast:myBcast,spk:isSpeaking(myId,meTalking),isMe:true,vid:localVideoEl}); // hide own avatar in first-person
+    for(const [id,e] of peers){const cz=_dot(_sub([e.rx,e.ry,30],CAM.camPos),CAM.Fc),lv=lkVideo.get(id);items.push({cz,k:'av',x:e.rx,y:e.ry,zoff:0,hue:hueOf(id),name:e.name||'Guest',talking:e.talking,bcast:e.bcast,spk:speakLevel(id),isMe:false,vid:lv&&lv.el});}
+    if(cameraMode!=='firstPerson')items.push({cz:_dot(_sub([me.x,me.y,30],CAM.camPos),CAM.Fc),k:'av',x:me.x,y:me.y,zoff:jumpZ,hue:212,name:'You',talking:false,bcast:myBcast,spk:speakLevel(myId),isMe:true,vid:localVideoEl}); // hide own avatar in first-person
     items.sort((p,q)=>q.cz-p.cz);
     for(const it of items){if(it.k==='wall')d3wall(it);else if(it.k==='furn')d3box(it.cx,it.cy,it.w,it.boxH);else if(it.k==='media')d3media();else if(it.k==='portal')d3portal(it);else if(it.k==='widget')d3widget(it);else d3av(it);}
     drawMinimap();
@@ -548,7 +559,8 @@
       alpha=(sameRoom||it.bcast)?1:Math.max(0.34,1-Math.max(0,d-R().inner)/(R().outer*1.25));}
     ctx.globalAlpha=alpha;const br=Math.max(4,16*head.s*1.05);
     if(feet){ctx.strokeStyle=hsl(it.hue);ctx.lineWidth=Math.max(3,br*.9);ctx.lineCap='round';ctx.beginPath();ctx.moveTo(feet.x,feet.y);ctx.lineTo(head.x,head.y);ctx.stroke();ctx.lineCap='butt';}
-    if(it.spk||it.bcast){const col=it.bcast?'#ff5d6c':'#39d3a6';for(let i=0;i<3;i++){const t=((frame*0.035)+i/3)%1;ctx.strokeStyle=hexA(col,(1-t)*0.7*alpha);ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(head.x,head.y,br+2+t*(br*1.6),0,7);ctx.stroke();}}
+    {let amp=Math.min(1,(it.spk||0)*3.4);if(it.bcast)amp=Math.max(amp,0.6);
+      if(amp>0.14){const col=it.bcast?'#ff5d6c':'#39d3a6',rings=amp>0.55?3:2;for(let i=0;i<rings;i++){const t=((frame*0.045)+i/rings)%1;ctx.strokeStyle=hexA(col,(1-t)*(0.3+amp*0.5)*alpha);ctx.lineWidth=2+amp*2.5;ctx.beginPath();ctx.arc(head.x,head.y,br+2+t*(br*0.4+amp*br*1.4),0,7);ctx.stroke();}}}
     const v=it.vid;
     if(v&&v.readyState>=2&&v.videoWidth>0&&alpha>0.34){ctx.save();ctx.beginPath();ctx.arc(head.x,head.y,br,0,7);ctx.clip();
       const vw=v.videoWidth,vh=v.videoHeight,sc=Math.max(2*br/vw,2*br/vh),sw=2*br/sc,shh=2*br/sc;try{ctx.drawImage(v,(vw-sw)/2,(vh-shh)/2,sw,shh,head.x-br,head.y-br,2*br,2*br);}catch(_){}ctx.restore();}
