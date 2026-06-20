@@ -16,12 +16,21 @@ const b64u = (s: string | Buffer) => Buffer.from(s).toString("base64url");
 
 @Injectable()
 export class AuthService {
-  sign(payload: object) {
+  sign(payload: object, ttlSec = 7200) {
     const h = b64u(JSON.stringify({ alg: "HS256", typ: "JWT" }));
     const now = Math.floor(Date.now() / 1000);
-    const p = b64u(JSON.stringify({ ...payload, iat: now, exp: now + 7200 }));
+    const p = b64u(JSON.stringify({ ...payload, iat: now, exp: now + ttlSec }));
     const data = `${h}.${p}`;
     return `${data}.${crypto.createHmac("sha256", SECRET).update(data).digest("base64url")}`;
+  }
+
+  // ---- Invites & guest links (spec §6.15) ----
+  makeInvite(name: string, ttlHours = 4) {
+    const sub = "guest-" + crypto.randomBytes(4).toString("hex");
+    return this.sign({ sub, name: name || "Guest", role: "guest" }, Math.max(1, Math.min(168, ttlHours)) * 3600);
+  }
+  parseEmails(csv: string) {
+    return [...new Set(String(csv || "").split(/[\n,;]+/).map((s) => s.trim()).filter((s) => /.+@.+\..+/.test(s)))].slice(0, 1000);
   }
 
   verify(token?: string): { sub: string; name: string; role: string } | null {

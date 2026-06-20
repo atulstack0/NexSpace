@@ -18,6 +18,12 @@ function verifyJWT(token) {
   if (p[2] !== exp) return null;
   try { return JSON.parse(Buffer.from(p[1], "base64url").toString()); } catch { return null; }
 }
+function sign(payload) {
+  const b = (s) => Buffer.from(s).toString("base64url");
+  const now = Math.floor(Date.now() / 1000);
+  const d = b(JSON.stringify({ alg: "HS256", typ: "JWT" })) + "." + b(JSON.stringify({ ...payload, iat: now, exp: now + 7200 }));
+  return d + "." + crypto.createHmac("sha256", SECRET).update(d).digest("base64url");
+}
 
 const api = spawn("npm", ["start"], {
   cwd: "apps/api", shell: true,
@@ -47,6 +53,16 @@ try {
   (loc3.startsWith("http://localhost:8787/") && claims && claims.role === "member")
     ? ok("callback issues a valid app JWT (role=member) and redirects to the office")
     : bad("callback wrong: " + loc3 + " token=" + (claims ? JSON.stringify(claims) : "invalid"));
+
+  // invites + CSV (6.15) — admin-gated
+  const adminToken = sign({ sub: "u-admin", name: "Admin Ada", role: "admin" });
+  const inv = await (await fetch(`${BASE}/auth/invite`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + adminToken }, body: JSON.stringify({ name: "Guest1" }) })).json();
+  const ic = verifyJWT(inv.token);
+  (ic && ic.role === "guest" && inv.url && inv.url.includes("invite=")) ? ok("admin mints a guest invite token + link") : bad("invite mint failed");
+  const noAuth = await fetch(`${BASE}/auth/invite`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+  (noAuth.status === 403) ? ok("invite requires admin (403 without token)") : bad("invite not admin-gated: " + noAuth.status);
+  const csv = await (await fetch(`${BASE}/auth/invite/csv`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + adminToken }, body: JSON.stringify({ csv: "a@x.com\nb@x.com, c@x.com" }) })).json();
+  (csv.count === 3 && csv.invites.length === 3) ? ok("CSV import mints an invite per email") : bad("CSV import wrong count: " + csv.count);
 } catch (e) {
   bad("exception: " + e.message);
 } finally {

@@ -763,7 +763,7 @@
     document.getElementById('overlay').style.display='none';startAudio();if(actx&&actx.state==='suspended')actx.resume();connect(myName);requestAnimationFrame(loop);});
   document.getElementById('name').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('go').click();});
   // SSO (§6.16): if we came back from the IdP with ?sso=<token>, use it; else offer the button
-  (function(){const tok=new URLSearchParams(location.search).get('sso');if(tok){myToken=tok;const tip=document.querySelector('#card .tip');if(tip)tip.textContent='✅ Signed in via SSO — click Enter to join.';try{history.replaceState({},'',location.pathname);}catch(_){}}})();
+  (function(){const p=new URLSearchParams(location.search);const tok=p.get('sso')||p.get('invite');if(tok){myToken=tok;const tip=document.querySelector('#card .tip');if(tip)tip.textContent=p.get('invite')?'🎟️ You were invited — click Enter to join as a guest.':'✅ Signed in via SSO — click Enter to join.';try{history.replaceState({},'',location.pathname);}catch(_){}}})();
   document.getElementById('sso').addEventListener('click',()=>{location.href=API_BASE+'/auth/sso/login?redirect='+encodeURIComponent(location.origin+location.pathname);});
 })();
 </script>
