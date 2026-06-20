@@ -9,8 +9,10 @@ import * as crypto from "node:crypto";
 const SECRET = process.env.JWT_SECRET || "nexspace-dev-secret-change-me";
 const RANK: Record<string, number> = { guest: 0, member: 1, admin: 2, owner: 3 };
 const DEMO: Record<string, { id: string; name: string; role: string; password: string }> = {
+  "owner@nexspace.dev": { id: "u-owner", name: "Owner Olla", role: "owner", password: "owner1234" },
   "admin@nexspace.dev": { id: "u-admin", name: "Admin Ada", role: "admin", password: "admin1234" },
   "member@nexspace.dev": { id: "u-member", name: "Member Mo", role: "member", password: "member1234" },
+  // (guest = no credentials: just enter a name and join, or use an invite link)
 };
 const b64u = (s: string | Buffer) => Buffer.from(s).toString("base64url");
 

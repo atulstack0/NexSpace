@@ -806,7 +806,7 @@
     step(dt);checkPortals();sendMove(now);updateAudio();
     if(viewMode==='3d'){ if(threeMode){Three3D.frame();drawMinimap();} else render3D(); } else draw();
     acc+=dt;if(acc>0.1){updateUI();acc=0;}requestAnimationFrame(loop);}
-  document.getElementById('floorSel').addEventListener('change',function(){travelTo(this.value);});
+  document.getElementById('floorSel').addEventListener('change',function(){travelTo(this.value);this.blur();}); // blur so WASD return to the game, not the dropdown
   document.getElementById('go').addEventListener('click',async function(){
     const name=(document.getElementById('name').value||'Guest').slice(0,16);
     const email=document.getElementById('email').value.trim(),password=document.getElementById('password').value;
