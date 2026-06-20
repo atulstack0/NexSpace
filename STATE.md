@@ -59,14 +59,15 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Persistence — NestJS API + Prisma (SQLite default, Postgres-ready) | ✅ | `apps/api` |
 | Hardening — anti-teleport, rate limit, connection cap, heartbeat, graceful shutdown | ✅ | realtime |
 | Multi-node fan-out (Redis pub/sub) | ✅ opt-in | realtime; `docs/SCALING.md` |
-| CI — GitHub Actions (`check` + `redis-multinode`) | ✅ | `.github/workflows/ci.yml` |
+| Branding / white-label — per-space name, accent color, logo; served in world + applied live | ✅ | `apps/api` (Floor.branding), realtime, web |
+| CI — GitHub Actions (`check` + `redis-multinode` + `api-smoke`) | ✅ | `.github/workflows/ci.yml` |
 
 ## What's not built yet (the honest list)
 
 - **Remote screen control** — not in the build. (Chat covers nearby / floor / #channels / DMs; whiteboard is collaborative.)
 - **glTF art** — 3D uses primitives (boxes/cylinders/billboards), not modeled assets.
 - **Multi-floor / portals / outdoor "chai stall"**, extra interactive objects (games, Spotify, YouTube TV beyond the media wall).
-- **Calendar / Teams** (need OAuth + accounts) and **SCIM** auto-provisioning; **branding / white-label**.
+- **Calendar / Teams** (need OAuth + accounts) and **SCIM** auto-provisioning.
 - **AI layer** (note-taker/assistant), **mobile/desktop apps**, **SOC2/GDPR/HIPAA** compliance.
 - **Scale follow-ups**: spatial-hash interest management, Redis-persisted boot state.
 

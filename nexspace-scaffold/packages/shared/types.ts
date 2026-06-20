@@ -86,6 +86,7 @@ export interface WorldBlob {
     bounds: { x: number; y: number; w: number; h: number };
     door: { x: number; y: number; w: number; h: number; state?: DoorState } }>;
   mediaWall: { x: number; y: number; w: number; base: number; screenH: number; title: string; dur: number };
+  branding?: { name: string; color: string; logo: string; whiteLabel: boolean }; // per-space white-label (6.12)
 }
 
 // ---- Client → Server ----

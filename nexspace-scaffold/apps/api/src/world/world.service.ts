@@ -40,7 +40,8 @@ export class WorldService {
       door: { x: r.doorX, y: r.doorY, w: r.doorW, h: r.doorH, state: r.doorState },
     }));
 
-    return { w: floor.width, h: floor.height, environment: floor.environment, supports3d: floor.supports3d, obstacles, rooms, mediaWall };
+    const branding = { name: "NexSpace", color: "#5b8cff", logo: "", whiteLabel: false, ...(floor.branding ? this.parse(floor.branding) : {}) };
+    return { w: floor.width, h: floor.height, environment: floor.environment, supports3d: floor.supports3d, obstacles, rooms, mediaWall, branding };
   }
 
   /** Raw floor (rooms + typed objects) for the editor to load and round-trip. */
@@ -56,9 +57,10 @@ export class WorldService {
    * Persist an edited layout (spec §6.10). Transactional: replace this floor's
    * placed objects, and update existing rooms in place (by stable key).
    */
-  async saveLayout(slug: string, body: { objects?: any[]; rooms?: any[] }) {
+  async saveLayout(slug: string, body: { objects?: any[]; rooms?: any[]; branding?: any }) {
     const floor = await this.prisma.floor.findUnique({ where: { slug } });
     if (!floor) throw new NotFoundException(`Floor '${slug}' not found`);
+    if (body.branding) await this.prisma.floor.update({ where: { id: floor.id }, data: { branding: JSON.stringify(body.branding) } });
 
     await this.prisma.$transaction(async (tx) => {
       await tx.placedObject.deleteMany({ where: { floorId: floor.id } });

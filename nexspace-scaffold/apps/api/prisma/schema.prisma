@@ -21,6 +21,7 @@ model Floor {
   height      Int
   environment String          @default("indoor") // 'indoor' | 'outdoor'
   supports3d  Boolean         @default(false)
+  branding    String?                            // JSON: { name, color, logo, whiteLabel } (spec 6.12)
   rooms       Room[]
   objects     PlacedObject[]
   createdAt   DateTime        @default(now())

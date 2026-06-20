@@ -78,6 +78,7 @@ let rooms = [
 ];
 let mediaWall = { x: 1180, y: 980, w: 300, base: 16, screenH: 150,
   title: "Lo-fi Beats — Focus Radio", playing: true, pos: 74, dur: 213 };
+let branding = { name: "NexSpace", color: "#5b8cff", logo: "", whiteLabel: false }; // per-space branding (spec 6.12)
 obstacles.push({ x: mediaWall.x, y: mediaWall.y, w: mediaWall.w, h: mediaWall.base });
 
 function inRoom(p, room) {
@@ -89,6 +90,7 @@ function worldForClient() {
     w: WORLD.w, h: WORLD.h, obstacles,
     rooms: rooms.map(r => ({ id: r.id, name: r.name, color: r.color, bounds: r.bounds, door: { x: r.door.x, y: r.door.y, w: r.door.w, h: r.door.h, state: r.door.state } })),
     mediaWall: { x: mediaWall.x, y: mediaWall.y, w: mediaWall.w, base: mediaWall.base, screenH: mediaWall.screenH, title: mediaWall.title, dur: mediaWall.dur },
+    branding,
   };
 }
 
@@ -363,6 +365,7 @@ function applyWorld(w) {
     door: { x: r.door.x, y: r.door.y, w: r.door.w, h: r.door.h, state: r.door.state || "closed", knocking: false } }));
   mediaWall = { x: w.mediaWall.x, y: w.mediaWall.y, w: w.mediaWall.w, base: w.mediaWall.base,
     screenH: w.mediaWall.screenH, title: w.mediaWall.title, playing: true, pos: 0, dur: w.mediaWall.dur };
+  if (w.branding) branding = w.branding;
 }
 async function reloadAndBroadcast() {
   await loadWorld();                               // re-fetch from WORLD_API if configured

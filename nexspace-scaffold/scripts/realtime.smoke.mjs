@@ -49,11 +49,11 @@ await new Promise((res, rej) => {
 function join(name, token) {
   return new Promise((resolve) => {
     const ws = new WebSocket(`ws://localhost:${PORT}`);
-    const st = { ws, name, id: null, role: null, last: null, denied: [], rateLimited: false, chats: [], draws: [], cleared: false, reacts: [], nudged: false, kicked: false };
+    const st = { ws, name, id: null, role: null, world: null, last: null, denied: [], rateLimited: false, chats: [], draws: [], cleared: false, reacts: [], nudged: false, kicked: false };
     ws.on("open", () => ws.send(JSON.stringify({ t: "join", name, token })));
     ws.on("message", (d) => {
       const m = JSON.parse(d.toString());
-      if (m.t === "welcome") { st.id = m.id; st.role = m.you.role; resolve(st); }
+      if (m.t === "welcome") { st.id = m.id; st.role = m.you.role; st.world = m.world; resolve(st); }
       if (m.t === "snapshot") st.last = m;
       if (m.t === "denied") st.denied.push(m.action);
       if (m.t === "rateLimited") st.rateLimited = true;
@@ -74,6 +74,7 @@ try {
   (admin.id && guest.id) ? ok("two clients joined (welcome+id)") : bad("welcome/id missing");
   (admin.role === "admin") ? ok("admin token → admin role") : bad("admin role not applied (got " + admin.role + ")");
   (guest.role === "guest") ? ok("no token → guest role") : bad("guest role not applied");
+  (admin.world?.branding && typeof admin.world.branding.name === "string" && typeof admin.world.branding.color === "string") ? ok("welcome carries branding (name+color)") : bad("welcome world.branding missing/malformed");
 
   // move in two steps — the server-authoritative speed cap only allows so much travel per
   // update since the last one, so a single 380px jump from spawn would (correctly) be clamped.

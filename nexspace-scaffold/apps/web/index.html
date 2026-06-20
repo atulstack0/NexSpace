@@ -206,6 +206,7 @@
         world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});
         if(m.you&&m.you.role){myRole=m.you.role;const rp=document.getElementById('rolePill');if(rp)rp.textContent='you: '+myRole;}
         if(m.whiteboard)wbStrokes=m.whiteboard.slice();
+        applyBranding(world.branding);
         initLiveKit();}
       else if(m.t==='snapshot'){
         doors=m.doors||doors; if(m.media)media=m.media; if(m.recording)recording=m.recording;
@@ -216,7 +217,7 @@
         for(const id of [...peers.keys()])if(!seen.has(id)){removeVoice(id);peers.delete(id);}
         document.getElementById('count').textContent=m.players.length;
       }
-      else if(m.t==='world'){world=m.world;WORLD={w:world.w,h:world.h};world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});if(threeMode)Three3D.rebuild();toast('🛠️ Office layout updated');}
+      else if(m.t==='world'){world=m.world;WORLD={w:world.w,h:world.h};world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});applyBranding(world.branding);if(threeMode)Three3D.rebuild();toast('🛠️ Office layout updated');}
       else if(m.t==='denied')toast('🔒 You need '+m.need+' role to '+m.action+'.');
       else if(m.t==='chat')addChat(m);
       else if(m.t==='draw'){wbStrokes.push(m.stroke);if(document.getElementById('wb').style.display==='flex')wbDrawStroke(m.stroke);}
@@ -632,6 +633,13 @@
     else{ws.send(JSON.stringify({t:'knock',roomId:r.id}));toast('🔔 You knocked on '+r.name);}});
   function toast(msg){const t=document.getElementById('toasts'),d=document.createElement('div');d.className='toast';d.textContent=msg;
     t.appendChild(d);setTimeout(()=>d.style.opacity='0',2400);setTimeout(()=>d.remove(),3000);}
+  // Per-space branding / white-label (spec §6.12): accent color, name, optional logo.
+  function applyBranding(b){if(!b)return;
+    if(b.color)document.documentElement.style.setProperty('--accent',b.color);
+    const brand=document.querySelector('#bar .brand');
+    if(brand&&brand.lastChild&&brand.lastChild.nodeType===3)brand.lastChild.textContent=b.name||'NexSpace';
+    if(b.name)document.title=(b.whiteLabel?b.name:b.name+' · NexSpace');
+    if(b.logo){const dot=document.querySelector('#bar .brand .dot');if(dot){dot.style.background='center/cover no-repeat url("'+b.logo+'")';}}}
   function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function addChat(m){const box=document.getElementById('chatMsgs');const d=document.createElement('div');d.className='cm';const mine=(m.from===myId);
     const tag=m.scope==='channel'?('#'+(m.channel||'')):m.scope==='dm'?'DM':m.scope;

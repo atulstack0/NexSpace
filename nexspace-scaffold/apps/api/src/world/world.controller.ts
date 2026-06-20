@@ -20,7 +20,7 @@ export class WorldController {
 
   // PUT /floors/default/layout  -> persist an edited layout (spec §6.10). Admin+ only (§6.14).
   @Put(":slug/layout")
-  saveLayout(@Param("slug") slug: string, @Body() body: { objects?: any[]; rooms?: any[] }, @Headers("authorization") authz?: string) {
+  saveLayout(@Param("slug") slug: string, @Body() body: { objects?: any[]; rooms?: any[]; branding?: any }, @Headers("authorization") authz?: string) {
     const u = this.auth.verify(authz);
     if (!u || this.auth.rank(u.role) < this.auth.rank("admin")) {
       throw new ForbiddenException("Admin role required to save layouts");

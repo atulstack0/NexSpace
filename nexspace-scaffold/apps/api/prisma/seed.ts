@@ -28,7 +28,8 @@ const MEDIA_WALL = { x: 1180, y: 980, w: 300, base: 16, screenH: 150, title: "Lo
 async function main() {
   await prisma.floor.deleteMany({ where: { slug: "default" } }); // idempotent reseed (cascades)
   const floor = await prisma.floor.create({
-    data: { slug: "default", name: "HQ — Ground Floor", width: 2200, height: 1500, environment: "indoor", supports3d: true },
+    data: { slug: "default", name: "HQ — Ground Floor", width: 2200, height: 1500, environment: "indoor", supports3d: true,
+      branding: JSON.stringify({ name: "NexSpace", color: "#5b8cff", logo: "", whiteLabel: false }) },
   });
 
   for (const r of ROOMS) await prisma.room.create({ data: { floorId: floor.id, ...r, audioMode: "room" } });
