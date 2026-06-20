@@ -352,12 +352,13 @@ wss.on("connection", (ws) => {
       // teleport to another floor (physical portal step-through or floor-switcher); any joined client may travel
       const dest = floors.get(String(m.to || ""));
       if (!dest || dest.slug === p.floor) return;
-      const prev = p.floor;
       p.floor = dest.slug;
-      // arrive beside the portal that leads back where we came from, else the floor's default spawn
-      const back = dest.portals.find((pt) => pt.to === prev);
-      const sx = back ? back.x + back.w / 2 : dest.spawn.x, sy = back ? back.y + back.h + 40 : dest.spawn.y;
-      p.x = clamp(sx, 24, dest.w - 24); p.y = clamp(sy, 24, dest.h - 24); p.lastMoveAt = Date.now();
+      // arrive at the floor's known-safe interior spawn (NOT beside the return portal — small floors clamp
+      // that into a wall, leaving the player stuck inside the collision radius). Small jitter avoids stacking.
+      const sp = dest.spawn || { x: dest.w / 2, y: dest.h / 2 };
+      p.x = clamp(sp.x + (Math.random() - 0.5) * 80, 60, dest.w - 60);
+      p.y = clamp(sp.y + (Math.random() - 0.5) * 80, 60, dest.h - 60);
+      p.lastMoveAt = Date.now();
       send(ws, { t: "floor", world: worldForClient(dest.slug), you: { id: p.id, x: Math.round(p.x), y: Math.round(p.y), floor: p.floor } });
       console.log(`~ ${p.name} (${p.id}) → floor '${dest.slug}'`);
     }
