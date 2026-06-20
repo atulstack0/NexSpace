@@ -817,7 +817,7 @@
   document.getElementById('chatKick').addEventListener('click',()=>{const id=dmTarget();if(!id){toast('Pick a DM target');return;}if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'moderate',action:'kick',target:id}));toast('⛔ Kicked');});
   function setStatus(s){myStatus=s;const sel=document.getElementById('statusSel');if(sel)sel.value=s;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'state',status:s}));}
   document.getElementById('statusSel').addEventListener('change',function(){autoAway=false;setStatus(this.value);});
-  ['mousemove','keydown','mousedown','wheel'].forEach(ev=>addEventListener(ev,()=>{lastActivity=Date.now();if(autoAway){autoAway=false;setStatus('available');}}));
+  ['mousemove','keydown','mousedown','wheel','touchstart'].forEach(ev=>addEventListener(ev,()=>{lastActivity=Date.now();if(actx&&actx.state==='suspended')actx.resume();if(autoAway){autoAway=false;setStatus('available');}})); // also resume audio on first interaction (needed after an auto-join)
   document.querySelectorAll('#rangeSeg button').forEach(b=>b.addEventListener('click',function(){
     document.querySelectorAll('#rangeSeg button').forEach(x=>x.classList.remove('active'));this.classList.add('active');mode=this.dataset.m;applyRange();}));
   const cv2d=document.getElementById('game'), cv3d=document.getElementById('game3d');
@@ -908,8 +908,13 @@
     if(claims&&claims.exp&&claims.exp*1000<Date.now()){try{localStorage.removeItem('nexspace_token');}catch(_){}if(fromUrl)try{history.replaceState({},'',location.pathname);}catch(_){}return;} // expired → ignore
     myToken=tok;try{localStorage.setItem('nexspace_token',tok);}catch(_){}
     if(claims){if(claims.name){const n=document.getElementById('name');if(n)n.value=String(claims.name).slice(0,16);myName=claims.name;}if(claims.role)myRole=claims.role;}
-    const tip=document.querySelector('#card .tip');if(tip)tip.innerHTML=p.get('invite')?'🎟️ You were invited — click <b>Enter</b> to join.':'✅ Signed in'+(claims&&claims.name?' as <b>'+escapeHtml(claims.name)+'</b>':'')+' — click <b>Enter</b> to join.';
-    if(fromUrl)try{history.replaceState({},'',location.pathname);}catch(_){}})();
+    const tip=document.querySelector('#card .tip'),who=(claims&&claims.name?' as <b>'+escapeHtml(claims.name)+'</b>':'');
+    if(fromUrl){ // just signed in → join automatically (no extra Enter click)
+      if(tip)tip.innerHTML='✅ Signed in'+who+' — joining…';
+      try{history.replaceState({},'',location.pathname);}catch(_){}
+      setTimeout(()=>{const g=document.getElementById('go');if(g)g.click();},200);
+    } else if(tip){tip.innerHTML='✅ Signed in'+who+' — click <b>Enter</b> to join.';}
+  })();
   document.getElementById('google').addEventListener('click',()=>{location.href='/auth/google/login';}); // same-origin: realtime server runs the OAuth flow
   document.getElementById('btnSignout').addEventListener('click',()=>{try{localStorage.removeItem('nexspace_token');}catch(_){}myToken=null;location.href=location.pathname;});
 })();
