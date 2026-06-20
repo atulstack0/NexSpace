@@ -182,7 +182,9 @@
   const R=()=>RANGES[mode];
   // LiveKit (optional real media). API runs on :3001 (same host as the page).
   const API_BASE=location.protocol+'//'+location.hostname+':3001';
-  let lkRoom=null,lkActive=false,localVideoEl=null,myToken=null,myRole='guest';
+  let lkRoom=null,lkActive=false,localVideoEl=null,myToken=null,myRole='guest',myAvatar='';
+  const avatarImgs=new Map(); // url -> HTMLImageElement (Google profile pics, cached)
+  function getAvatarImg(url){if(!url)return null;let im=avatarImgs.get(url);if(im!==undefined)return im;im=new Image();im.referrerPolicy='no-referrer';im.src=url;avatarImgs.set(url,im);return im;}
   // Real speaking detection: read each participant's live mic level from LiveKit (0..1), smoothed.
   // Silent ⇒ ~0 ⇒ no wave; louder ⇒ bigger wave. No LiveKit ⇒ 0 ⇒ no waves (no false positives).
   const lvlSmooth=new Map();
@@ -234,7 +236,7 @@
       if(m.t==='welcome'){myId=m.id;world=m.world;WORLD={w:world.w,h:world.h};me.x=m.you.x;me.y=m.you.y;cam.x=me.x;cam.y=me.y;
         myFloor=world.slug||(m.you&&m.you.floor)||'default';
         world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});
-        if(m.you){if(m.you.name)myName=m.you.name;if(m.you.role)myRole=m.you.role;
+        if(m.you){if(m.you.name)myName=m.you.name;if(m.you.role)myRole=m.you.role;if(m.you.avatar)myAvatar=m.you.avatar;
           const rp=document.getElementById('rolePill');if(rp)rp.innerHTML='you: '+escapeHtml(myName||'Guest')+' · <b>'+escapeHtml(myRole||'guest')+'</b>';
           const so=document.getElementById('btnSignout');if(so)so.style.display=myToken?'':'none';}
         if(m.whiteboard)wbStrokes=m.whiteboard.slice();
@@ -246,7 +248,7 @@
         const seen=new Set();
         for(const p of m.players){if(p.id===myId){seen.add(p.id);continue;}seen.add(p.id);
           let e=peers.get(p.id);if(!e){e={rx:p.x,ry:p.y};peers.set(p.id,e);}
-          Object.assign(e,{x:p.x,y:p.y,facing:p.facing,name:p.name,status:p.status,talking:p.talking,bcast:p.bcast});}
+          Object.assign(e,{x:p.x,y:p.y,facing:p.facing,name:p.name,status:p.status,talking:p.talking,bcast:p.bcast,avatar:p.avatar});}
         for(const id of [...peers.keys()])if(!seen.has(id)){removeVoice(id);peers.delete(id);}
         document.getElementById('count').textContent=m.players.length;
       }
@@ -446,8 +448,8 @@
     if(showLinks&&!muted){for(const e of peers.values()){const v=e.bcast?1:peerVol(e);
       if(v>0.04){ctx.strokeStyle=(e.bcast?'rgba(255,93,108,':'rgba(57,211,166,')+(0.12+v*0.55)+')';ctx.lineWidth=1+v*2.5;
         ctx.beginPath();ctx.moveTo(me.x,me.y);ctx.lineTo(e.rx,e.ry);ctx.stroke();}}}
-    for(const [id,e] of peers){const lv=lkVideo.get(id);const rc=reactions.get(id);const re=(rc&&performance.now()-rc.t<2200)?rc.emoji:null;avatar(e.rx,e.ry,hueOf(id),e.name||'Guest',e.status,e.talking,e.bcast,false,lv&&lv.el,re,speakLevel(id));}
-    {const rc=reactions.get(myId);const re=(rc&&performance.now()-rc.t<2200)?rc.emoji:null;avatar(me.x,me.y,212,'You',null,false,myBcast,true,localVideoEl,re,speakLevel(myId));}
+    for(const [id,e] of peers){const lv=lkVideo.get(id);const rc=reactions.get(id);const re=(rc&&performance.now()-rc.t<2200)?rc.emoji:null;avatar(e.rx,e.ry,hueOf(id),e.name||'Guest',e.status,e.talking,e.bcast,false,lv&&lv.el,re,speakLevel(id),e.avatar);}
+    {const rc=reactions.get(myId);const re=(rc&&performance.now()-rc.t<2200)?rc.emoji:null;avatar(me.x,me.y,212,'You',null,false,myBcast,true,localVideoEl,re,speakLevel(myId),myAvatar);}
     ctx.restore();
     drawMinimap();
   }
@@ -470,7 +472,7 @@
   function speakWaves(x,y,r,color,amp){const reach=8+amp*40,rings=amp>0.55?3:2;
     for(let i=0;i<rings;i++){const t=((frame*0.045)+i/rings)%1;const rad=r+3+t*reach;
       ctx.strokeStyle=hexA(color,(1-t)*(0.3+amp*0.5));ctx.lineWidth=2+amp*2.5;ctx.beginPath();ctx.arc(x,y,rad,0,7);ctx.stroke();}}
-  function avatar(x,y,hue,name,status,talking,bcast,isMe,videoEl,reactEmoji,level){
+  function avatar(x,y,hue,name,status,talking,bcast,isMe,videoEl,reactEmoji,level,avatarUrl){
     let alpha=1;if(!isMe){const sameRoom=roomAtPt(me.x,me.y)&&roomAtPt(me.x,me.y)===roomAtPt(x,y);const d=Math.hypot(x-me.x,y-me.y);
       alpha=(sameRoom||bcast)?1:Math.max(0.32,1-Math.max(0,d-R().inner)/(R().outer*1.25));}
     ctx.globalAlpha=alpha;const r=16;
@@ -482,8 +484,16 @@
       try{ctx.drawImage(videoEl,(vw-sw)/2,(vh-sh)/2,sw,sh,x-r,y-r,2*r,2*r);}catch(_){}
       ctx.restore();
     }else{
-      ctx.fillStyle=hsl(hue);ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();
-      ctx.fillStyle='#0b1019';ctx.font='700 16px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(isMe?'Y':(name[0]||'?'),x,y+1);
+      const pic=avatarUrl?getAvatarImg(avatarUrl):null;
+      if(pic&&pic.complete&&pic.naturalWidth>0){ // Google profile photo
+        ctx.save();ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.clip();
+        const s=pic.naturalWidth,d=pic.naturalHeight,sc=Math.max(2*r/s,2*r/d),sw=2*r/sc,sh=2*r/sc;
+        try{ctx.drawImage(pic,(s-sw)/2,(d-sh)/2,sw,sh,x-r,y-r,2*r,2*r);}catch(_){pic.naturalWidth=0;}
+        ctx.restore();
+      }else{
+        ctx.fillStyle=hsl(hue);ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();
+        ctx.fillStyle='#0b1019';ctx.font='700 16px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(isMe?(myName?myName[0].toUpperCase():'Y'):(name[0]||'?'),x,y+1);
+      }
     }
     ctx.lineWidth=3;ctx.strokeStyle=isMe?'#fff':'rgba(255,255,255,.7)';ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.stroke();
     if(status){ctx.beginPath();ctx.fillStyle=STATUS_COLOR[status]||'#8a96b3';ctx.arc(x+12,y-12,5,0,7);ctx.fill();ctx.strokeStyle='#141b2c';ctx.lineWidth=2;ctx.stroke();}
@@ -537,8 +547,8 @@
     if(world.mediaWall){const cx=world.mediaWall.x+world.mediaWall.w/2,cy=world.mediaWall.y,cz=_dot(_sub([cx,cy,(world.mediaWall.screenH||150)/2],CAM.camPos),CAM.Fc);items.push({cz,k:'media'});}
     if(world.portals)for(const pt of world.portals){const cx=pt.x+pt.w/2,cy=pt.y+pt.h/2,cz=_dot(_sub([cx,cy,30],CAM.camPos),CAM.Fc);items.push({cz,k:'portal',cx,cy,w:pt.w,color:pt.color,label:pt.label});}
     if(world.widgets)for(const wd of world.widgets){const cx=wd.x+wd.w/2,cy=wd.y+wd.h/2,cz=_dot(_sub([cx,cy,40],CAM.camPos),CAM.Fc);items.push({cz,k:'widget',cx,cy,wd});}
-    for(const [id,e] of peers){const cz=_dot(_sub([e.rx,e.ry,30],CAM.camPos),CAM.Fc),lv=lkVideo.get(id);items.push({cz,k:'av',x:e.rx,y:e.ry,zoff:0,hue:hueOf(id),name:e.name||'Guest',talking:e.talking,bcast:e.bcast,spk:speakLevel(id),isMe:false,vid:lv&&lv.el});}
-    if(cameraMode!=='firstPerson')items.push({cz:_dot(_sub([me.x,me.y,30],CAM.camPos),CAM.Fc),k:'av',x:me.x,y:me.y,zoff:jumpZ,hue:212,name:'You',talking:false,bcast:myBcast,spk:speakLevel(myId),isMe:true,vid:localVideoEl}); // hide own avatar in first-person
+    for(const [id,e] of peers){const cz=_dot(_sub([e.rx,e.ry,30],CAM.camPos),CAM.Fc),lv=lkVideo.get(id);items.push({cz,k:'av',x:e.rx,y:e.ry,zoff:0,hue:hueOf(id),name:e.name||'Guest',talking:e.talking,bcast:e.bcast,spk:speakLevel(id),isMe:false,vid:lv&&lv.el,avatar:e.avatar});}
+    if(cameraMode!=='firstPerson')items.push({cz:_dot(_sub([me.x,me.y,30],CAM.camPos),CAM.Fc),k:'av',x:me.x,y:me.y,zoff:jumpZ,hue:212,name:'You',talking:false,bcast:myBcast,spk:speakLevel(myId),isMe:true,vid:localVideoEl,avatar:myAvatar}); // hide own avatar in first-person
     items.sort((p,q)=>q.cz-p.cz);
     for(const it of items){if(it.k==='wall')d3wall(it);else if(it.k==='furn')d3box(it.cx,it.cy,it.w,it.boxH);else if(it.k==='media')d3media();else if(it.k==='portal')d3portal(it);else if(it.k==='widget')d3widget(it);else d3av(it);}
     drawMinimap();
@@ -571,11 +581,13 @@
     if(feet){ctx.strokeStyle=hsl(it.hue);ctx.lineWidth=Math.max(3,br*.9);ctx.lineCap='round';ctx.beginPath();ctx.moveTo(feet.x,feet.y);ctx.lineTo(head.x,head.y);ctx.stroke();ctx.lineCap='butt';}
     {let amp=Math.min(1,(it.spk||0)*3.4);if(it.bcast)amp=Math.max(amp,0.6);
       if(amp>0.14){const col=it.bcast?'#ff5d6c':'#39d3a6',rings=amp>0.55?3:2;for(let i=0;i<rings;i++){const t=((frame*0.045)+i/rings)%1;ctx.strokeStyle=hexA(col,(1-t)*(0.3+amp*0.5)*alpha);ctx.lineWidth=2+amp*2.5;ctx.beginPath();ctx.arc(head.x,head.y,br+2+t*(br*0.4+amp*br*1.4),0,7);ctx.stroke();}}}
-    const v=it.vid;
+    const v=it.vid,pic=it.avatar?getAvatarImg(it.avatar):null;
     if(v&&v.readyState>=2&&v.videoWidth>0&&alpha>0.34){ctx.save();ctx.beginPath();ctx.arc(head.x,head.y,br,0,7);ctx.clip();
       const vw=v.videoWidth,vh=v.videoHeight,sc=Math.max(2*br/vw,2*br/vh),sw=2*br/sc,shh=2*br/sc;try{ctx.drawImage(v,(vw-sw)/2,(vh-shh)/2,sw,shh,head.x-br,head.y-br,2*br,2*br);}catch(_){}ctx.restore();}
+    else if(pic&&pic.complete&&pic.naturalWidth>0){ctx.save();ctx.beginPath();ctx.arc(head.x,head.y,br,0,7);ctx.clip();
+      const s=pic.naturalWidth,d2=pic.naturalHeight,sc=Math.max(2*br/s,2*br/d2),sw=2*br/sc,shh=2*br/sc;try{ctx.drawImage(pic,(s-sw)/2,(d2-shh)/2,sw,shh,head.x-br,head.y-br,2*br,2*br);}catch(_){}ctx.restore();}
     else{ctx.fillStyle=hsl(it.hue);ctx.beginPath();ctx.arc(head.x,head.y,br,0,7);ctx.fill();
-      ctx.fillStyle='#0b1019';ctx.font='700 '+Math.max(7,br)+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(it.isMe?'Y':(it.name[0]||'?'),head.x,head.y+1);ctx.textBaseline='alphabetic';}
+      ctx.fillStyle='#0b1019';ctx.font='700 '+Math.max(7,br)+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(it.isMe?(myName?myName[0].toUpperCase():'Y'):(it.name[0]||'?'),head.x,head.y+1);ctx.textBaseline='alphabetic';}
     ctx.lineWidth=Math.max(2,br*.18);ctx.strokeStyle=it.isMe?'#fff':'rgba(255,255,255,.7)';ctx.beginPath();ctx.arc(head.x,head.y,br,0,7);ctx.stroke();
     if(br>7){ctx.font='600 12px sans-serif';const tw=ctx.measureText(it.name).width;ctx.fillStyle='rgba(8,11,18,.7)';rr(head.x-tw/2-6,head.y-br-22,tw+12,17,6);ctx.fill();ctx.fillStyle='#e8edf7';ctx.textAlign='center';ctx.fillText(it.name,head.x,head.y-br-10);}
     ctx.globalAlpha=1;}
@@ -915,7 +927,7 @@
     let claims=null;try{claims=JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));}catch(_){}
     if(claims&&claims.exp&&claims.exp*1000<Date.now()){try{localStorage.removeItem('nexspace_token');}catch(_){}if(fromUrl)try{history.replaceState({},'',location.pathname);}catch(_){}return;} // expired → ignore
     myToken=tok;try{localStorage.setItem('nexspace_token',tok);}catch(_){}
-    if(claims){if(claims.name){const n=document.getElementById('name');if(n)n.value=String(claims.name).slice(0,16);myName=claims.name;}if(claims.role)myRole=claims.role;}
+    if(claims){if(claims.name){const n=document.getElementById('name');if(n)n.value=String(claims.name).slice(0,16);myName=claims.name;}if(claims.role)myRole=claims.role;if(claims.avatar)myAvatar=claims.avatar;}
     const tip=document.querySelector('#card .tip'),who=(claims&&claims.name?' as <b>'+escapeHtml(claims.name)+'</b>':'');
     if(fromUrl){ // just signed in → join automatically (no extra Enter click)
       if(tip)tip.innerHTML='✅ Signed in'+who+' — joining…';

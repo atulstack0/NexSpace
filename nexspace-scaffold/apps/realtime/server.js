@@ -237,7 +237,7 @@ const NODE_ID = crypto.randomBytes(4).toString("hex");
 const remoteByNode = new Map(); // nodeId -> { players, ts }
 let pub = null;
 function localPlayers() {
-  return [...clients.values()].map((p) => ({ id: p.id, name: p.name, x: p.x, y: p.y, facing: p.facing, status: p.status, talking: p.talking, bcast: p.bcast, role: p.role, floor: p.floor }));
+  return [...clients.values()].map((p) => ({ id: p.id, name: p.name, x: p.x, y: p.y, facing: p.facing, status: p.status, talking: p.talking, bcast: p.bcast, role: p.role, floor: p.floor, avatar: p.avatar }));
 }
 function remotePlayers() {
   const out = [], now = Date.now();
@@ -323,7 +323,7 @@ const server = http.createServer((req, res) => {
         if (!tj.id_token) throw new Error(tj.error_description || tj.error || "no id_token");
         const claims = JSON.parse(Buffer.from(tj.id_token.split(".")[1], "base64url").toString());
         const email = claims.email || "", name = claims.name || email.split("@")[0] || "User";
-        const token = mintAppToken({ sub: claims.sub || ("g-" + email), name, role: googleRole(email), email });
+        const token = mintAppToken({ sub: claims.sub || ("g-" + email), name, role: googleRole(email), email, avatar: claims.picture || "" });
         res.writeHead(302, { Location: "/?sso=" + encodeURIComponent(token) });
         res.end();
         console.log(`✓ Google login: ${name} <${email}> → ${googleRole(email)}`);
@@ -382,8 +382,9 @@ wss.on("connection", (ws) => {
       const claims = verifyJWT(m.token);
       const role = claims?.role || "guest";
       const name = claims?.name || String(m.name || "Guest").slice(0, 16) || "Guest";
+      const avatar = (claims?.avatar && /^https:\/\//.test(claims.avatar)) ? claims.avatar : ""; // Google profile pic (https only)
       const f0 = anyFloor();
-      const player = { id, name, role, floor: f0.slug, joinedAt: Date.now(), lastMoveAt: Date.now(),
+      const player = { id, name, role, avatar, floor: f0.slug, joinedAt: Date.now(), lastMoveAt: Date.now(),
         x: f0.spawn.x + (Math.random() - 0.5) * 120, y: f0.spawn.y + (Math.random() - 0.5) * 100, facing: 0,
         status: "available", talking: m.talking !== false, bcast: false };
       clients.set(ws, player);
