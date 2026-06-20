@@ -83,6 +83,7 @@
   <span class="pill" id="conn"><b id="connText">connecting…</b></span>
   <span class="pill">online: <b id="count">1</b></span>
   <span class="pill" id="rolePill">you: guest</span>
+  <button class="btn" id="btnSignout" style="display:none" title="Sign out">⎋ Sign out</button>
   <select id="floorSel" title="Switch floor (multi-floor §6)" style="display:none"></select>
   <span class="sep"></span>
   <div class="seg" id="viewSeg" title="Same office, two renderers (spec 6.23)"><button data-view="2d" class="active">🗺️ 2D</button><button data-view="3d">🧊 3D</button></div>
@@ -233,7 +234,9 @@
       if(m.t==='welcome'){myId=m.id;world=m.world;WORLD={w:world.w,h:world.h};me.x=m.you.x;me.y=m.you.y;cam.x=me.x;cam.y=me.y;
         myFloor=world.slug||(m.you&&m.you.floor)||'default';
         world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});
-        if(m.you&&m.you.role){myRole=m.you.role;const rp=document.getElementById('rolePill');if(rp)rp.textContent='you: '+myRole;}
+        if(m.you){if(m.you.name)myName=m.you.name;if(m.you.role)myRole=m.you.role;
+          const rp=document.getElementById('rolePill');if(rp)rp.innerHTML='you: '+escapeHtml(myName||'Guest')+' · <b>'+escapeHtml(myRole||'guest')+'</b>';
+          const so=document.getElementById('btnSignout');if(so)so.style.display=myToken?'':'none';}
         if(m.whiteboard)wbStrokes=m.whiteboard.slice();
         applyBranding(world.branding);populateFloors(world);
         initLiveKit();}
@@ -897,12 +900,18 @@
     document.getElementById('rolePill').textContent='you: '+myRole;
     document.getElementById('overlay').style.display='none';startAudio();if(actx&&actx.state==='suspended')actx.resume();connect(myName);requestAnimationFrame(loop);});
   document.getElementById('name').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('go').click();});
-  // Login: if we came back from Google (or an invite) with ?sso=<token>, use it; prefill the name field.
-  (function(){const p=new URLSearchParams(location.search);const tok=p.get('sso')||p.get('invite');if(!tok)return;myToken=tok;
-    try{const claims=JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));if(claims.name){const n=document.getElementById('name');if(n)n.value=String(claims.name).slice(0,16);myName=claims.name;}}catch(_){}
-    const tip=document.querySelector('#card .tip');if(tip)tip.innerHTML=p.get('invite')?'🎟️ You were invited — click <b>Enter</b> to join.':'✅ Signed in with Google — click <b>Enter</b> to join.';
-    try{history.replaceState({},'',location.pathname);}catch(_){}})();
+  // Login: use ?sso=<token> from a Google redirect (or an invite), else a stored token from a prior sign-in.
+  (function(){const p=new URLSearchParams(location.search);const fromUrl=p.get('sso')||p.get('invite');
+    let tok=fromUrl;if(!tok){try{tok=localStorage.getItem('nexspace_token')||null;}catch(_){}}
+    if(!tok)return;
+    let claims=null;try{claims=JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));}catch(_){}
+    if(claims&&claims.exp&&claims.exp*1000<Date.now()){try{localStorage.removeItem('nexspace_token');}catch(_){}if(fromUrl)try{history.replaceState({},'',location.pathname);}catch(_){}return;} // expired → ignore
+    myToken=tok;try{localStorage.setItem('nexspace_token',tok);}catch(_){}
+    if(claims){if(claims.name){const n=document.getElementById('name');if(n)n.value=String(claims.name).slice(0,16);myName=claims.name;}if(claims.role)myRole=claims.role;}
+    const tip=document.querySelector('#card .tip');if(tip)tip.innerHTML=p.get('invite')?'🎟️ You were invited — click <b>Enter</b> to join.':'✅ Signed in'+(claims&&claims.name?' as <b>'+escapeHtml(claims.name)+'</b>':'')+' — click <b>Enter</b> to join.';
+    if(fromUrl)try{history.replaceState({},'',location.pathname);}catch(_){}})();
   document.getElementById('google').addEventListener('click',()=>{location.href='/auth/google/login';}); // same-origin: realtime server runs the OAuth flow
+  document.getElementById('btnSignout').addEventListener('click',()=>{try{localStorage.removeItem('nexspace_token');}catch(_){}myToken=null;location.href=location.pathname;});
 })();
 </script>
 </body>
