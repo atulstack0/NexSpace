@@ -37,7 +37,9 @@ const hookServer = http.createServer((req, res) => {
 await new Promise((r) => hookServer.listen(WHPORT, r));
 
 const server = spawn(process.execPath, ["apps/realtime/server.js"], {
-  env: { ...process.env, PORT: String(PORT), WEBHOOK_URL: `http://localhost:${WHPORT}/hook`, SLACK_WEBHOOK_URL: `http://localhost:${WHPORT}/slack`, PUBLIC_API_KEY: API_KEY, MAX_CLIENTS: "2" },
+  // WORLD_API/REDIS_URL cleared so the test is hermetic — it always exercises the built-in floors,
+  // never a stray API/Redis from the shell env (e.g. $env:WORLD_API left set in the same terminal).
+  env: { ...process.env, WORLD_API: "", REDIS_URL: "", PORT: String(PORT), WEBHOOK_URL: `http://localhost:${WHPORT}/hook`, SLACK_WEBHOOK_URL: `http://localhost:${WHPORT}/slack`, PUBLIC_API_KEY: API_KEY, MAX_CLIENTS: "2" },
   stdio: ["ignore", "pipe", "pipe"],
 });
 server.stderr.on("data", (d) => process.stderr.write(d));
