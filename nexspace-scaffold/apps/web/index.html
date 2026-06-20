@@ -160,7 +160,7 @@
 
   // ---------- State ----------
   let WORLD={w:2200,h:1500},world=null,myId=null;
-  let myFloor='default',portalCD=0; // current floor slug + portal-travel cooldown (§6 multi-floor)
+  let myFloor='default',portalArmed=false; // current floor slug + portal re-arm flag (§6 multi-floor)
   let doors={},media={playing:true,pos:0},recording={on:false,by:null},myEgressId=null;
   const me={x:880,y:900,facing:0};
   const peers=new Map();        // id -> {x,y,facing,name,status,talking,bcast,rx,ry}
@@ -656,14 +656,19 @@
   function toast(msg){const t=document.getElementById('toasts'),d=document.createElement('div');d.className='toast';d.textContent=msg;
     t.appendChild(d);setTimeout(()=>d.style.opacity='0',2400);setTimeout(()=>d.remove(),3000);}
   // Multi-floor + portals (spec §6): travel between floors via portal step-through, click, or the switcher.
-  function travelTo(slug){if(!slug||slug===myFloor)return;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'portal',to:slug}));portalCD=performance.now()+1400;}
-  function checkPortals(){if(!world||!world.portals||performance.now()<portalCD)return;
-    for(const pt of world.portals){if(me.x>=pt.x&&me.x<=pt.x+pt.w&&me.y>=pt.y&&me.y<=pt.y+pt.h){travelTo(pt.to);return;}}}
+  function travelTo(slug){if(!slug||slug===myFloor)return;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'portal',to:slug}));}
+  // Auto-travel on overlap, but only AFTER you've stepped off a portal — otherwise you'd bounce
+  // forever because you arrive standing on the return portal (and the floor switcher also drops you there).
+  function checkPortals(){if(!world||!world.portals)return;
+    let on=null;for(const pt of world.portals){if(me.x>=pt.x&&me.x<=pt.x+pt.w&&me.y>=pt.y&&me.y<=pt.y+pt.h){on=pt;break;}}
+    if(!on){portalArmed=true;return;}                 // clear of all portals → arm
+    if(portalArmed){portalArmed=false;travelTo(on.to);} // stepped onto a portal while armed → travel once
+  }
   function applyFloorChange(m){world=m.world;WORLD={w:world.w,h:world.h};myFloor=world.slug||(m.you&&m.you.floor)||myFloor;
     me.x=m.you.x;me.y=m.you.y;cam.x=me.x;cam.y=me.y;target=null;
     doors={};world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});
     peers.forEach((e,id)=>removeVoice(id));peers.clear();
-    portalCD=performance.now()+1400; // grace so you don't immediately bounce back through the return portal
+    portalArmed=false; // disarm: you must step off the arrival portal before it can re-trigger
     applyBranding(world.branding);populateFloors(world);
     if(threeMode)Three3D.rebuild();
     toast('🪜 Entered '+(world.name||myFloor));}
