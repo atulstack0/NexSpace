@@ -18,6 +18,21 @@ const path = require("path");
 const { WebSocketServer } = require("ws");
 const crypto = require("crypto");
 
+// Local convenience: pull LiveKit/S3 creds from a .env file if they aren't already in the
+// environment (whitelisted so a stray PORT/DATABASE_URL in apps/api/.env can't hijack this server).
+// In production (Render etc.) these come from the dashboard and the file reads simply no-op.
+(function loadEnv() {
+  const want = /^(LIVEKIT_|S3_)/;
+  for (const f of [path.join(__dirname, ".env"), path.join(__dirname, "..", "api", ".env")]) {
+    try {
+      for (const line of fs.readFileSync(f, "utf8").split(/\r?\n/)) {
+        const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$/);
+        if (m && want.test(m[1]) && !(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+      }
+    } catch {}
+  }
+})();
+
 const PORT = process.env.PORT || 8787;
 const TICK_HZ = 15;
 const MAX_SPEED = 520;   // px/s — server-authoritative movement cap (> client sprint; anti-teleport, §8)
@@ -56,6 +71,25 @@ const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || "";
 function notifySlack(text) {
   if (!SLACK_WEBHOOK_URL) return;
   fetch(SLACK_WEBHOOK_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) }).catch(() => {});
+}
+
+// ---------- LiveKit token minting (spec §3) — lets this single server hand out real voice/video
+// tokens with no separate API. A LiveKit access token is just an HS256 JWT signed with the API
+// secret, so we mint it with node:crypto (no extra dependency). Set LIVEKIT_URL/KEY/SECRET in env. ----------
+const LIVEKIT_URL = process.env.LIVEKIT_URL || "";
+const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || "";
+const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET || "";
+const livekitConfigured = () => !!(LIVEKIT_URL && LIVEKIT_API_KEY && LIVEKIT_API_SECRET);
+function mintLivekitToken(room, identity, name) {
+  const now = Math.floor(Date.now() / 1000);
+  const b64u = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+  const header = b64u({ alg: "HS256", typ: "JWT" });
+  const payload = b64u({
+    exp: now + 7200, iat: now, nbf: now, iss: LIVEKIT_API_KEY, sub: identity, name: name || identity,
+    video: { room, roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: true },
+  });
+  const data = header + "." + payload;
+  return data + "." + crypto.createHmac("sha256", LIVEKIT_API_SECRET).update(data).digest("base64url");
 }
 
 // ---------- Authoritative world(s) — multi-floor (spec §6: multiple maps + portals) ----------
@@ -221,6 +255,18 @@ if (REDIS_URL) {
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".ico": "image/x-icon" };
 const server = http.createServer((req, res) => {
   const urlPath = (req.url === "/" || !req.url) ? "/index.html" : req.url.split("?")[0];
+  if (urlPath === "/livekit/token" && req.method === "POST") { // real voice/video, no separate API needed
+    if (!livekitConfigured()) return json(res, { error: "LiveKit not configured" }, 503);
+    let body = ""; req.on("data", (c) => { body += c; if (body.length > 4096) req.destroy(); });
+    req.on("end", () => {
+      let b = {}; try { b = JSON.parse(body || "{}"); } catch {}
+      const room = String(b.room || "floor:default").slice(0, 80);
+      const identity = String(b.identity || ("u" + Date.now())).slice(0, 64);
+      const name = String(b.name || identity).slice(0, 40);
+      json(res, { url: LIVEKIT_URL, token: mintLivekitToken(room, identity, name) });
+    });
+    return;
+  }
   if (urlPath === "/analytics") { // admin-gated metrics JSON (spec 6.20)
     const token = (req.headers.authorization || "").replace(/^Bearer /, "") || (new URL(req.url, "http://x").searchParams.get("token") || "");
     const claims = verifyJWT(token);

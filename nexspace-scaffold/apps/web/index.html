@@ -323,10 +323,10 @@
   async function initLiveKit(){
     if(!LK)return;                                           // CDN not loaded → keep synth
     let url,token;
-    try{const res=await fetch(API_BASE+'/livekit/token',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({room:'floor:default',identity:myId,name:myName})});
+    try{const res=await fetch('/livekit/token',{method:'POST',headers:{'Content-Type':'application/json'},  // same-origin: the realtime server mints it (no separate API needed)
+        body:JSON.stringify({room:'floor:'+myFloor,identity:myId,name:myName})});
       if(!res.ok)throw new Error('token '+res.status);({url,token}=await res.json());}
-    catch(e){return;}                                        // API/LiveKit not configured → keep synth
+    catch(e){return;}                                        // LiveKit not configured → keep synth
     try{
       const room=new LK.Room({adaptiveStream:true,dynacast:true});
       room.on(LK.RoomEvent.TrackSubscribed,onTrack);
