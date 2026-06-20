@@ -76,10 +76,15 @@ try {
   (guest.role === "guest") ? ok("no token → guest role") : bad("guest role not applied");
   (admin.world?.branding && typeof admin.world.branding.name === "string" && typeof admin.world.branding.color === "string") ? ok("welcome carries branding (name+color)") : bad("welcome world.branding missing/malformed");
 
-  // move in two steps — the server-authoritative speed cap only allows so much travel per
-  // update since the last one, so a single 380px jump from spawn would (correctly) be clamped.
+  // walk into the Focus Room at (500,500). The server-authoritative speed cap (MAX_SPEED) only
+  // allows ~one step of travel per update since this client's last move, and spawn is ~570-665px
+  // away — so prime the first step with a wait (dt≈1) and take three steps to converge exactly.
+  // (A single jump from spawn would, correctly, be clamped — see the anti-teleport assertion below.)
+  await wait(1100);
   admin.ws.send(JSON.stringify({ t: "move", x: 500, y: 500, facing: 0 }));
-  await wait(1200);
+  await wait(1100);
+  admin.ws.send(JSON.stringify({ t: "move", x: 500, y: 500, facing: 0 }));
+  await wait(1100);
   admin.ws.send(JSON.stringify({ t: "move", x: 500, y: 500, facing: 0 }));
   await wait(450);
   (guest.last?.players?.some((p) => p.id === admin.id && Math.abs(p.x - 500) < 5)) ? ok("position syncs between clients") : bad("position not synced");
