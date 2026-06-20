@@ -58,39 +58,79 @@ function notifySlack(text) {
   fetch(SLACK_WEBHOOK_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) }).catch(() => {});
 }
 
-// ---------- Authoritative world (hardcoded here; loaded from DB in apps/api) ----------
-const WORLD = { w: 2200, h: 1500 };
-let obstacles = [
-  { x: 0, y: 0, w: WORLD.w, h: 16 }, { x: 0, y: WORLD.h - 16, w: WORLD.w, h: 16 },
-  { x: 0, y: 0, w: 16, h: WORLD.h }, { x: WORLD.w - 16, y: 0, w: 16, h: WORLD.h },
-  { x: 520, y: 120, w: 16, h: 300 }, { x: 520, y: 520, w: 16, h: 240 }, { x: 120, y: 760, w: 430, h: 16 },
-  { x: 1500, y: 120, w: 16, h: 560 }, { x: 1516, y: 120, w: 300, h: 16 }, { x: 1516, y: 666, w: 300, h: 16 },
-  { x: 1800, y: 120, w: 16, h: 236 }, { x: 1800, y: 452, w: 16, h: 230 },
-  { x: 980, y: 560, w: 240, h: 120, r: 14 }, { x: 300, y: 300, w: 150, h: 80, r: 12 },
-  { x: 1600, y: 330, w: 170, h: 90, r: 12 }, { x: 900, y: 1150, w: 120, h: 120, r: 60 },
-  { x: 1750, y: 1150, w: 150, h: 80, r: 12 }, { x: 250, y: 1150, w: 90, h: 90, r: 10 },
-];
-let rooms = [
-  { id: "focus", name: "Focus Room", color: "#7c6bff",
-    bounds: { x: 140, y: 130, w: 380, h: 630 }, door: { x: 512, y: 418, w: 18, h: 104, state: "closed", knocking: false } },
-  { id: "board", name: "Boardroom", color: "#39d3a6",
-    bounds: { x: 1516, y: 136, w: 300, h: 546 }, door: { x: 1796, y: 356, w: 18, h: 96, state: "locked", knocking: false } },
-];
-let mediaWall = { x: 1180, y: 980, w: 300, base: 16, screenH: 150,
-  title: "Lo-fi Beats — Focus Radio", playing: true, pos: 74, dur: 213 };
-let branding = { name: "NexSpace", color: "#5b8cff", logo: "", whiteLabel: false }; // per-space branding (spec 6.12)
-obstacles.push({ x: mediaWall.x, y: mediaWall.y, w: mediaWall.w, h: mediaWall.base });
+// ---------- Authoritative world(s) — multi-floor (spec §6: multiple maps + portals) ----------
+// Each floor is an independent world; a player belongs to exactly one floor at a time, and
+// portals teleport between them. Built-in geometry below is the fallback when WORLD_API is unset;
+// otherwise every floor is loaded from the API (apps/api) in loadWorld().
+const DEFAULT_FLOOR = "default";
+const floors = new Map(); // slug -> floor state { slug, name, w, h, obstacles, rooms, mediaWall, portals, branding, spawn }
+
+function makeDefaultFloor() {
+  const W = 2200, H = 1500;
+  const obstacles = [
+    { x: 0, y: 0, w: W, h: 16 }, { x: 0, y: H - 16, w: W, h: 16 },
+    { x: 0, y: 0, w: 16, h: H }, { x: W - 16, y: 0, w: 16, h: H },
+    { x: 520, y: 120, w: 16, h: 300 }, { x: 520, y: 520, w: 16, h: 240 }, { x: 120, y: 760, w: 430, h: 16 },
+    { x: 1500, y: 120, w: 16, h: 560 }, { x: 1516, y: 120, w: 300, h: 16 }, { x: 1516, y: 666, w: 300, h: 16 },
+    { x: 1800, y: 120, w: 16, h: 236 }, { x: 1800, y: 452, w: 16, h: 230 },
+    { x: 980, y: 560, w: 240, h: 120, r: 14 }, { x: 300, y: 300, w: 150, h: 80, r: 12 },
+    { x: 1600, y: 330, w: 170, h: 90, r: 12 }, { x: 900, y: 1150, w: 120, h: 120, r: 60 },
+    { x: 1750, y: 1150, w: 150, h: 80, r: 12 }, { x: 250, y: 1150, w: 90, h: 90, r: 10 },
+  ];
+  const rooms = [
+    { id: "focus", name: "Focus Room", color: "#7c6bff",
+      bounds: { x: 140, y: 130, w: 380, h: 630 }, door: { x: 512, y: 418, w: 18, h: 104, state: "closed", knocking: false } },
+    { id: "board", name: "Boardroom", color: "#39d3a6",
+      bounds: { x: 1516, y: 136, w: 300, h: 546 }, door: { x: 1796, y: 356, w: 18, h: 96, state: "locked", knocking: false } },
+  ];
+  const mediaWall = { x: 1180, y: 980, w: 300, base: 16, screenH: 150,
+    title: "Lo-fi Beats — Focus Radio", playing: true, pos: 74, dur: 213 };
+  obstacles.push({ x: mediaWall.x, y: mediaWall.y, w: mediaWall.w, h: mediaWall.base });
+  const portals = [{ id: "to-rooftop", x: 2030, y: 1290, w: 96, h: 96, to: "rooftop", label: "Rooftop ↑", color: "#ffb454" }];
+  return { slug: "default", name: "HQ — Ground Floor", w: W, h: H, obstacles, rooms, mediaWall, portals,
+    branding: { name: "NexSpace", color: "#5b8cff", logo: "", whiteLabel: false }, spawn: { x: 890, y: 920 } };
+}
+
+function makeRooftopFloor() {
+  const W = 1600, H = 1100;
+  const obstacles = [
+    { x: 0, y: 0, w: W, h: 16 }, { x: 0, y: H - 16, w: W, h: 16 },
+    { x: 0, y: 0, w: 16, h: H }, { x: W - 16, y: 0, w: 16, h: H },
+    { x: 700, y: 300, w: 200, h: 120, r: 18 },
+    { x: 220, y: 760, w: 140, h: 90, r: 12 }, { x: 1240, y: 760, w: 140, h: 90, r: 12 },
+  ];
+  const rooms = [
+    { id: "cabana", name: "Cabana", color: "#39d3a6",
+      bounds: { x: 120, y: 130, w: 360, h: 360 }, door: { x: 472, y: 290, w: 18, h: 90, state: "open", knocking: false } },
+  ];
+  const mediaWall = { x: 660, y: 720, w: 280, base: 16, screenH: 140,
+    title: "Sunset Set — Rooftop Radio", playing: true, pos: 12, dur: 240 };
+  obstacles.push({ x: mediaWall.x, y: mediaWall.y, w: mediaWall.w, h: mediaWall.base });
+  const portals = [{ id: "to-default", x: 90, y: 960, w: 96, h: 96, to: "default", label: "Ground ↓", color: "#5b8cff" }];
+  return { slug: "rooftop", name: "Rooftop Garden", w: W, h: H, obstacles, rooms, mediaWall, portals,
+    branding: { name: "NexSpace", color: "#39d3a6", logo: "", whiteLabel: false }, spawn: { x: 800, y: 600 } };
+}
+
+floors.set("default", makeDefaultFloor());
+floors.set("rooftop", makeRooftopFloor());
+
+const anyFloor = () => floors.get(DEFAULT_FLOOR) || [...floors.values()][0];
+const floorOf = (p) => floors.get(p && p.floor) || anyFloor();
+const floorsList = () => [...floors.values()].map((f) => ({ slug: f.slug, name: f.name }));
 
 function inRoom(p, room) {
   const b = room.bounds;
   return p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
 }
-function worldForClient() {
+function worldForClient(slug) {
+  const f = floors.get(slug) || anyFloor();
   return {
-    w: WORLD.w, h: WORLD.h, obstacles,
-    rooms: rooms.map(r => ({ id: r.id, name: r.name, color: r.color, bounds: r.bounds, door: { x: r.door.x, y: r.door.y, w: r.door.w, h: r.door.h, state: r.door.state } })),
-    mediaWall: { x: mediaWall.x, y: mediaWall.y, w: mediaWall.w, base: mediaWall.base, screenH: mediaWall.screenH, title: mediaWall.title, dur: mediaWall.dur },
-    branding,
+    slug: f.slug, name: f.name, w: f.w, h: f.h, obstacles: f.obstacles,
+    rooms: f.rooms.map(r => ({ id: r.id, name: r.name, color: r.color, bounds: r.bounds, door: { x: r.door.x, y: r.door.y, w: r.door.w, h: r.door.h, state: r.door.state } })),
+    mediaWall: f.mediaWall ? { x: f.mediaWall.x, y: f.mediaWall.y, w: f.mediaWall.w, base: f.mediaWall.base, screenH: f.mediaWall.screenH, title: f.mediaWall.title, dur: f.mediaWall.dur } : null,
+    portals: f.portals.map(pt => ({ id: pt.id, x: pt.x, y: pt.y, w: pt.w, h: pt.h, to: pt.to, label: pt.label, color: pt.color })),
+    branding: f.branding,
+    floors: floorsList(),
   };
 }
 
@@ -108,11 +148,11 @@ function applyModerate(action, target) {
 
 // ---------- Analytics (spec 6.20) ----------
 const A = { startedAt: Date.now(), sessions: 0, peak: 0, totalMs: 0, closed: 0 };
-const roomSeconds = { open: 0 };
-for (const r of rooms) roomSeconds[r.id] = 0;
+const roomSeconds = {}; // keyed "floorSlug:roomId" (and "floorSlug:open") across all floors
+for (const f of floors.values()) { roomSeconds[f.slug + ":open"] = 0; for (const r of f.rooms) roomSeconds[f.slug + ":" + r.id] = 0; }
 function analyticsSnapshot() {
-  const occ = { open: 0 }; for (const r of rooms) occ[r.id] = 0;
-  for (const p of clients.values()) { const r = rooms.find((rm) => inRoom(p, rm)); occ[r ? r.id : "open"]++; }
+  const occ = {}; for (const k in roomSeconds) occ[k] = 0;
+  for (const p of clients.values()) { const f = floorOf(p); const r = f.rooms.find((rm) => inRoom(p, rm)); const k = f.slug + ":" + (r ? r.id : "open"); occ[k] = (occ[k] || 0) + 1; }
   const roomUsageMin = {}; for (const k in roomSeconds) roomUsageMin[k] = +(roomSeconds[k] / 60).toFixed(1);
   return {
     online: clients.size,
@@ -132,7 +172,7 @@ const NODE_ID = crypto.randomBytes(4).toString("hex");
 const remoteByNode = new Map(); // nodeId -> { players, ts }
 let pub = null;
 function localPlayers() {
-  return [...clients.values()].map((p) => ({ id: p.id, name: p.name, x: p.x, y: p.y, facing: p.facing, status: p.status, talking: p.talking, bcast: p.bcast, role: p.role }));
+  return [...clients.values()].map((p) => ({ id: p.id, name: p.name, x: p.x, y: p.y, facing: p.facing, status: p.status, talking: p.talking, bcast: p.bcast, role: p.role, floor: p.floor }));
 }
 function remotePlayers() {
   const out = [], now = Date.now();
@@ -141,8 +181,8 @@ function remotePlayers() {
 }
 function publishEvent(event, data) { if (pub) pub.publish("nexspace:event", JSON.stringify({ nodeId: NODE_ID, event, data })); }
 function applyEvent(event, data) {
-  if (event === "door") { const r = rooms.find((x) => x.id === data.roomId); if (r && ["open", "closed", "locked"].includes(data.state)) r.door.state = data.state; }
-  else if (event === "media") { mediaWall.playing = !!data.playing; }
+  if (event === "door") { const f = floors.get(data.floor) || anyFloor(); const r = f.rooms.find((x) => x.id === data.roomId); if (r && ["open", "closed", "locked"].includes(data.state)) r.door.state = data.state; }
+  else if (event === "media") { const f = floors.get(data.floor) || anyFloor(); if (f.mediaWall) f.mediaWall.playing = !!data.playing; }
   else if (event === "recording") { recording = data.on ? { on: true, by: data.by, egressId: data.egressId || null } : { on: false, by: null, egressId: null }; }
   else if (event === "worldReload") { reloadAndBroadcast(); }
   else if (event === "chat") { deliverChat(data); }
@@ -182,10 +222,11 @@ const server = http.createServer((req, res) => {
     if ((req.headers["x-api-key"] || "") !== PUBLIC_API_KEY) return json(res, { error: "invalid or missing X-API-Key" }, 401);
     if (urlPath === "/api/v1/health") return json(res, { ok: true, online: clients.size });
     if (urlPath === "/api/v1/presence") {
-      const users = [...clients.values()].map((p) => { const r = rooms.find((rm) => inRoom(p, rm)); return { id: p.id, name: p.name, role: p.role, status: p.status, x: Math.round(p.x), y: Math.round(p.y), room: r ? r.id : null }; });
+      const users = [...clients.values()].map((p) => { const f = floorOf(p); const r = f.rooms.find((rm) => inRoom(p, rm)); return { id: p.id, name: p.name, role: p.role, status: p.status, x: Math.round(p.x), y: Math.round(p.y), floor: p.floor, room: r ? r.id : null }; });
       return json(res, { online: users.length, users });
     }
-    if (urlPath === "/api/v1/floor") return json(res, { width: WORLD.w, height: WORLD.h, rooms: rooms.map((r) => ({ id: r.id, name: r.name })), objects: obstacles.length, mediaWall: { title: mediaWall.title, playing: mediaWall.playing } });
+    if (urlPath === "/api/v1/floors") return json(res, { floors: floorsList() });
+    if (urlPath === "/api/v1/floor") { const f = anyFloor(); return json(res, { slug: f.slug, name: f.name, width: f.w, height: f.h, rooms: f.rooms.map((r) => ({ id: r.id, name: r.name })), objects: f.obstacles.length, portals: f.portals.length, mediaWall: f.mediaWall ? { title: f.mediaWall.title, playing: f.mediaWall.playing } : null }); }
     return json(res, { error: "not found" }, 404);
   }
   const safe = path.normalize(urlPath).replace(/^(\.\.[/\\])+/, "");
@@ -221,14 +262,15 @@ wss.on("connection", (ws) => {
       const claims = verifyJWT(m.token);
       const role = claims?.role || "guest";
       const name = claims?.name || String(m.name || "Guest").slice(0, 16) || "Guest";
-      const player = { id, name, role, joinedAt: Date.now(), lastMoveAt: Date.now(),
-        x: 820 + Math.random() * 140, y: 860 + Math.random() * 120, facing: 0,
+      const f0 = anyFloor();
+      const player = { id, name, role, floor: f0.slug, joinedAt: Date.now(), lastMoveAt: Date.now(),
+        x: f0.spawn.x + (Math.random() - 0.5) * 120, y: f0.spawn.y + (Math.random() - 0.5) * 100, facing: 0,
         status: "available", talking: m.talking !== false, bcast: false };
       clients.set(ws, player);
       A.sessions++; if (clients.size > A.peak) A.peak = clients.size;
       fireWebhook("user.joined", { id, name, role });
       notifySlack("👋 " + name + " entered the office");
-      send(ws, { t: "welcome", id, world: worldForClient(), you: { ...player }, whiteboard: whiteboard.strokes });
+      send(ws, { t: "welcome", id, world: worldForClient(player.floor), you: { ...player }, whiteboard: whiteboard.strokes });
       console.log(`+ ${player.name} (${id}) [${role}] — ${clients.size} online`);
       return;
     }
@@ -244,8 +286,9 @@ wss.on("connection", (ws) => {
       // server-authoritative: clamp to MAX_SPEED since this client's last update (anti-teleport)
       const dt = Math.min(1, (_now - (p.lastMoveAt || _now)) / 1000);
       p.lastMoveAt = _now;
-      let nx = Number.isFinite(m.x) ? clamp(m.x, 16, WORLD.w - 16) : p.x;
-      let ny = Number.isFinite(m.y) ? clamp(m.y, 16, WORLD.h - 16) : p.y;
+      const fdim = floorOf(p);
+      let nx = Number.isFinite(m.x) ? clamp(m.x, 16, fdim.w - 16) : p.x;
+      let ny = Number.isFinite(m.y) ? clamp(m.y, 16, fdim.h - 16) : p.y;
       const dx = nx - p.x, dy = ny - p.y, dist = Math.hypot(dx, dy), maxDist = MAX_SPEED * dt + 8;
       if (dist > maxDist) { const s = maxDist / dist; nx = p.x + dx * s; ny = p.y + dy * s; }
       p.x = nx; p.y = ny;
@@ -258,21 +301,21 @@ wss.on("connection", (ws) => {
       if (m.on && mutedIds.has(p.id)) return deny(ws, "broadcast", "unmuted");
       p.bcast = !!m.on;
     } else if (m.t === "media") {
-      mediaWall.playing = !!m.playing; publishEvent("media", { playing: mediaWall.playing });
+      const f = floorOf(p); if (f.mediaWall) { f.mediaWall.playing = !!m.playing; publishEvent("media", { floor: f.slug, playing: f.mediaWall.playing }); }
     } else if (m.t === "door") {
       if (rank(p.role) < RANK.member) return deny(ws, "change doors", "member");
       if (m.state === "locked" && rank(p.role) < RANK.admin) return deny(ws, "lock doors", "admin");
-      const room = rooms.find(r => r.id === m.roomId);
-      if (room && ["open", "closed", "locked"].includes(m.state)) { room.door.state = m.state; publishEvent("door", { roomId: m.roomId, state: m.state }); }
+      const room = floorOf(p).rooms.find(r => r.id === m.roomId);
+      if (room && ["open", "closed", "locked"].includes(m.state)) { room.door.state = m.state; publishEvent("door", { floor: p.floor, roomId: m.roomId, state: m.state }); }
     } else if (m.t === "knock") {
-      const room = rooms.find(r => r.id === m.roomId);
+      const room = floorOf(p).rooms.find(r => r.id === m.roomId);
       if (!room) return;
       const d = room.door;
       if (d.state === "open" || d.knocking) return;
       if (d.state === "locked" && rank(p.role) < RANK.member) return deny(ws, "enter the locked room", "member");
       d.knocking = true;
-      const occupied = [...clients.values()].some(q => inRoom(q, room));
-      setTimeout(() => { d.knocking = false; if (occupied) { d.state = "open"; publishEvent("door", { roomId: room.id, state: "open" }); } }, 1300);
+      const occupied = [...clients.values()].some(q => q.floor === p.floor && inRoom(q, room));
+      setTimeout(() => { d.knocking = false; if (occupied) { d.state = "open"; publishEvent("door", { floor: p.floor, roomId: room.id, state: "open" }); } }, 1300);
     } else if (m.t === "recording") {
       if (rank(p.role) < RANK.admin) return deny(ws, "record", "admin");
       recording = m.on ? { on: true, by: p.name, egressId: m.egressId || null } : { on: false, by: null, egressId: null };
@@ -284,8 +327,8 @@ wss.on("connection", (ws) => {
       let channel = null, to = null;
       if (scope === "channel") channel = String(m.channel || "general").slice(0, 32);
       else if (scope === "dm") { to = String(m.to || ""); if (!to) return; }
-      const r = rooms.find((rm) => inRoom(p, rm));
-      const payload = { from: p.id, name: p.name, scope, channel, to, body, x: p.x, y: p.y, roomId: r ? r.id : null, ts: Date.now() };
+      const r = floorOf(p).rooms.find((rm) => inRoom(p, rm));
+      const payload = { from: p.id, name: p.name, scope, channel, to, body, floor: p.floor, x: p.x, y: p.y, roomId: r ? r.id : null, ts: Date.now() };
       deliverChat(payload); publishEvent("chat", payload); // local + cross-node
     } else if (m.t === "draw") {
       const stroke = m.stroke; if (!stroke || !Array.isArray(stroke.pts) || stroke.pts.length > 2000) return;
@@ -304,6 +347,18 @@ wss.on("connection", (ws) => {
       if (rank(p.role) < RANK.admin) return deny(ws, "moderate", "admin");
       const action = m.action, target = String(m.target || "");
       applyModerate(action, target); publishEvent("moderate", { action, target });
+    } else if (m.t === "portal") {
+      // teleport to another floor (physical portal step-through or floor-switcher); any joined client may travel
+      const dest = floors.get(String(m.to || ""));
+      if (!dest || dest.slug === p.floor) return;
+      const prev = p.floor;
+      p.floor = dest.slug;
+      // arrive beside the portal that leads back where we came from, else the floor's default spawn
+      const back = dest.portals.find((pt) => pt.to === prev);
+      const sx = back ? back.x + back.w / 2 : dest.spawn.x, sy = back ? back.y + back.h + 40 : dest.spawn.y;
+      p.x = clamp(sx, 24, dest.w - 24); p.y = clamp(sy, 24, dest.h - 24); p.lastMoveAt = Date.now();
+      send(ws, { t: "floor", world: worldForClient(dest.slug), you: { id: p.id, x: Math.round(p.x), y: Math.round(p.y), floor: p.floor } });
+      console.log(`~ ${p.name} (${p.id}) → floor '${dest.slug}'`);
     }
   });
 
@@ -319,17 +374,25 @@ wss.on("connection", (ws) => {
 let lastTick = Date.now();
 setInterval(() => {
   const now = Date.now(), dt = (now - lastTick) / 1000; lastTick = now;
-  if (mediaWall.playing) { mediaWall.pos += dt; if (mediaWall.pos > mediaWall.dur) mediaWall.pos = 0; }
+  for (const f of floors.values()) if (f.mediaWall && f.mediaWall.playing) { f.mediaWall.pos += dt; if (f.mediaWall.pos > f.mediaWall.dur) f.mediaWall.pos = 0; }
   if (clients.size === 0) return;
-  const players = localPlayers().concat(remotePlayers()); // local + cross-node (Redis) presence
-  const doors = {}; for (const r of rooms) doors[r.id] = r.door.state;
-  const snap = JSON.stringify({ t: "snapshot", players, doors, media: { playing: mediaWall.playing, pos: Math.round(mediaWall.pos) }, recording });
-  for (const ws of clients.keys()) if (ws.readyState === 1) ws.send(snap);
+  // group all presence (local + cross-node) by floor, then send each client only its own floor's snapshot
+  const all = localPlayers().concat(remotePlayers());
+  const byFloor = new Map();
+  for (const pl of all) { const fl = pl.floor || DEFAULT_FLOOR; let arr = byFloor.get(fl); if (!arr) { arr = []; byFloor.set(fl, arr); } arr.push(pl); }
+  const snapByFloor = new Map();
+  for (const [slug, plist] of byFloor) {
+    const f = floors.get(slug) || anyFloor();
+    const doors = {}; for (const r of f.rooms) doors[r.id] = r.door.state;
+    const media = f.mediaWall ? { playing: f.mediaWall.playing, pos: Math.round(f.mediaWall.pos) } : null;
+    snapByFloor.set(slug, JSON.stringify({ t: "snapshot", floor: slug, players: plist, doors, media, recording }));
+  }
+  for (const [ws, p] of clients) { if (ws.readyState !== 1) continue; const s = snapByFloor.get(p.floor); if (s) ws.send(s); }
 }, 1000 / TICK_HZ);
 
-// analytics sampler — accumulate occupant-seconds per zone every 5s (spec 6.20)
+// analytics sampler — accumulate occupant-seconds per zone every 5s (spec 6.20), keyed by floor
 setInterval(() => {
-  for (const p of clients.values()) { const r = rooms.find((rm) => inRoom(p, rm)); const k = r ? r.id : "open"; roomSeconds[k] = (roomSeconds[k] || 0) + 5; }
+  for (const p of clients.values()) { const f = floorOf(p); const r = f.rooms.find((rm) => inRoom(p, rm)); const k = f.slug + ":" + (r ? r.id : "open"); roomSeconds[k] = (roomSeconds[k] || 0) + 5; }
 }, 5000);
 
 // heartbeat — terminate sockets that stop responding so presence/analytics stay accurate (§8)
@@ -340,14 +403,18 @@ const heartbeat = setInterval(() => {
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 function json(res, obj, code = 200) { res.writeHead(code, { "Content-Type": "application/json" }); res.end(JSON.stringify(obj)); }
 function broadcastLocal(msg) { const s = JSON.stringify(msg); for (const ws of clients.keys()) if (ws.readyState === 1) ws.send(s); }
-// chat routing (§6.9): floor = everyone; nearby = same room, or within radius on the open floor
+// chat routing (§6.9): channels are org-wide (cross-floor); floor + nearby are local to the sender's floor
 function deliverChat(d) {
+  const dfloor = d.floor || DEFAULT_FLOOR;
   for (const [ws, p] of clients) {
+    const pfloor = p.floor || DEFAULT_FLOOR;
     let target;
-    if (d.scope === "floor" || d.scope === "channel") target = true;        // floor + open channels reach all
+    if (d.scope === "channel") target = true;                              // #channels span every floor
     else if (d.scope === "dm") target = (p.id === d.from || p.id === d.to); // DM: sender + recipient only
+    else if (pfloor !== dfloor) target = false;                            // floor + nearby never cross floors
+    else if (d.scope === "floor") target = true;                          // whole (same) floor
     else { // nearby: same room, or within radius on the open floor
-      const pr = rooms.find((r) => inRoom(p, r)), prId = pr ? pr.id : null;
+      const pr = floorOf(p).rooms.find((r) => inRoom(p, r)), prId = pr ? pr.id : null;
       target = d.roomId ? (prId === d.roomId) : (!prId && Math.hypot(p.x - d.x, p.y - d.y) < CHAT_NEARBY);
     }
     if (target) send(ws, { t: "chat", from: d.from, name: d.name, scope: d.scope, channel: d.channel, to: d.to, body: d.body, ts: d.ts });
@@ -356,33 +423,41 @@ function deliverChat(d) {
 function deny(ws, action, need) { send(ws, { t: "denied", action, need }); } // RBAC refusal feedback
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
-// Optionally load the authoritative world from the API (apps/api). Falls back
-// to the built-in geometry above if WORLD_API is unset or unreachable.
-function applyWorld(w) {
-  WORLD.w = w.w; WORLD.h = w.h;
-  obstacles = w.obstacles.slice();
-  rooms = w.rooms.map((r) => ({ id: r.id, name: r.name, color: r.color, bounds: r.bounds,
+// Build a floor's mutable runtime state from an API WorldBlob (see apps/api world.service).
+function buildFloorFromBlob(slug, w) {
+  const rooms = (w.rooms || []).map((r) => ({ id: r.id, name: r.name, color: r.color, bounds: r.bounds,
     door: { x: r.door.x, y: r.door.y, w: r.door.w, h: r.door.h, state: r.door.state || "closed", knocking: false } }));
-  mediaWall = { x: w.mediaWall.x, y: w.mediaWall.y, w: w.mediaWall.w, base: w.mediaWall.base,
-    screenH: w.mediaWall.screenH, title: w.mediaWall.title, playing: true, pos: 0, dur: w.mediaWall.dur };
-  if (w.branding) branding = w.branding;
+  const mediaWall = w.mediaWall ? { x: w.mediaWall.x, y: w.mediaWall.y, w: w.mediaWall.w, base: w.mediaWall.base,
+    screenH: w.mediaWall.screenH, title: w.mediaWall.title, playing: true, pos: 0, dur: w.mediaWall.dur } : null;
+  const portals = (w.portals || []).map((pt) => ({ id: pt.id, x: pt.x, y: pt.y, w: pt.w, h: pt.h, to: pt.to, label: pt.label, color: pt.color }));
+  return { slug, name: w.name || slug, w: w.w, h: w.h, obstacles: (w.obstacles || []).slice(), rooms, mediaWall, portals,
+    branding: w.branding || { name: "NexSpace", color: "#5b8cff", logo: "", whiteLabel: false },
+    spawn: w.spawn || { x: Math.round((w.w || 2000) * 0.4), y: Math.round((w.h || 1400) * 0.6) } };
 }
 async function reloadAndBroadcast() {
   await loadWorld();                               // re-fetch from WORLD_API if configured
-  const msg = JSON.stringify({ t: "world", world: worldForClient() });
-  for (const ws of clients.keys()) if (ws.readyState === 1) ws.send(msg);
+  for (const [ws, p] of clients) {
+    if (!floors.has(p.floor)) p.floor = anyFloor().slug; // floor may have been removed on reload
+    if (ws.readyState === 1) ws.send(JSON.stringify({ t: "world", world: worldForClient(p.floor) }));
+  }
   console.log("World reloaded and broadcast to " + clients.size + " client(s)");
 }
+// Load EVERY floor from the API (apps/api). Falls back to the built-in floors if WORLD_API is unset/unreachable.
 async function loadWorld() {
-  if (!process.env.WORLD_API) return;
-  const url = process.env.WORLD_API.replace(/\/$/, "") + "/floors/default/world";
+  if (!process.env.WORLD_API) return; // keep built-in floors (default + rooftop)
+  const base = process.env.WORLD_API.replace(/\/$/, "");
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    applyWorld(await res.json());
-    console.log("Loaded world from API:", url);
+    let list = null;
+    try { const r = await fetch(base + "/floors"); if (r.ok) list = await r.json(); } catch {}
+    if (!Array.isArray(list) || !list.length) list = [{ slug: "default" }];
+    const loaded = new Map();
+    for (const item of list) {
+      try { const r = await fetch(base + "/floors/" + item.slug + "/world"); if (!r.ok) continue; loaded.set(item.slug, buildFloorFromBlob(item.slug, await r.json())); } catch {}
+    }
+    if (loaded.size) { floors.clear(); for (const [k, v] of loaded) floors.set(k, v); console.log("Loaded " + loaded.size + " floor(s) from API: " + [...loaded.keys()].join(", ")); }
+    else console.warn("WORLD_API returned no usable floors — using built-in floors");
   } catch (e) {
-    console.warn(`WORLD_API unavailable (${e.message}) — using built-in geometry`);
+    console.warn(`WORLD_API unavailable (${e.message}) — using built-in floors`);
   }
 }
 loadWorld().finally(() => {

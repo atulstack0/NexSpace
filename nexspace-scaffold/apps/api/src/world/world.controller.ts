@@ -6,6 +6,12 @@ import { AuthService } from "../auth/auth.service";
 export class WorldController {
   constructor(private world: WorldService, private auth: AuthService) {}
 
+  // GET /floors  -> [{ slug, name }] for the multi-floor loader + client switcher
+  @Get()
+  listFloors() {
+    return this.world.getFloors();
+  }
+
   // GET /floors/default/world  -> WorldBlob consumed by the realtime server + clients
   @Get(":slug/world")
   getWorld(@Param("slug") slug: string) {

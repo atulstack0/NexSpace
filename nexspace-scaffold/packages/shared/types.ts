@@ -78,15 +78,20 @@ export interface PresenceState {
 export type DoorState = "open" | "closed" | "locked";
 
 /** Static geometry sent once in `welcome` (authoritative; from the API/DB in prod). */
+export interface PortalObject { id: string; x: number; y: number; w: number; h: number; to: string; label: string; color: string } // links to another floor's slug (§6 multi-floor)
 export interface WorldBlob {
+  slug?: string;   // which floor this is
+  name?: string;   // human floor name (e.g. "Rooftop Garden")
   w: number;
   h: number;
   obstacles: Array<{ x: number; y: number; w: number; h: number; r?: number }>;
   rooms: Array<{ id: string; name: string; color: string;
     bounds: { x: number; y: number; w: number; h: number };
     door: { x: number; y: number; w: number; h: number; state?: DoorState } }>;
-  mediaWall: { x: number; y: number; w: number; base: number; screenH: number; title: string; dur: number };
+  mediaWall: { x: number; y: number; w: number; base: number; screenH: number; title: string; dur: number } | null;
+  portals?: PortalObject[];                                  // doorways to other floors (§6 multi-floor)
   branding?: { name: string; color: string; logo: string; whiteLabel: boolean }; // per-space white-label (6.12)
+  floors?: Array<{ slug: string; name: string }>;            // every floor, for the switcher (§6 multi-floor)
 }
 
 // ---- Client → Server ----
@@ -106,7 +111,8 @@ export interface WbClearMsg    { t: "wbclear"; }                        // clear
 export interface ReactSendMsg  { t: "react"; emoji: string; }          // emoji reaction (6.6)
 export interface NudgeSendMsg  { t: "nudge"; to: string; }             // ping a user (6.9)
 export interface ModerateMsg   { t: "moderate"; action: "mute" | "unmute" | "kick"; target: string; } // moderation (6.16)
-export type ClientMsg = JoinMsg | MoveMsg | StateMsg | BroadcastMsg | MediaMsg | DoorMsg | KnockMsg | RecordingMsg | AdminReloadMsg | ChatSendMsg | DrawMsg | WbClearMsg | ReactSendMsg | NudgeSendMsg | ModerateMsg;
+export interface PortalMsg     { t: "portal"; to: string; } // travel to another floor by slug (§6 multi-floor)
+export type ClientMsg = JoinMsg | MoveMsg | StateMsg | BroadcastMsg | MediaMsg | DoorMsg | KnockMsg | RecordingMsg | AdminReloadMsg | ChatSendMsg | DrawMsg | WbClearMsg | ReactSendMsg | NudgeSendMsg | ModerateMsg | PortalMsg;
 
 // ---- Server → Client ----
 export interface PlayerSnapshot {
@@ -119,6 +125,7 @@ export interface PlayerSnapshot {
   talking: boolean;
   bcast: boolean;          // broadcasting to the whole floor
   role: string;            // owner | admin | member | guest (6.14)
+  floor?: string;          // which floor this player is on (§6 multi-floor)
 }
 export interface WelcomeMsg  { t: "welcome"; id: string; world: WorldBlob; you: PlayerSnapshot; whiteboard?: WhiteboardStroke[]; }
 export interface DeniedMsg   { t: "denied"; action: string; need: string; }   // RBAC refusal (6.14)
@@ -128,15 +135,17 @@ export interface FullMsg        { t: "full"; }                                 /
 export interface ChatMessage    { t: "chat"; from: string; name: string; scope: "nearby" | "floor" | "channel" | "dm"; channel?: string | null; to?: string | null; body: string; ts: number; } // (6.9)
 export interface SnapshotMsg {
   t: "snapshot";
+  floor?: string;                            // which floor this snapshot is for (§6 multi-floor)
   players: PlayerSnapshot[];
   doors: Record<string, DoorState>;          // roomId -> state
-  media: { playing: boolean; pos: number };  // shared media-wall playback (synced)
+  media: { playing: boolean; pos: number } | null;  // shared media-wall playback (null if floor has no media wall)
   recording: { on: boolean; by: string | null; egressId?: string | null }; // shared recording indicator (6.17)
 }
+export interface FloorChangeMsg { t: "floor"; world: WorldBlob; you: { id: string; x: number; y: number; floor: string }; } // arrived on a new floor via portal (§6)
 export interface ReactMsg      { t: "react"; from: string; emoji: string; } // broadcast reaction (6.6)
 export interface NudgeMsg      { t: "nudge"; from: string; name: string; }   // nudge delivered (6.9)
 export interface KickedMsg     { t: "kicked"; }                              // you were removed (6.16)
-export type ServerMsg = WelcomeMsg | SnapshotMsg | DeniedMsg | WorldUpdateMsg | RateLimitedMsg | FullMsg | ChatMessage | DrawMsg | WbClearMsg | ReactMsg | NudgeMsg | KickedMsg;
+export type ServerMsg = WelcomeMsg | SnapshotMsg | FloorChangeMsg | DeniedMsg | WorldUpdateMsg | RateLimitedMsg | FullMsg | ChatMessage | DrawMsg | WbClearMsg | ReactMsg | NudgeMsg | KickedMsg;
 
 // ====================================================================
 // Public API + webhooks (spec §6.18). See docs/PUBLIC_API.md.

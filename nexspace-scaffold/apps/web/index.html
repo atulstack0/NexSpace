@@ -82,6 +82,7 @@
   <span class="pill" id="conn"><b id="connText">connecting…</b></span>
   <span class="pill">online: <b id="count">1</b></span>
   <span class="pill" id="rolePill">you: guest</span>
+  <select id="floorSel" title="Switch floor (multi-floor §6)" style="display:none"></select>
   <span class="sep"></span>
   <div class="seg" id="viewSeg" title="Same office, two renderers (spec 6.23)"><button data-view="2d" class="active">🗺️ 2D</button><button data-view="3d">🧊 3D</button></div>
   <span class="sep"></span>
@@ -159,6 +160,7 @@
 
   // ---------- State ----------
   let WORLD={w:2200,h:1500},world=null,myId=null;
+  let myFloor='default',portalCD=0; // current floor slug + portal-travel cooldown (§6 multi-floor)
   let doors={},media={playing:true,pos:0},recording={on:false,by:null},myEgressId=null;
   const me={x:880,y:900,facing:0};
   const peers=new Map();        // id -> {x,y,facing,name,status,talking,bcast,rx,ry}
@@ -203,11 +205,13 @@
     ws.onerror=()=>{conn.classList.add('bad');ct.textContent='connection error';};
     ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch{return;}
       if(m.t==='welcome'){myId=m.id;world=m.world;WORLD={w:world.w,h:world.h};me.x=m.you.x;me.y=m.you.y;cam.x=me.x;cam.y=me.y;
+        myFloor=world.slug||(m.you&&m.you.floor)||'default';
         world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});
         if(m.you&&m.you.role){myRole=m.you.role;const rp=document.getElementById('rolePill');if(rp)rp.textContent='you: '+myRole;}
         if(m.whiteboard)wbStrokes=m.whiteboard.slice();
-        applyBranding(world.branding);
+        applyBranding(world.branding);populateFloors(world);
         initLiveKit();}
+      else if(m.t==='floor'){applyFloorChange(m);}
       else if(m.t==='snapshot'){
         doors=m.doors||doors; if(m.media)media=m.media; if(m.recording)recording=m.recording;
         const seen=new Set();
@@ -241,8 +245,9 @@
   canvas.addEventListener('mousedown',e=>{if(e.button!==0)return;
     if(viewMode==='3d'){if(!pointerLocked&&canvas.requestPointerLock)canvas.requestPointerLock();return;} // click to look around
     const w={x:(e.clientX-VW/2)/cam.zoom+cam.x,y:(e.clientY-VH/2)/cam.zoom+cam.y};
-    if(world){const mc={x:world.mediaWall.x+world.mediaWall.w/2,y:world.mediaWall.y};
+    if(world&&world.mediaWall){const mc={x:world.mediaWall.x+world.mediaWall.w/2,y:world.mediaWall.y};
       if(Math.hypot(w.x-mc.x,w.y-mc.y)<90){toggleMedia();return;}}
+    if(world&&world.portals){for(const pt of world.portals){if(w.x>=pt.x&&w.x<=pt.x+pt.w&&w.y>=pt.y&&w.y<=pt.y+pt.h){travelTo(pt.to);return;}}}
     target=w;});
   document.addEventListener('pointerlockchange',()=>{pointerLocked=!!document.pointerLockElement;});
   document.addEventListener('mousemove',e=>{if(!pointerLocked||viewMode!=='3d')return;
@@ -297,7 +302,8 @@
       const e=peers.get(part.identity);let want=true;
       if(e){const d=Math.hypot(e.rx-me.x,e.ry-me.y),pr=roomAtPt(e.rx,e.ry);want=!!(e.bcast||(mr&&mr===pr)||d<R().outer*1.25);}
       part.trackPublications.forEach(pub=>{try{pub.setSubscribed(want);}catch(_){}}); }}
-    // media wall
+    // media wall (floors without one mute the media node)
+    if(!world.mediaWall){if(mediaNode)mediaNode.voice.gain.setTargetAtTime(0,t,0.1);return;}
     const mc={x:world.mediaWall.x+world.mediaWall.w/2,y:world.mediaWall.y};setPos(mediaNode.pan,mc.x,mc.y);
     let mv=0;if(media.playing&&!mr){const d=Math.hypot(mc.x-me.x,mc.y-me.y);mv=d<=R().inner?1:d>=R().outer?0:1-(d-R().inner)/(R().outer-R().inner);}
     mediaNode.voice.gain.setTargetAtTime(muted?0:mv*0.12,t,0.1);}
@@ -397,6 +403,7 @@
       ctx.strokeStyle='rgba(91,140,255,.5)';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(me.x,me.y,R().outer,0,7);ctx.stroke();}
     if(myBcast)ripples(me.x,me.y);
     for(const o of world.obstacles){ctx.fillStyle='#222c44';if(o.r){rr(o.x,o.y,o.w,o.h,o.r);ctx.fill();}else ctx.fillRect(o.x,o.y,o.w,o.h);}
+    drawPortals();
     for(const r of world.rooms)drawDoor(r);
     drawMedia();
     if(showLinks&&!muted){for(const e of peers.values()){const v=e.bcast?1:peerVol(e);
@@ -412,7 +419,7 @@
   function drawDoor(r){const d=r.door,st=doors[r.id]||'closed';const col=st==='open'?'#39d3a6':st==='locked'?'#ff5d6c':'#ffb454';
     ctx.fillStyle=hexA(col,st==='open'?.25:.7);rr(d.x,d.y,d.w,d.h,4);ctx.fill();ctx.strokeStyle=col;ctx.lineWidth=2;rr(d.x,d.y,d.w,d.h,4);ctx.stroke();
     if(st==='locked'){ctx.fillStyle='#fff';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.fillText('🔒',d.x+d.w/2,d.y+d.h/2+4);}}
-  function drawMedia(){const m=world.mediaWall,sx=m.x,sy=m.y-m.screenH,sw=m.w,sh=m.screenH;
+  function drawMedia(){if(!world.mediaWall)return;const m=world.mediaWall,sx=m.x,sy=m.y-m.screenH,sw=m.w,sh=m.screenH;
     ctx.fillStyle='#222c44';ctx.fillRect(m.x,m.y,m.w,m.base);
     ctx.fillStyle='#0a0f1c';rr(sx,sy,sw,sh,8);ctx.fill();ctx.save();rr(sx,sy,sw,sh,8);ctx.clip();
     if(media.playing){for(let i=0;i<22;i++){const bh=18+Math.abs(Math.sin(frame*.06+i))*Math.abs(Math.sin(frame*.013+i*1.7))*(sh-30);
@@ -445,7 +452,8 @@
     mctx.clearRect(0,0,W,H);mctx.fillStyle='#0d1424';mctx.fillRect(0,0,W,H);
     for(const r of world.rooms){const b=r.bounds;mctx.fillStyle=hexA(r.color,.3);mctx.fillRect(b.x*sx,b.y*sy,b.w*sx,b.h*sy);}
     mctx.fillStyle='#2a3552';for(const o of world.obstacles)mctx.fillRect(o.x*sx,o.y*sy,Math.max(1,o.w*sx),Math.max(1,o.h*sy));
-    mctx.fillStyle='#5b8cff';mctx.fillRect(world.mediaWall.x*sx,world.mediaWall.y*sy,world.mediaWall.w*sx,3);
+    if(world.mediaWall){mctx.fillStyle='#5b8cff';mctx.fillRect(world.mediaWall.x*sx,world.mediaWall.y*sy,world.mediaWall.w*sx,3);}
+    if(world.portals)for(const pt of world.portals){mctx.fillStyle=pt.color;mctx.fillRect(pt.x*sx,pt.y*sy,Math.max(2,pt.w*sx),Math.max(2,pt.h*sy));}
     for(const [id,e] of peers){mctx.fillStyle=e.bcast?'#ff5d6c':hsl(hueOf(id));mctx.beginPath();mctx.arc(e.rx*sx,e.ry*sy,2.4,0,7);mctx.fill();}
     mctx.fillStyle='#fff';mctx.beginPath();mctx.arc(me.x*sx,me.y*sy,3,0,7);mctx.fill();}
 
@@ -484,11 +492,12 @@
       for(let i=0;i<4;i++){const a=cn[i],z=cn[(i+1)%4],cz=_dot(_sub([(a[0]+z[0])/2,(a[1]+z[1])/2,H/2],CAM.camPos),CAM.Fc);items.push({cz,k:'wall',a,z,H,c});}}
     for(const o of world.obstacles){if((o.w||0)>WORLD.w-100||(o.h||0)>WORLD.h-100)continue;const cx=o.x+(o.w||40)/2,cy=o.y+(o.h||40)/2,cz=_dot(_sub([cx,cy,20],CAM.camPos),CAM.Fc);
       items.push({cz,k:'furn',cx,cy,w:Math.min(o.w||40,o.h||40),boxH:(o.r&&o.r>30)?20:46});}
-    {const cx=world.mediaWall.x+world.mediaWall.w/2,cy=world.mediaWall.y,cz=_dot(_sub([cx,cy,(world.mediaWall.screenH||150)/2],CAM.camPos),CAM.Fc);items.push({cz,k:'media'});}
+    if(world.mediaWall){const cx=world.mediaWall.x+world.mediaWall.w/2,cy=world.mediaWall.y,cz=_dot(_sub([cx,cy,(world.mediaWall.screenH||150)/2],CAM.camPos),CAM.Fc);items.push({cz,k:'media'});}
+    if(world.portals)for(const pt of world.portals){const cx=pt.x+pt.w/2,cy=pt.y+pt.h/2,cz=_dot(_sub([cx,cy,30],CAM.camPos),CAM.Fc);items.push({cz,k:'portal',cx,cy,w:pt.w,color:pt.color,label:pt.label});}
     for(const [id,e] of peers){const cz=_dot(_sub([e.rx,e.ry,30],CAM.camPos),CAM.Fc),lv=lkVideo.get(id);items.push({cz,k:'av',x:e.rx,y:e.ry,zoff:0,hue:hueOf(id),name:e.name||'Guest',talking:e.talking,bcast:e.bcast,isMe:false,vid:lv&&lv.el});}
     if(cameraMode!=='firstPerson')items.push({cz:_dot(_sub([me.x,me.y,30],CAM.camPos),CAM.Fc),k:'av',x:me.x,y:me.y,zoff:jumpZ,hue:212,name:'You',talking:false,bcast:myBcast,isMe:true,vid:localVideoEl}); // hide own avatar in first-person
     items.sort((p,q)=>q.cz-p.cz);
-    for(const it of items){if(it.k==='wall')d3wall(it);else if(it.k==='furn')d3box(it.cx,it.cy,it.w,it.boxH);else if(it.k==='media')d3media();else d3av(it);}
+    for(const it of items){if(it.k==='wall')d3wall(it);else if(it.k==='furn')d3box(it.cx,it.cy,it.w,it.boxH);else if(it.k==='media')d3media();else if(it.k==='portal')d3portal(it);else d3av(it);}
     drawMinimap();
   }
   function d3wall(w){const b0=project([w.a[0],w.a[1],0]),b1=project([w.z[0],w.z[1],0]),t1=project([w.z[0],w.z[1],w.H]),t0=project([w.a[0],w.a[1],w.H]);
@@ -496,7 +505,12 @@
     ctx.beginPath();ctx.moveTo(b0.x,b0.y);ctx.lineTo(b1.x,b1.y);ctx.lineTo(t1.x,t1.y);ctx.lineTo(t0.x,t0.y);ctx.closePath();ctx.fill();ctx.stroke();}
   function d3box(cx,cy,size,boxH){const base=project([cx,cy,0]),top=project([cx,cy,boxH]);if(!base||!top)return;const w=size*base.s;
     ctx.fillStyle='#2a3552';ctx.fillRect(base.x-w/2,top.y,w,base.y-top.y);ctx.strokeStyle='rgba(0,0,0,.3)';ctx.lineWidth=1;ctx.strokeRect(base.x-w/2,top.y,w,base.y-top.y);}
-  function d3media(){const m=world.mediaWall,sh=m.screenH||150,b0=project([m.x,m.y,0]),b1=project([m.x+m.w,m.y,0]),t1=project([m.x+m.w,m.y,sh]),t0=project([m.x,m.y,sh]);
+  function d3portal(it){const base=project([it.cx,it.cy,0]),top=project([it.cx,it.cy,90]);if(!base||!top)return;const w=it.w*base.s;
+    const g=ctx.createLinearGradient(0,top.y,0,base.y);g.addColorStop(0,hexA(it.color,0.85));g.addColorStop(1,hexA(it.color,0.15));
+    ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(base.x,(top.y+base.y)/2,w/2,(base.y-top.y)/2,0,0,7);ctx.fill();
+    ctx.strokeStyle=hexA(it.color,0.9);ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle=hexA(it.color,0.95);ctx.font='600 12px sans-serif';ctx.textAlign='center';ctx.fillText(it.label||'Portal',base.x,top.y-6);}
+  function d3media(){if(!world.mediaWall)return;const m=world.mediaWall,sh=m.screenH||150,b0=project([m.x,m.y,0]),b1=project([m.x+m.w,m.y,0]),t1=project([m.x+m.w,m.y,sh]),t0=project([m.x,m.y,sh]);
     if(!b0||!b1||!t1||!t0)return;ctx.fillStyle='#0a0f1c';ctx.beginPath();ctx.moveTo(b0.x,b0.y);ctx.lineTo(b1.x,b1.y);ctx.lineTo(t1.x,t1.y);ctx.lineTo(t0.x,t0.y);ctx.closePath();ctx.fill();
     ctx.save();ctx.clip();if(media.playing){const top=Math.min(t0.y,t1.y),bot=Math.max(b0.y,b1.y),left=Math.min(t0.x,b0.x),right=Math.max(t1.x,b1.x);
       for(let i=0;i<18;i++){const bh=(bot-top)*.2+Math.abs(Math.sin(frame*.06+i))*(bot-top)*.6;ctx.fillStyle='hsl('+(200+i*7)+' 70% 55%)';ctx.fillRect(left+i*((right-left)/18),bot-bh,((right-left)/18)-2,bh);}}
@@ -554,9 +568,17 @@
         const w = o.w || 40, h = o.h || 40, bh = (o.r && o.r > 30) ? 22 : 46;
         const m = new THREE.Mesh(new THREE.BoxGeometry(w, bh, h), new THREE.MeshStandardMaterial({ color: 0x2a3552 })); m.position.set(o.x + w / 2, bh / 2, o.y + h / 2); worldGroup.add(m);
       }
-      const mw = world.mediaWall, sh = mw.screenH || 150;
-      const panel = new THREE.Mesh(new THREE.PlaneGeometry(mw.w, sh), new THREE.MeshBasicMaterial({ color: 0x123, side: THREE.DoubleSide }));
-      panel.position.set(mw.x + mw.w / 2, sh / 2 + (mw.base || 16), mw.y); worldGroup.add(panel);
+      const mw = world.mediaWall;
+      if (mw) {
+        const sh = mw.screenH || 150;
+        const panel = new THREE.Mesh(new THREE.PlaneGeometry(mw.w, sh), new THREE.MeshBasicMaterial({ color: 0x123, side: THREE.DoubleSide }));
+        panel.position.set(mw.x + mw.w / 2, sh / 2 + (mw.base || 16), mw.y); worldGroup.add(panel);
+      }
+      for (const pt of (world.portals || [])) { // glowing portal pillar (§6 multi-floor)
+        const col = new THREE.Color(pt.color || "#ffb454");
+        const pil = new THREE.Mesh(new THREE.CylinderGeometry(pt.w / 2, pt.w / 2, 90, 20), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.5 }));
+        pil.position.set(pt.x + pt.w / 2, 45, pt.y + pt.h / 2); worldGroup.add(pil);
+      }
       worldBuilt = true;
     }
     function letterTex(ch, color) {
@@ -633,6 +655,28 @@
     else{ws.send(JSON.stringify({t:'knock',roomId:r.id}));toast('🔔 You knocked on '+r.name);}});
   function toast(msg){const t=document.getElementById('toasts'),d=document.createElement('div');d.className='toast';d.textContent=msg;
     t.appendChild(d);setTimeout(()=>d.style.opacity='0',2400);setTimeout(()=>d.remove(),3000);}
+  // Multi-floor + portals (spec §6): travel between floors via portal step-through, click, or the switcher.
+  function travelTo(slug){if(!slug||slug===myFloor)return;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'portal',to:slug}));portalCD=performance.now()+1400;}
+  function checkPortals(){if(!world||!world.portals||performance.now()<portalCD)return;
+    for(const pt of world.portals){if(me.x>=pt.x&&me.x<=pt.x+pt.w&&me.y>=pt.y&&me.y<=pt.y+pt.h){travelTo(pt.to);return;}}}
+  function applyFloorChange(m){world=m.world;WORLD={w:world.w,h:world.h};myFloor=world.slug||(m.you&&m.you.floor)||myFloor;
+    me.x=m.you.x;me.y=m.you.y;cam.x=me.x;cam.y=me.y;target=null;
+    doors={};world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});
+    peers.forEach((e,id)=>removeVoice(id));peers.clear();
+    portalCD=performance.now()+1400; // grace so you don't immediately bounce back through the return portal
+    applyBranding(world.branding);populateFloors(world);
+    if(threeMode)Three3D.rebuild();
+    toast('🪜 Entered '+(world.name||myFloor));}
+  function populateFloors(world){const sel=document.getElementById('floorSel');if(!sel)return;
+    const list=world.floors||[];if(list.length<2){sel.style.display='none';return;}
+    sel.innerHTML=list.map(f=>'<option value="'+f.slug+'">🪜 '+escapeHtml(f.name)+'</option>').join('');
+    sel.value=world.slug||myFloor;sel.style.display='';}
+  function drawPortals(){if(!world.portals)return;for(const pt of world.portals){const cx=pt.x+pt.w/2,cy=pt.y+pt.h/2,rad=pt.w/2;
+    const pulse=0.5+0.5*Math.sin(frame*0.08);
+    const g=ctx.createRadialGradient(cx,cy,rad*0.2,cx,cy,rad*1.25);g.addColorStop(0,hexA(pt.color,0.55));g.addColorStop(1,hexA(pt.color,0));
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,rad*1.25,0,7);ctx.fill();
+    ctx.strokeStyle=hexA(pt.color,0.7+0.3*pulse);ctx.lineWidth=3;ctx.beginPath();ctx.arc(cx,cy,rad*(0.82+0.12*pulse),0,7);ctx.stroke();
+    ctx.fillStyle=hexA(pt.color,0.95);ctx.font='600 14px sans-serif';ctx.textAlign='center';ctx.fillText(pt.label||'Portal',cx,pt.y-8);}}
   // Per-space branding / white-label (spec §6.12): accent color, name, optional logo.
   function applyBranding(b){if(!b)return;
     if(b.color)document.documentElement.style.setProperty('--accent',b.color);
@@ -754,9 +798,10 @@
   // ---------- Start ----------
   let last=performance.now(),acc=0;
   function loop(now){const dt=Math.min(0.05,(now-last)/1000);last=now;frame++;
-    step(dt);sendMove(now);updateAudio();
+    step(dt);checkPortals();sendMove(now);updateAudio();
     if(viewMode==='3d'){ if(threeMode){Three3D.frame();drawMinimap();} else render3D(); } else draw();
     acc+=dt;if(acc>0.1){updateUI();acc=0;}requestAnimationFrame(loop);}
+  document.getElementById('floorSel').addEventListener('change',function(){travelTo(this.value);});
   document.getElementById('go').addEventListener('click',async function(){
     const name=(document.getElementById('name').value||'Guest').slice(0,16);
     const email=document.getElementById('email').value.trim(),password=document.getElementById('password').value;

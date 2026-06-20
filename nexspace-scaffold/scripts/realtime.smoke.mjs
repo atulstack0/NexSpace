@@ -49,11 +49,12 @@ await new Promise((res, rej) => {
 function join(name, token) {
   return new Promise((resolve) => {
     const ws = new WebSocket(`ws://localhost:${PORT}`);
-    const st = { ws, name, id: null, role: null, world: null, last: null, denied: [], rateLimited: false, chats: [], draws: [], cleared: false, reacts: [], nudged: false, kicked: false };
+    const st = { ws, name, id: null, role: null, world: null, floorMsg: null, last: null, denied: [], rateLimited: false, chats: [], draws: [], cleared: false, reacts: [], nudged: false, kicked: false };
     ws.on("open", () => ws.send(JSON.stringify({ t: "join", name, token })));
     ws.on("message", (d) => {
       const m = JSON.parse(d.toString());
       if (m.t === "welcome") { st.id = m.id; st.role = m.you.role; st.world = m.world; resolve(st); }
+      if (m.t === "floor") { st.floorMsg = m; st.world = m.world; } // arrived on a new floor via portal
       if (m.t === "snapshot") st.last = m;
       if (m.t === "denied") st.denied.push(m.action);
       if (m.t === "rateLimited") st.rateLimited = true;
@@ -75,6 +76,7 @@ try {
   (admin.role === "admin") ? ok("admin token → admin role") : bad("admin role not applied (got " + admin.role + ")");
   (guest.role === "guest") ? ok("no token → guest role") : bad("guest role not applied");
   (admin.world?.branding && typeof admin.world.branding.name === "string" && typeof admin.world.branding.color === "string") ? ok("welcome carries branding (name+color)") : bad("welcome world.branding missing/malformed");
+  (admin.world?.floors?.length >= 2 && admin.world?.portals?.some((p) => p.to === "rooftop")) ? ok("welcome lists floors + portals (multi-floor)") : bad("multi-floor world blob missing floors/portals");
 
   // walk into the Focus Room at (500,500). The server-authoritative speed cap (MAX_SPEED) only
   // allows ~one step of travel per update since this client's last move, and spawn is ~570-665px
@@ -204,6 +206,20 @@ try {
     setTimeout(() => { try { ws.close(); } catch {} resolve(r); }, 900);
   });
   (third.full && !third.welcomed) ? ok("connection cap rejects 3rd client (MAX_CLIENTS=2)") : bad("connection cap not enforced");
+
+  // multi-floor + portals (§6) — admin travels to the rooftop; guest stays on the ground floor
+  admin.ws.send(JSON.stringify({ t: "portal", to: "rooftop" }));
+  await wait(300);
+  (admin.floorMsg?.world?.slug === "rooftop" && admin.floorMsg?.you?.floor === "rooftop") ? ok("portal moves player to the rooftop floor") : bad("portal did not switch floors");
+  (guest.last?.floor === "default" && !guest.last?.players?.some((p) => p.id === admin.id)) ? ok("snapshots are floor-scoped (rooftop traveler hidden from ground)") : bad("snapshot leaked a player across floors");
+  // floor chat must not cross floors
+  admin.ws.send(JSON.stringify({ t: "chat", scope: "floor", body: "rooftop-only" }));
+  await wait(300);
+  (!guest.chats.some((c) => c.body === "rooftop-only")) ? ok("floor chat does not cross floors") : bad("floor chat leaked across floors");
+  // travel back — the ground floor sees the admin again
+  admin.ws.send(JSON.stringify({ t: "portal", to: "default" }));
+  await wait(300);
+  (admin.floorMsg?.world?.slug === "default" && guest.last?.players?.some((p) => p.id === admin.id)) ? ok("portal back to ground floor re-syncs presence") : bad("return portal did not re-sync");
 
   // reactions (6.6)
   admin.ws.send(JSON.stringify({ t: "react", emoji: "🎉" }));

@@ -40,8 +40,19 @@ export class WorldService {
       door: { x: r.doorX, y: r.doorY, w: r.doorW, h: r.doorH, state: r.doorState },
     }));
 
+    // portals (spec §6: multi-floor) — non-collidable PlacedObjects of type 'portal' linking to another floor's slug
+    const portals = floor.objects.filter((o) => o.type === "portal").map((o) => {
+      const c = this.parse(o.config);
+      return { id: c.id || o.id, x: o.x, y: o.y, w: c.w ?? 90, h: c.h ?? 90, to: c.to, label: c.label || "Portal", color: c.color || "#ffb454" };
+    });
+
     const branding = { name: "NexSpace", color: "#5b8cff", logo: "", whiteLabel: false, ...(floor.branding ? this.parse(floor.branding) : {}) };
-    return { w: floor.width, h: floor.height, environment: floor.environment, supports3d: floor.supports3d, obstacles, rooms, mediaWall, branding };
+    return { slug: floor.slug, name: floor.name, w: floor.width, h: floor.height, environment: floor.environment, supports3d: floor.supports3d, obstacles, rooms, mediaWall, portals, branding };
+  }
+
+  /** List every floor (slug + name) — feeds the realtime server's multi-floor loader and the client switcher. */
+  async getFloors() {
+    return this.prisma.floor.findMany({ select: { slug: true, name: true }, orderBy: { createdAt: "asc" } });
   }
 
   /** Raw floor (rooms + typed objects) for the editor to load and round-trip. */
