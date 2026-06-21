@@ -47,6 +47,8 @@
   #statusSel:hover,#floorSel:hover{border-color:var(--accent)}
   /* Shared YouTube TV — the player lives ON the wall TV (positioned over the canvas); everyone sees it. */
   #tvWorld{position:fixed;z-index:6;display:none;background:#000;border-radius:6px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.5);outline:2px solid rgba(91,140,255,.5)}
+  #tvWorld.pip{z-index:25;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.6);outline:2px solid rgba(91,140,255,.8)}
+  #tvWorld.pip::before{content:"📺 TV — live";position:absolute;top:-22px;left:0;font-size:11px;color:#aab6d6;font-weight:600;pointer-events:none}
   #tvWorld #tvFrameWrap{width:100%;height:100%}
   #tvWorld iframe,#tvWorld #ytplayer{width:100%;height:100%;border:0;display:block}
   #tvMute{position:absolute;left:0;right:0;bottom:0;text-align:center;font-size:11px;font-weight:600;color:#fff;background:rgba(0,0,0,.55);padding:3px;cursor:pointer}
@@ -715,7 +717,7 @@
     let _ray = null;   // reused raycaster for TV occlusion (lazy so THREE is loaded)
     // Real character model (Renderpeople "Eric"). Optional: if models/eric.glb or the loader is missing,
     // avatars stay on the built-in styled businessman. Convert one FBX → eric.glb (see CHARACTER.md).
-    let ericProto = null, ericState = "none";          // none | loading | ready | failed
+    let ericProto = null, ericClips = [], ericState = "none";   // none | loading | ready | failed
     const ERIC_FOR = "all";                            // "all" → everyone uses the model · "me" → only your avatar
     const ERIC_FACE = Math.PI;                          // base yaw so the model faces forward (flip by ±Math.PI if it faces away)
     function loadEric() {
@@ -723,7 +725,7 @@
       ericState = "loading";
       try {
         new THREE.GLTFLoader().load("models/eric.glb",
-          (g) => { ericProto = (g && (g.scene || (g.scenes && g.scenes[0]))) || null; ericState = ericProto ? "ready" : "failed"; },
+          (g) => { ericProto = (g && (g.scene || (g.scenes && g.scenes[0]))) || null; ericClips = (g && g.animations) || []; ericState = ericProto ? "ready" : "failed"; },
           undefined,
           () => { ericState = "failed"; });           // no file / network / parse error → keep the styled fallback
       } catch (_) { ericState = "failed"; }
@@ -739,6 +741,17 @@
       const tint = new THREE.Color("hsl(" + a.hue + ",60%,55%)");                       // subtle per-person tint
       m.traverse((n) => { if (n.isMesh && n.material) { n.frustumCulled = false; n.material = Array.isArray(n.material) ? n.material.map((mm) => tintMat(mm, tint)) : tintMat(n.material, tint); } });
       a.model = m; a.group.add(m); a.bodyGroup.visible = false; if (a.head) a.head.visible = false;
+      try {                                                                            // play embedded walk/idle clips if the GLB has them (e.g. a Mixamo export)
+        if (ericClips && ericClips.length && THREE.AnimationMixer) {
+          a.mixer = new THREE.AnimationMixer(m);
+          const find = (re) => ericClips.find((c) => re.test(c.name || ""));
+          const walkClip = find(/walk/i) || ericClips[ericClips.length - 1];
+          const idleClip = find(/idle|stand|breath/i) || (ericClips.length > 1 ? ericClips[0] : null);
+          a.walkAction = a.mixer.clipAction(walkClip); a.walkAction.play();
+          if (idleClip && idleClip !== walkClip) { a.idleAction = a.mixer.clipAction(idleClip); a.idleAction.play(); a.idleAction.weight = 1; a.walkAction.weight = 0; }
+          else { a.walkAction.weight = 1; }
+        }
+      } catch (_) {}
     }
     const avatars = new Map(), picTexCache = new Map(), tvThumbCache = new Map(); // id->avatar, url->tex, videoId->tex
     function available() { return typeof THREE !== "undefined"; }
@@ -772,11 +785,11 @@
       if (ready) return true; if (!available()) return false;
       renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("game3d"), antialias: true });
       renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1)); renderer.setSize(VW, VH);
-      scene = new THREE.Scene(); scene.background = new THREE.Color(0x0e1320); scene.fog = new THREE.Fog(0x0e1320, 700, 2800);
+      scene = new THREE.Scene(); scene.background = new THREE.Color(0x141d31); scene.fog = new THREE.Fog(0x141d31, 1100, 4000); // brighter, less murky
       camera = new THREE.PerspectiveCamera(70, VW / VH, 1, 7000);
-      scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-      scene.add(new THREE.HemisphereLight(0xbcd0ff, 0x1a2238, 0.7)); // soft sky/ground fill for nicer avatars
-      const dir = new THREE.DirectionalLight(0xffffff, 0.7); dir.position.set(400, 900, 250); scene.add(dir);
+      scene.add(new THREE.AmbientLight(0xffffff, 0.78));
+      scene.add(new THREE.HemisphereLight(0xcfe0ff, 0x20283c, 0.95)); // soft sky/ground fill for nicer avatars
+      const dir = new THREE.DirectionalLight(0xffffff, 0.9); dir.position.set(400, 900, 250); scene.add(dir);
       worldGroup = new THREE.Group(); scene.add(worldGroup);
       avatarGroup = new THREE.Group(); scene.add(avatarGroup);
       ready = true; loadEric(); return true;
@@ -827,7 +840,7 @@
     }
     function buildWorld() {
       if (!ready || !world) return; dispose(worldGroup);
-      const ground = new THREE.Mesh(new THREE.PlaneGeometry(WORLD.w, WORLD.h), new THREE.MeshStandardMaterial({ color: 0x141b2c }));
+      const ground = new THREE.Mesh(new THREE.PlaneGeometry(WORLD.w, WORLD.h), new THREE.MeshStandardMaterial({ color: 0x202a40, roughness: 0.95 }));
       ground.rotation.x = -Math.PI / 2; ground.position.set(WORLD.w / 2, 0, WORLD.h / 2); worldGroup.add(ground);
       const grid = new THREE.GridHelper(Math.max(WORLD.w, WORLD.h), Math.round(Math.max(WORLD.w, WORLD.h) / 80), 0x2b3654, 0x1b2438);
       grid.position.set(WORLD.w / 2, 0.3, WORLD.h / 2); worldGroup.add(grid);
@@ -895,9 +908,11 @@
       const matVest = pMat(0x24272f, 0.6), matShirt = pMat(0xeef2f8, 0.5), matSkin = pMat(0xf1c9a5, 0.6), matTrouser = pMat(0x232733, 0.6), matShoe = pMat(0x141619, 0.45);
       const matTie = new THREE.MeshStandardMaterial({ color: new THREE.Color("hsl(" + hue + ",72%,52%)"), roughness: 0.5 }); // per-person tie colour
       const mesh = (geo, mat, x, y, z, rz) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); if (rz) m.rotation.z = rz; bodyGroup.add(m); return m; };
-      for (const sx of [-5.2, 5.2]) {                                                  // trouser legs + shoes
-        mesh(new THREE.CylinderGeometry(4.2, 3.6, 24, 10), matTrouser, sx, 12, 0);
-        mesh(new THREE.BoxGeometry(7.5, 4.5, 14), matShoe, sx, 2.2, 3.5);
+      const legP = [], armP = [];
+      for (const sx of [-5.2, 5.2]) {                                                  // legs hung from a hip pivot so they can swing when walking
+        const p = new THREE.Group(); p.position.set(sx, 24, 0); bodyGroup.add(p); legP.push(p);
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 3.6, 24, 10), matTrouser); leg.position.y = -12; p.add(leg);
+        const foot = new THREE.Mesh(new THREE.BoxGeometry(7.5, 4.5, 14), matShoe); foot.position.set(0, -21.8, 3.5); p.add(foot);
       }
       mesh(new THREE.CylinderGeometry(9.5, 8, 6, 12), matTrouser, 0, 26, 0);           // hips
       mesh(new THREE.CylinderGeometry(8.6, 9.6, 22, 14), matVest, 0, 38, 0);           // waistcoat / vest torso
@@ -905,9 +920,10 @@
       mesh(new THREE.CylinderGeometry(4.2, 4.2, 4, 12), matShirt, 0, 51, 2.5);         // white collar
       mesh(new THREE.BoxGeometry(3.6, 18, 1.6), matTie, 0, 41, 8.4);                   // tie
       mesh(new THREE.BoxGeometry(5, 4, 1.8), matTie, 0, 49.5, 8.2);                    // tie knot
-      for (const sx of [-1, 1]) {                                                      // white shirt sleeves + skin hands
-        mesh(new THREE.CylinderGeometry(2.9, 2.5, 22, 10), matShirt, sx * 12.6, 39, 0, sx * 0.14);
-        mesh(new THREE.SphereGeometry(3.1, 10, 10), matSkin, sx * 14.8, 28.5, 0);
+      for (const sx of [-1, 1]) {                                                      // arms hung from a shoulder pivot (swing opposite the legs)
+        const p = new THREE.Group(); p.position.set(sx * 12.6, 50, 0); bodyGroup.add(p); armP.push(p);
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(2.9, 2.5, 22, 10), matShirt); arm.position.y = -11; p.add(arm);
+        const hand = new THREE.Mesh(new THREE.SphereGeometry(3.1, 10, 10), matSkin); hand.position.set(sx * 1.6, -21.5, 0); p.add(hand);
       }
       mesh(new THREE.CylinderGeometry(2.6, 2.6, 4, 8), matSkin, 0, 56, 0);             // neck
       const headMat = new THREE.MeshBasicMaterial({ map: letterTex((name && name[0]) || "?", "hsl(" + hue + ",70%,60%)"), transparent: true });
@@ -915,10 +931,27 @@
       const shadow = new THREE.Mesh(new THREE.CircleGeometry(15, 24), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28 })); // contact shadow (stays under the GLB too)
       shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.6;
       group.add(shadow); avatarGroup.add(group);
-      a = { group, bodyGroup, head, headMat, videoTex: null, picUrl: null, model: null, hue }; avatars.set(id, a); return a;
+      a = { group, bodyGroup, head, headMat, legP, armP, videoTex: null, picUrl: null, model: null, mixer: null, hue }; avatars.set(id, a); return a;
+    }
+    // Procedural walk: swing legs/arms while the avatar is moving; settle when idle. GLB models use their own clips.
+    function walkAnim(a, x, z, dt) {
+      const moved = (a._lx !== undefined) ? Math.hypot(x - a._lx, z - a._lz) : 0; a._lx = x; a._lz = z;
+      if (a.model) {                                                                   // animated GLB: blend walk vs idle by movement
+        if (a.mixer) { a.mixer.update(dt);
+          if (a.idleAction && a.walkAction) { const w = moved > 0.25 ? 1 : 0; a.walkAction.weight += (w - a.walkAction.weight) * 0.2; a.idleAction.weight = 1 - a.walkAction.weight; }
+          else if (a.walkAction) { a.walkAction.timeScale = moved > 0.25 ? 1 : 0.0001; } }
+        return;
+      }
+      const tAmp = moved > 0.25 ? 0.5 : 0;
+      a.walkAmp = (a.walkAmp || 0) + (tAmp - (a.walkAmp || 0)) * 0.18;
+      if (moved > 0.25) a.walkPhase = (a.walkPhase || 0) + moved * 0.09;
+      const s = Math.sin(a.walkPhase || 0) * a.walkAmp;
+      if (a.legP && a.legP.length) { a.legP[0].rotation.x = s; a.legP[1].rotation.x = -s; }
+      if (a.armP && a.armP.length) { a.armP[0].rotation.x = -s; a.armP[1].rotation.x = s; }
     }
     function frame() {
       if (!ready) return; if (!worldBuilt) buildWorld();
+      const _now = performance.now(); const dt = Math.min(0.05, (_now - (frame._t || _now)) / 1000); frame._t = _now;
       if (tvPanelMat && tvData.videoId && tvPanelMat._vid !== tvData.videoId) {   // show the current video's poster on the 3D TV
         const t = tvThumbTex(tvData.videoId); if (t) { tvPanelMat.map = t; tvPanelMat.color.set(0xffffff); tvPanelMat.needsUpdate = true; tvPanelMat._vid = tvData.videoId; }
       }
@@ -935,6 +968,7 @@
       for (const [id, e] of peers) {
         seen.add(id); const a = ensure(id, hueOf(id), e.name); a.group.position.set(e.rx, 0, e.ry); a.group.rotation.y = Math.PI / 2 - (e.facing || 0); a.head.lookAt(camera.position); setNameSprite(a, e.name || "Guest");
         if (ericState === "ready" && !a.model && ERIC_FOR === "all") attachEric(a);   // upgrade to the real character when it loads
+        walkAnim(a, e.rx, e.ry, dt);
         const lv = lkVideo.get(id);
         if (lv && lv.el && lv.el.readyState >= 2 && !a.videoTex) { a.videoTex = new THREE.VideoTexture(lv.el); a.headMat.map = a.videoTex; a.headMat.needsUpdate = true; }
         else if (!a.videoTex && e.avatar) applyPic(a, e.avatar); // Google profile photo (when no live video)
@@ -942,6 +976,7 @@
       if (cameraMode !== "firstPerson") {
         seen.add("__me"); const a = ensure("__me", 212, "You"); a.group.visible = true; a.group.position.set(me.x, 0, me.y); a.group.rotation.y = Math.PI / 2 - (me.facing || 0); a.head.lookAt(camera.position); setNameSprite(a, myName || "You");
         if (ericState === "ready" && !a.model) attachEric(a);                          // your avatar uses the real character (ERIC_FOR all or me)
+        walkAnim(a, me.x, me.y, dt);
         if (localVideoEl && localVideoEl.readyState >= 2 && !a.videoTex) { a.videoTex = new THREE.VideoTexture(localVideoEl); a.headMat.map = a.videoTex; a.headMat.needsUpdate = true; }
         else if (!a.videoTex && myAvatar) applyPic(a, myAvatar);
       } else { const a = avatars.get("__me"); if (a) a.group.visible = false; }
@@ -1091,8 +1126,15 @@
   function tvPositionWorld(){const wd=document.getElementById('tvWorld');if(!wd)return;
     if(!world||!world.mediaWall||!((ytPlayer&&ytPlayer.getCurrentTime)||tvRaw)){wd.style.display='none';return;}
     const m=world.mediaWall;let px,py,pw,ph;
-    if(viewMode==='3d'){const r=(threeMode&&Three3D.tvRect)?Three3D.tvRect():tvScreenRect3D(m);if(!r){wd.style.display='none';return;}px=r.x;py=r.y;pw=r.w;ph=r.h;}
-    else{px=(m.x-cam.x)*cam.zoom+VW/2;py=((m.y-m.screenH)-cam.y)*cam.zoom+VH/2;pw=m.w*cam.zoom;ph=m.screenH*cam.zoom;}
+    if(viewMode==='3d'){
+      // 3D: a flat HTML video can't be perspective-skewed onto the angled 3D screen (it drifts and the wall
+      // poster peeks out behind it). So dock the live player as a fixed picture-in-picture; the wall itself
+      // keeps showing the video's poster in-scene (perspective-correct + occluded by walls).
+      pw=Math.max(200,Math.min(VW*0.24,340));ph=Math.round(pw*9/16);px=16;py=VH-ph-46; // bottom-left: clear of toolbar, minimap, and hint bar
+      wd.classList.add('pip');wd.style.display='block';wd.style.left=Math.round(px)+'px';wd.style.top=Math.round(py)+'px';wd.style.width=Math.round(pw)+'px';wd.style.height=Math.round(ph)+'px';return;
+    }
+    wd.classList.remove('pip');
+    px=(m.x-cam.x)*cam.zoom+VW/2;py=((m.y-m.screenH)-cam.y)*cam.zoom+VH/2;pw=m.w*cam.zoom;ph=m.screenH*cam.zoom;
     if(pw<24||ph<16||px+pw<0||py+ph<0||px>VW||py>VH){wd.style.display='none';return;}
     wd.style.display='block';wd.style.left=Math.round(px)+'px';wd.style.top=Math.round(py)+'px';wd.style.width=Math.round(pw)+'px';wd.style.height=Math.round(ph)+'px';}
   // Pseudo-3D fallback (no WebGL): size the overlay from the projected scale at the TV centre (s = focal/depth),

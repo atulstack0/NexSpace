@@ -5,9 +5,37 @@ The 3D view can render a real character model for avatars. The web renderer (Thr
 model needs a one-time **FBX → GLB** conversion. Until `apps/web/models/eric.glb` exists, avatars use the
 built-in styled businessman avatar automatically (no errors).
 
-Source folder you provided: `66-rp_eric_rigged_001_c4d/` — use **`rp_eric_rigged_001_yup_a.fbx`**
+The app now also **plays a walk animation**: if the GLB contains animation clips (named `Walk`/`Idle`),
+avatars walk when moving and stand when idle. If there are no clips, the avatar still gets a built-in
+procedural walk (legs/arms swing). `ERIC_FOR` is already set to `"all"`.
+
+---
+
+## EASIEST: a professional character **with a walk animation** from Mixamo (free, recommended)
+
+Mixamo (by Adobe, free with an Adobe account) has ready-made professional characters **and** motion-capture
+walk/idle clips, and exports a single **GLB with the animation embedded** — no Renderpeople conversion needed.
+
+1. Go to **https://www.mixamo.com** and sign in (free Adobe account).
+2. **Characters** tab → pick a professional one — e.g. **"Business Man"**, **"Business Casual"**, or **"Suit"**.
+3. **Animations** tab → search **"Walking"** → pick an in-place walk (toggle **In Place** on).
+   *(Optional, for nicer idling: also grab an **"Idle"** / **"Breathing Idle"** — see step 5.)*
+4. **Download** → Format **glTF Binary (.glb)**, Skin **With Skin**, 30 fps → save as **`eric.glb`**.
+5. *(Optional idle+walk blend)* In Blender, import the walk GLB and the idle GLB, rename their actions to
+   contain **"Walk"** and **"Idle"**, and export one GLB with both — the app crossfades them by movement.
+6. Drop the file at **`apps/web/models/eric.glb`** and commit (see **Install it** below).
+
+This gives you a professional, **walking** office character for everyone, tinted per person, in ~3 minutes —
+and it's already lighter/cleaner than the raw Renderpeople mesh.
+
+---
+
+## ALTERNATIVE: convert the Renderpeople "Eric" you provided (static pose, no walk clip)
+
+Source folder: `66-rp_eric_rigged_001_c4d/` — use **`rp_eric_rigged_001_yup_a.fbx`**
 (Y-up, **A-pose** — Y-up matches Three.js, and the A-pose stands more naturally than the T-pose for a
-static avatar). The `tex/` subfolder has the textures it references.
+static avatar). The `tex/` subfolder has the textures it references. This model has **no walk clip**, so it
+uses the built-in procedural walk instead.
 
 ---
 
