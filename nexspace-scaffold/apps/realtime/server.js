@@ -292,8 +292,14 @@ if (REDIS_URL) {
 // quota easily. Set PERSIST_REDIS_URL to an Upstash rediss:// URL to survive Render redeploys.
 let persistRedis = null;
 if (process.env.PERSIST_REDIS_URL) {
-  try { const Redis = require("ioredis"); persistRedis = new Redis(process.env.PERSIST_REDIS_URL, { maxRetriesPerRequest: 2 });
-    persistRedis.on("error", (e) => console.warn("persist redis:", e.message)); console.log("Durable edit persistence via PERSIST_REDIS_URL");
+  try {
+    const Redis = require("ioredis"); const u = process.env.PERSIST_REDIS_URL;
+    const opts = { maxRetriesPerRequest: 2 };
+    if (/^rediss:/i.test(u) || /upstash\.io/i.test(u)) opts.tls = {}; // Upstash needs TLS even if the URL says redis://
+    persistRedis = new Redis(u, opts);
+    persistRedis.on("error", (e) => console.warn("persist redis:", e.message));
+    persistRedis.on("connect", () => console.log("Durable edit persistence connected (PERSIST_REDIS_URL)"));
+    console.log("Durable edit persistence enabled via PERSIST_REDIS_URL");
   } catch (e) { console.warn("persist redis init:", e.message); }
 }
 const persistClient = () => persistRedis || pub; // prefer the dedicated client; fall back to the fan-out client
