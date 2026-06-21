@@ -41,7 +41,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Real voice/video (LiveKit) — video-in-bubble, proximity track culling, mic/cam toggles | ✅ opt-in | `apps/api` (token/egress) + `apps/web` |
 | Rooms, doors (open/closed/locked) + knock-to-enter | ✅ | realtime + web |
 | Broadcast mode | ✅ | realtime + web |
-| Media wall — synced play/pause, distance-faded audio | ✅ | realtime + web |
+| Shared YouTube TV — one screen everyone watches; search (YouTube API) or paste a link, shared play queue, skip; synced to all | ✅ | realtime `/youtube/search` + `tv*` msgs, web |
 | Text chat — nearby / floor / #channels / private DMs, room-aware, cross-node, XSS-safe | ✅ | realtime + web |
 | Screen sharing (LiveKit) — publish + multi-share focus viewer | ✅ opt-in | `apps/web` |
 | Collaborative whiteboard — synced strokes + clear, late-joiner state, cross-node | ✅ | realtime + web |
@@ -62,6 +62,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Multi-node fan-out (Redis pub/sub) | ✅ opt-in | realtime; `docs/SCALING.md` |
 | Multi-floor + portals — independent floors, floor-scoped presence/chat/snapshots, portal travel + floor switcher | ✅ | `apps/api` (Floor/portal objects), realtime, web |
 | Interactive objects — sticky notes, embeds (YouTube/Spotify/web → iframe), shared countdown timers; placed in the editor, synced live | ✅ | `apps/api` (widget objects), realtime, web, editor |
+| Responsive UI — collapsible toolbar (hamburger), mobile-friendly overlays | ✅ | `apps/web/index.html` |
 | Branding / white-label — per-space name, accent color, logo; served in world + applied live | ✅ | `apps/api` (Floor.branding), realtime, web |
 | CI — GitHub Actions (`check` + `redis-multinode` + `api-smoke`) | ✅ | `.github/workflows/ci.yml` |
 

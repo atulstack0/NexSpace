@@ -13,6 +13,15 @@
   #game3d{position:fixed;top:0;left:0;display:none;background:#0e1320;z-index:0}
   #bar{position:fixed;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:98vw;
     background:rgba(20,27,44,.94);border:1px solid var(--line);border-radius:14px;padding:7px 11px;z-index:20;backdrop-filter:blur(10px);box-shadow:0 10px 34px rgba(0,0,0,.38)}
+  #barItems{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center}
+  #barToggle{font-size:15px;line-height:1;padding:6px 10px}     /* hamburger: collapse/expand the toolbar on any screen */
+  #bar.collapsed #barItems{display:none}
+  @media(max-width:820px){
+    #bar{max-width:96vw;gap:5px;padding:6px 9px}
+    #barItems{order:3;width:100%;margin-top:6px;border-top:1px solid var(--line);padding-top:7px;max-height:62vh;overflow-y:auto}
+    .tvmain{flex-direction:column} .tvside{width:100%;max-width:none} .tvplayer{aspect-ratio:16/9}
+    #chat,#wb{max-width:94vw}
+  }
   .brand{font-weight:700;display:flex;align-items:center;gap:8px}
   .dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2))}
   .pill{font-size:12px;color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:5px 10px}
@@ -33,6 +42,24 @@
   #recind{position:fixed;top:72px;left:12px;z-index:19;display:none;background:rgba(255,93,108,.16);border:1px solid var(--danger);color:#ffd2d7;border-radius:20px;padding:6px 12px;font-size:12px;font-weight:700}
   #statusSel,#floorSel{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:6px 9px;font-size:13px;cursor:pointer;max-width:170px}
   #statusSel:hover,#floorSel:hover{border-color:var(--accent)}
+  /* Shared YouTube TV */
+  #tv{position:fixed;inset:0;z-index:62;display:none;align-items:center;justify-content:center;background:rgba(8,12,20,.82);padding:14px}
+  .tvbox{display:flex;flex-direction:column;gap:10px;width:1040px;max-width:96vw;max-height:92vh;background:#0f1626;border:1px solid var(--line);border-radius:14px;padding:12px}
+  .tvhead{display:flex;align-items:center;gap:10px;font-size:14px}
+  #tvNow{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:50%}
+  .tvmain{display:flex;gap:12px;min-height:0;flex:1}
+  .tvplayer{flex:1;min-width:0;background:#000;border-radius:10px;overflow:hidden;aspect-ratio:16/9}
+  .tvplayer iframe{width:100%;height:100%;border:0;display:block}
+  .tvside{width:320px;max-width:42vw;display:flex;flex-direction:column;gap:8px;min-height:0}
+  .tvsearch{display:flex;gap:6px}
+  .tvsearch input{flex:1;background:#0d1424;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:8px 10px;font-size:13px}
+  .tvqhead{display:flex;align-items:center;font-size:12px;color:var(--muted);font-weight:600;margin-top:2px}
+  .tvlist{overflow-y:auto;display:flex;flex-direction:column;gap:5px;min-height:0}
+  #tvResults{max-height:34%} #tvQueue{flex:1}
+  .tvitem{display:flex;align-items:center;gap:7px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px}
+  .tvitem .tt{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tvitem button{background:#0d1424;border:1px solid var(--line);color:var(--text);border-radius:6px;padding:3px 7px;font-size:12px;cursor:pointer}
+  .tvitem button:hover{border-color:var(--accent);color:#fff}
   #chat{position:fixed;bottom:14px;left:14px;z-index:16;width:300px;max-width:46vw;display:none;flex-direction:column;background:rgba(22,29,46,.96);border:1px solid var(--line);border-radius:12px;overflow:hidden;backdrop-filter:blur(8px)}
   #chat .chead{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted);font-weight:600}
   #chat .chead select{margin-left:auto;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:3px 6px;font-size:12px}
@@ -82,6 +109,8 @@
   <span class="brand"><span class="dot"></span>NexSpace</span>
   <span class="pill" id="conn"><b id="connText">connecting…</b></span>
   <span class="pill">online: <b id="count">1</b></span>
+  <button class="btn" id="barToggle" title="Show/hide toolbar">☰</button>
+  <div id="barItems">
   <span class="pill" id="rolePill">you: guest</span>
   <button class="btn" id="btnSignout" style="display:none" title="Sign out">⎋ Sign out</button>
   <select id="floorSel" title="Switch floor (multi-floor §6)" style="display:none"></select>
@@ -108,6 +137,7 @@
   <button class="btn" id="btnChat" title="Chat (6.9)">💬</button>
   <button class="btn" id="btnWb" title="Whiteboard (6.8)">🖊️</button>
   <button class="btn" id="btnReact" title="React (6.6)">😀</button>
+  </div>
 </div>
 <div id="reactBar"></div>
 <div id="chat">
@@ -137,6 +167,20 @@
     <div style="display:flex;align-items:center;gap:10px"><b id="widgetTitle" style="font-size:14px">Widget</b>
       <button class="btn" id="widgetClose" style="margin-left:auto;padding:3px 10px">✕ Close</button></div>
     <div id="widgetBody"></div>
+  </div>
+</div>
+<div id="tv">
+  <div class="tvbox">
+    <div class="tvhead"><b>📺 NexSpace TV</b><span id="tvNow"></span><button class="btn" id="tvClose" style="margin-left:auto;padding:3px 10px">✕ Close</button></div>
+    <div class="tvmain">
+      <div id="tvFrameWrap" class="tvplayer"></div>
+      <div class="tvside">
+        <div class="tvsearch"><input id="tvQ" placeholder="Search YouTube or paste a link…" /><button class="btn" id="tvSearchBtn">Search</button></div>
+        <div id="tvResults" class="tvlist"></div>
+        <div class="tvqhead">Up next <button class="btn" id="tvSkip" style="margin-left:auto;padding:2px 9px">⏭ Skip</button></div>
+        <div id="tvQueue" class="tvlist"></div>
+      </div>
+    </div>
   </div>
 </div>
 <div id="banner"><span class="l"></span><span id="bannerText"></span></div>
@@ -202,6 +246,7 @@
     return 0;}
   function speakLevel(id){const s=(lvlSmooth.get(id)||0)*0.6+rawLevel(id)*0.4;lvlSmooth.set(id,s<0.003?0:s);return s;}
   let myStatus='available',lastActivity=Date.now(),autoAway=false;
+  let tvData={videoId:'',title:'',queue:[]},tvFrameId=''; // shared YouTube TV state
   const reactions=new Map(),adminMuted=new Set();
   const lkAudio=new Map(),lkVideo=new Map(),lkScreens=new Map();let screenFocus=null;
   const hsl=h=>'hsl('+h+' 70% 60%)';
@@ -240,9 +285,11 @@
           const rp=document.getElementById('rolePill');if(rp)rp.innerHTML='you: '+escapeHtml(myName||'Guest')+' · <b>'+escapeHtml(myRole||'guest')+'</b>';
           const so=document.getElementById('btnSignout');if(so)so.style.display=myToken?'':'none';}
         if(m.whiteboard)wbStrokes=m.whiteboard.slice();
+        if(m.tv)applyTv(m.tv);
         applyBranding(world.branding);populateFloors(world);
         initLiveKit();}
       else if(m.t==='floor'){applyFloorChange(m);}
+      else if(m.t==='tv'){applyTv(m);}
       else if(m.t==='snapshot'){
         doors=m.doors||doors; if(m.media)media=m.media; if(m.recording)recording=m.recording;
         const seen=new Set();
@@ -277,7 +324,7 @@
     if(viewMode==='3d'){if(!pointerLocked&&canvas.requestPointerLock)canvas.requestPointerLock();return;} // click to look around
     const w={x:(e.clientX-VW/2)/cam.zoom+cam.x,y:(e.clientY-VH/2)/cam.zoom+cam.y};
     if(world&&world.mediaWall){const mc={x:world.mediaWall.x+world.mediaWall.w/2,y:world.mediaWall.y};
-      if(Math.hypot(w.x-mc.x,w.y-mc.y)<90){toggleMedia();return;}}
+      if(Math.hypot(w.x-mc.x,w.y-mc.y)<90){openTv();return;}}
     if(world&&world.portals){for(const pt of world.portals){if(w.x>=pt.x&&w.x<=pt.x+pt.w&&w.y>=pt.y&&w.y<=pt.y+pt.h){travelTo(pt.to);return;}}}
     if(world&&world.widgets){for(const wd of world.widgets){if(wd.type!=='timer'&&w.x>=wd.x&&w.x<=wd.x+wd.w&&w.y>=wd.y&&w.y<=wd.y+wd.h){openWidget(wd);return;}}}
     target=w;});
@@ -331,11 +378,8 @@
       const e=peers.get(part.identity);let want=true;
       if(e){const d=Math.hypot(e.rx-me.x,e.ry-me.y),pr=roomAtPt(e.rx,e.ry);want=!!(e.bcast||(mr&&mr===pr)||d<R().outer*1.25);}
       part.trackPublications.forEach(pub=>{try{pub.setSubscribed(want);}catch(_){}}); }}
-    // media wall (floors without one mute the media node)
-    if(!world.mediaWall){if(mediaNode)mediaNode.voice.gain.setTargetAtTime(0,t,0.1);return;}
-    const mc={x:world.mediaWall.x+world.mediaWall.w/2,y:world.mediaWall.y};setPos(mediaNode.pan,mc.x,mc.y);
-    let mv=0;if(media.playing&&!mr){const d=Math.hypot(mc.x-me.x,mc.y-me.y);mv=d<=R().inner?1:d>=R().outer?0:1-(d-R().inner)/(R().outer-R().inner);}
-    mediaNode.voice.gain.setTargetAtTime(muted?0:mv*0.12,t,0.1);}
+    // media wall is now the YouTube TV — its audio comes from the TV overlay, so keep the synth muted
+    if(mediaNode)mediaNode.voice.gain.setTargetAtTime(0,t,0.1);}
 
   function toggleMedia(){if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'media',playing:!media.playing}));}
 
@@ -798,6 +842,27 @@
     // timers have no overlay — they render live on the floor
   }
   function closeWidget(){const ov=document.getElementById('widgetOv');ov.style.display='none';document.getElementById('widgetBody').innerHTML='';}
+  // ---------- Shared YouTube TV ----------
+  function parseYt(s){s=String(s||'').trim();let m=s.match(/(?:youtu\.be\/|v=|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/);if(m)return m[1];if(/^[A-Za-z0-9_-]{11}$/.test(s))return s;return null;}
+  function tvSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o));}
+  function applyTv(t){tvData={videoId:t.videoId||'',title:t.title||'',queue:t.queue||[]};
+    const ov=document.getElementById('tv');if(ov&&ov.style.display==='flex'){tvSetFrame(tvData.videoId);renderTvQueue();const now=document.getElementById('tvNow');if(now)now.textContent=tvData.title?('▶ '+tvData.title):'';}}
+  function tvSetFrame(id){if(!id||id===tvFrameId)return;tvFrameId=id;
+    document.getElementById('tvFrameWrap').innerHTML='<iframe src="https://www.youtube.com/embed/'+encodeURIComponent(id)+'?autoplay=1&rel=0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>';}
+  function openTv(){const ov=document.getElementById('tv');ov.style.display='flex';tvFrameId='';tvSetFrame(tvData.videoId);renderTvQueue();
+    const now=document.getElementById('tvNow');if(now)now.textContent=tvData.title?('▶ '+tvData.title):'';document.getElementById('tvResults').innerHTML='';const q=document.getElementById('tvQ');if(q){q.value='';setTimeout(()=>q.focus(),50);}}
+  function closeTv(){const ov=document.getElementById('tv');ov.style.display='none';document.getElementById('tvFrameWrap').innerHTML='';tvFrameId='';}
+  function tvItemRow(title,btns){const d=document.createElement('div');d.className='tvitem';const t=document.createElement('span');t.className='tt';t.textContent=title;t.title=title;d.appendChild(t);for(const b of btns){const bt=document.createElement('button');bt.textContent=b.label;bt.onclick=b.fn;d.appendChild(bt);}return d;}
+  function renderTvQueue(){const box=document.getElementById('tvQueue');box.innerHTML='';if(!tvData.queue.length){box.innerHTML='<div style="color:var(--muted);font-size:12px;padding:4px">Queue is empty — search and add a song.</div>';return;}
+    tvData.queue.forEach((it,i)=>box.appendChild(tvItemRow((it.title||it.videoId)+(it.by?'  · '+it.by:''),[{label:'×',fn:()=>tvSend({t:'tvRemove',index:i})}])));}
+  function renderTvResults(items){const box=document.getElementById('tvResults');box.innerHTML='';if(!items.length){box.innerHTML='<div style="color:var(--muted);font-size:12px;padding:4px">No results.</div>';return;}
+    items.forEach(it=>box.appendChild(tvItemRow(it.title||it.videoId,[{label:'▶ Play',fn:()=>tvSend({t:'tvPlay',videoId:it.videoId,title:it.title})},{label:'+ Queue',fn:()=>tvSend({t:'tvQueue',videoId:it.videoId,title:it.title})}])));}
+  async function tvSearch(){const q=document.getElementById('tvQ').value.trim();if(!q)return;const direct=parseYt(q);
+    if(direct){renderTvResults([{videoId:direct,title:'Pasted link'}]);return;}
+    const box=document.getElementById('tvResults');box.innerHTML='<div style="color:var(--muted);font-size:12px;padding:4px">Searching…</div>';
+    try{const r=await fetch('/youtube/search?q='+encodeURIComponent(q));const j=await r.json();
+      if(j.error){box.innerHTML='<div style="color:var(--warn);font-size:12px;padding:4px">'+(j.error.indexOf('not configured')>=0?'Search needs a YouTube API key — paste a YouTube link instead.':escapeHtml(j.error))+'</div>';return;}
+      renderTvResults(j.items||[]);}catch(e){box.innerHTML='<div style="color:var(--danger);font-size:12px;padding:4px">Search failed.</div>';}}
   function drawPortals(){if(!world.portals)return;for(const pt of world.portals){const cx=pt.x+pt.w/2,cy=pt.y+pt.h/2,rad=pt.w/2;
     const pulse=0.5+0.5*Math.sin(frame*0.08);
     const g=ctx.createRadialGradient(cx,cy,rad*0.2,cx,cy,rad*1.25);g.addColorStop(0,hexA(pt.color,0.55));g.addColorStop(1,hexA(pt.color,0));
@@ -934,6 +999,14 @@
   document.getElementById('floorSel').addEventListener('change',function(){travelTo(this.value);this.blur();}); // blur so WASD return to the game, not the dropdown
   document.getElementById('widgetClose').addEventListener('click',closeWidget);
   document.getElementById('widgetOv').addEventListener('click',e=>{if(e.target.id==='widgetOv')closeWidget();});
+  document.getElementById('tvClose').addEventListener('click',closeTv);
+  document.getElementById('tv').addEventListener('click',e=>{if(e.target.id==='tv')closeTv();});
+  document.getElementById('tvSearchBtn').addEventListener('click',tvSearch);
+  document.getElementById('tvQ').addEventListener('keydown',e=>{if(e.key==='Enter')tvSearch();});
+  document.getElementById('tvSkip').addEventListener('click',()=>tvSend({t:'tvNext'}));
+  // responsive toolbar: hamburger collapses/expands the controls; collapsed by default on small screens
+  (function(){const bar=document.getElementById('bar');if(innerWidth<=820)bar.classList.add('collapsed');
+    document.getElementById('barToggle').addEventListener('click',()=>bar.classList.toggle('collapsed'));})();
   document.getElementById('go').addEventListener('click',async function(){
     const name=(document.getElementById('name').value||'Guest').slice(0,16);
     const email=document.getElementById('email').value.trim(),password=document.getElementById('password').value;

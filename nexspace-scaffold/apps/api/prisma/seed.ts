@@ -41,11 +41,10 @@ const DEFAULT_FLOOR: FloorDef = {
     { key: "board", name: "Boardroom", color: "#39d3a6", x: 1516, y: 136, w: 300, h: 546,
       doorX: 1796, doorY: 356, doorW: 18, doorH: 96, doorState: "locked" },
   ],
-  media: { x: 1180, y: 980, w: 300, base: 16, screenH: 150, title: "Lo-fi Beats — Focus Radio", dur: 213 },
+  media: { x: 1180, y: 980, w: 300, base: 16, screenH: 150, title: "📺 NexSpace TV — click to watch", dur: 213 },
   portals: [{ x: 2030, y: 1290, w: 96, h: 96, to: "rooftop", label: "Rooftop ↑", color: "#ffb454" }],
   widgets: [
-    { type: "embed", x: 1180, y: 700, config: { w: 300, h: 170, kind: "youtube", url: "https://www.youtube.com/embed/jfKfPfyJRdk", title: "Lofi TV" } },
-    { type: "note", x: 360, y: 980, config: { w: 190, h: 130, text: "Welcome to NexSpace! Click the TV ▶ or pop up to the rooftop 🌇", color: "#ffd166" } },
+    { type: "note", x: 360, y: 980, config: { w: 190, h: 130, text: "Welcome to NexSpace! Click the 📺 TV to watch & queue songs together, or pop up to the rooftop 🌇", color: "#ffd166" } },
     { type: "timer", x: 980, y: 300, config: { w: 180, h: 96, label: "Standup ends", endsAt: Date.now() + 30 * 60000 } },
   ],
 };

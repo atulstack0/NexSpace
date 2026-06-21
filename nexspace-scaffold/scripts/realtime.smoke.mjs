@@ -51,12 +51,13 @@ await new Promise((res, rej) => {
 function join(name, token) {
   return new Promise((resolve) => {
     const ws = new WebSocket(`ws://localhost:${PORT}`);
-    const st = { ws, name, id: null, role: null, world: null, floorMsg: null, last: null, denied: [], rateLimited: false, chats: [], draws: [], cleared: false, reacts: [], nudged: false, kicked: false };
+    const st = { ws, name, id: null, role: null, world: null, floorMsg: null, tv: null, last: null, denied: [], rateLimited: false, chats: [], draws: [], cleared: false, reacts: [], nudged: false, kicked: false };
     ws.on("open", () => ws.send(JSON.stringify({ t: "join", name, token })));
     ws.on("message", (d) => {
       const m = JSON.parse(d.toString());
-      if (m.t === "welcome") { st.id = m.id; st.role = m.you.role; st.world = m.world; resolve(st); }
+      if (m.t === "welcome") { st.id = m.id; st.role = m.you.role; st.world = m.world; st.tv = m.tv; resolve(st); }
       if (m.t === "floor") { st.floorMsg = m; st.world = m.world; } // arrived on a new floor via portal
+      if (m.t === "tv") st.tv = m;
       if (m.t === "snapshot") st.last = m;
       if (m.t === "denied") st.denied.push(m.action);
       if (m.t === "rateLimited") st.rateLimited = true;
@@ -79,7 +80,8 @@ try {
   (guest.role === "guest") ? ok("no token → guest role") : bad("guest role not applied");
   (admin.world?.branding && typeof admin.world.branding.name === "string" && typeof admin.world.branding.color === "string") ? ok("welcome carries branding (name+color)") : bad("welcome world.branding missing/malformed");
   (admin.world?.floors?.length >= 2 && admin.world?.portals?.some((p) => p.to === "rooftop")) ? ok("welcome lists floors + portals (multi-floor)") : bad("multi-floor world blob missing floors/portals");
-  (admin.world?.widgets?.some((wd) => wd.type === "embed") && admin.world?.widgets?.some((wd) => wd.type === "note") && admin.world?.widgets?.some((wd) => wd.type === "timer")) ? ok("welcome carries interactive widgets (embed+note+timer)") : bad("interactive widgets missing from world");
+  (admin.world?.widgets?.some((wd) => wd.type === "note") && admin.world?.widgets?.some((wd) => wd.type === "timer")) ? ok("welcome carries interactive widgets (note+timer)") : bad("interactive widgets missing from world");
+  (admin.tv && typeof admin.tv.videoId === "string" && admin.tv.videoId) ? ok("welcome carries shared TV state") : bad("TV state missing from welcome");
 
   // walk into the Focus Room at (500,500). The server-authoritative speed cap (MAX_SPEED) only
   // allows ~one step of travel per update since this client's last move, and spawn is ~570-665px
@@ -223,6 +225,14 @@ try {
   admin.ws.send(JSON.stringify({ t: "portal", to: "default" }));
   await wait(300);
   (admin.floorMsg?.world?.slug === "default" && guest.last?.players?.some((p) => p.id === admin.id)) ? ok("portal back to ground floor re-syncs presence") : bad("return portal did not re-sync");
+
+  // shared TV (§6.22) — tvPlay broadcasts the new video to everyone, tvQueue appends
+  admin.ws.send(JSON.stringify({ t: "tvPlay", videoId: "dQw4w9WgXcQ", title: "Test Video" }));
+  await wait(250);
+  (guest.tv?.videoId === "dQw4w9WgXcQ") ? ok("tvPlay broadcasts the new video to everyone") : bad("tvPlay did not broadcast");
+  admin.ws.send(JSON.stringify({ t: "tvQueue", videoId: "abc123XYZ_-", title: "Queued" }));
+  await wait(200);
+  (guest.tv?.queue?.some((q) => q.videoId === "abc123XYZ_-")) ? ok("tvQueue appends to the shared queue") : bad("tvQueue did not propagate");
 
   // reactions (6.6)
   admin.ws.send(JSON.stringify({ t: "react", emoji: "🎉" }));

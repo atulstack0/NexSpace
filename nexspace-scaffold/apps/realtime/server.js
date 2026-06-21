@@ -22,7 +22,7 @@ const crypto = require("crypto");
 // environment (whitelisted so a stray PORT/DATABASE_URL in apps/api/.env can't hijack this server).
 // In production (Render etc.) these come from the dashboard and the file reads simply no-op.
 (function loadEnv() {
-  const want = /^(LIVEKIT_|S3_|GOOGLE_|JWT_SECRET)/;
+  const want = /^(LIVEKIT_|S3_|GOOGLE_|YOUTUBE_|JWT_SECRET)/;
   for (const f of [path.join(__dirname, ".env"), path.join(__dirname, "..", "api", ".env")]) {
     try {
       for (const line of fs.readFileSync(f, "utf8").split(/\r?\n/)) {
@@ -114,6 +114,12 @@ const googleRedirectUri = (req) => process.env.GOOGLE_REDIRECT_URI || (fwdBase(r
 function signState() { const n = crypto.randomBytes(12).toString("hex"); return n + "." + crypto.createHmac("sha256", JWT_SECRET).update(n).digest("base64url"); }
 function verifyState(s) { if (!s || s.indexOf(".") < 0) return false; const n = s.slice(0, s.indexOf(".")), sig = s.slice(s.indexOf(".") + 1); const exp = crypto.createHmac("sha256", JWT_SECRET).update(n).digest("base64url"); try { return sig.length === exp.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(exp)); } catch { return false; } }
 
+// ---------- Shared YouTube TV (§6.22) — one screen everyone watches; a queue anyone can add to. ----------
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || process.env.GOOGLE_API_KEY || "";
+const validVideoId = (v) => typeof v === "string" && /^[A-Za-z0-9_-]{6,20}$/.test(v);
+let tv = { videoId: "e5D5h4W7P98", title: "NexSpace TV", by: "", queue: [] }; // default video = the link the team shared
+function tvState() { return { t: "tv", videoId: tv.videoId, title: tv.title, by: tv.by, queue: tv.queue }; }
+
 // ---------- Authoritative world(s) — multi-floor (spec §6: multiple maps + portals) ----------
 // Each floor is an independent world; a player belongs to exactly one floor at a time, and
 // portals teleport between them. Built-in geometry below is the fallback when WORLD_API is unset;
@@ -140,12 +146,11 @@ function makeDefaultFloor() {
       bounds: { x: 1516, y: 136, w: 300, h: 546 }, door: { x: 1796, y: 356, w: 18, h: 96, state: "locked", knocking: false } },
   ];
   const mediaWall = { x: 1180, y: 980, w: 300, base: 16, screenH: 150,
-    title: "Lo-fi Beats — Focus Radio", playing: true, pos: 74, dur: 213 };
+    title: "📺 NexSpace TV — click to watch", playing: true, pos: 74, dur: 213 };
   obstacles.push({ x: mediaWall.x, y: mediaWall.y, w: mediaWall.w, h: mediaWall.base });
   const portals = [{ id: "to-rooftop", x: 2030, y: 1290, w: 96, h: 96, to: "rooftop", label: "Rooftop ↑", color: "#ffb454" }];
   const widgets = [
-    { id: "w-tv", type: "embed", x: 1180, y: 700, w: 300, h: 170, kind: "youtube", url: "https://www.youtube.com/embed/jfKfPfyJRdk", title: "Lofi TV" },
-    { id: "w-note", type: "note", x: 360, y: 980, w: 190, h: 130, text: "Welcome to NexSpace! Click the TV ▶ or pop up to the rooftop 🌇", color: "#ffd166" },
+    { id: "w-note", type: "note", x: 360, y: 980, w: 190, h: 130, text: "Welcome to NexSpace! Click the 📺 TV to watch & queue songs together, or pop up to the rooftop 🌇", color: "#ffd166" },
     { id: "w-timer", type: "timer", x: 980, y: 300, w: 180, h: 96, label: "Standup ends", endsAt: Date.now() + 30 * 60000 },
   ];
   return { slug: "default", name: "HQ — Ground Floor", w: W, h: H, obstacles, rooms, mediaWall, portals, widgets,
@@ -256,6 +261,7 @@ function applyEvent(event, data) {
   else if (event === "react") { broadcastLocal({ t: "react", from: data.from, emoji: data.emoji }); }
   else if (event === "nudge") { for (const [ws2, q] of clients) if (q.id === data.to) send(ws2, { t: "nudge", from: data.from, name: data.name }); }
   else if (event === "moderate") { applyModerate(data.action, data.target); }
+  else if (event === "tv") { tv = data; broadcastLocal(tvState()); }
 }
 if (REDIS_URL) {
   const Redis = require("ioredis");
@@ -299,6 +305,21 @@ const server = http.createServer((req, res) => {
       try { json(res, await stopEgress(String(b.egressId || ""))); }
       catch (e) { json(res, { error: "egress stop failed: " + (e && e.message || e) }, 503); }
     });
+  }
+  if (urlPath === "/youtube/search") { // proxy YouTube search so the API key stays server-side
+    if (!YOUTUBE_API_KEY) return json(res, { error: "search not configured (set YOUTUBE_API_KEY)" }, 503);
+    const q = new URL(req.url, "http://x").searchParams.get("q") || "";
+    if (!q.trim()) return json(res, { items: [] });
+    (async () => {
+      try {
+        const u = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&maxResults=10&q=" + encodeURIComponent(q) + "&key=" + YOUTUBE_API_KEY;
+        const r = await fetch(u); const j = await r.json();
+        if (j.error) throw new Error(j.error.message || "youtube error");
+        const items = (j.items || []).map((it) => ({ videoId: it.id && it.id.videoId, title: it.snippet && it.snippet.title })).filter((x) => x.videoId);
+        json(res, { items });
+      } catch (e) { json(res, { error: "search failed: " + (e && e.message || e) }, 502); }
+    })();
+    return;
   }
   if (urlPath === "/auth/google/login") { // step 1: bounce to Google's consent screen
     if (!googleConfigured()) { res.writeHead(503, { "Content-Type": "text/plain" }); res.end("Google login not configured (set GOOGLE_CLIENT_ID/SECRET)"); return; }
@@ -391,7 +412,7 @@ wss.on("connection", (ws) => {
       A.sessions++; if (clients.size > A.peak) A.peak = clients.size;
       fireWebhook("user.joined", { id, name, role });
       notifySlack("👋 " + name + " entered the office");
-      send(ws, { t: "welcome", id, world: worldForClient(player.floor), you: { ...player }, whiteboard: whiteboard.strokes });
+      send(ws, { t: "welcome", id, world: worldForClient(player.floor), you: { ...player }, whiteboard: whiteboard.strokes, tv: tvState() });
       console.log(`+ ${player.name} (${id}) [${role}] — ${clients.size} online`);
       return;
     }
@@ -481,6 +502,20 @@ wss.on("connection", (ws) => {
       p.lastMoveAt = Date.now();
       send(ws, { t: "floor", world: worldForClient(dest.slug), you: { id: p.id, x: Math.round(p.x), y: Math.round(p.y), floor: p.floor } });
       console.log(`~ ${p.name} (${p.id}) → floor '${dest.slug}'`);
+    } else if (m.t === "tvPlay") {            // shared TV: play a video now (everyone's screen switches)
+      if (!validVideoId(m.videoId)) return;
+      tv.videoId = m.videoId; tv.title = String(m.title || "").slice(0, 140); tv.by = p.name;
+      broadcastLocal(tvState()); publishEvent("tv", tv);
+    } else if (m.t === "tvQueue") {           // add to the shared queue
+      if (!validVideoId(m.videoId) || tv.queue.length >= 50) return;
+      tv.queue.push({ videoId: m.videoId, title: String(m.title || "").slice(0, 140), by: p.name });
+      broadcastLocal(tvState()); publishEvent("tv", tv);
+    } else if (m.t === "tvNext") {            // skip to the next queued video
+      if (!tv.queue.length) return;
+      const n = tv.queue.shift(); tv.videoId = n.videoId; tv.title = n.title; tv.by = n.by;
+      broadcastLocal(tvState()); publishEvent("tv", tv);
+    } else if (m.t === "tvRemove") {
+      const i = Number(m.index); if (Number.isInteger(i) && i >= 0 && i < tv.queue.length) { tv.queue.splice(i, 1); broadcastLocal(tvState()); publishEvent("tv", tv); }
     }
   });
 
