@@ -145,7 +145,8 @@ function makeDefaultFloor() {
     { id: "board", name: "Boardroom", color: "#39d3a6",
       bounds: { x: 1516, y: 136, w: 300, h: 546 }, door: { x: 1796, y: 356, w: 18, h: 96, state: "locked", knocking: false } },
   ];
-  const mediaWall = { x: 1180, y: 980, w: 300, base: 16, screenH: 150,
+  // mounted on the top wall (screen flush against the wall at y0-16; base ledge just below)
+  const mediaWall = { x: 940, y: 212, w: 320, base: 16, screenH: 196,
     title: "📺 NexSpace TV — click to watch", playing: true, pos: 74, dur: 213 };
   obstacles.push({ x: mediaWall.x, y: mediaWall.y, w: mediaWall.w, h: mediaWall.base });
   const portals = [{ id: "to-rooftop", x: 2030, y: 1290, w: 96, h: 96, to: "rooftop", label: "Rooftop ↑", color: "#ffb454" }];
@@ -516,6 +517,27 @@ wss.on("connection", (ws) => {
       broadcastLocal(tvState()); publishEvent("tv", tv);
     } else if (m.t === "tvRemove") {
       const i = Number(m.index); if (Number.isInteger(i) && i >= 0 && i < tv.queue.length) { tv.queue.splice(i, 1); broadcastLocal(tvState()); publishEvent("tv", tv); }
+    } else if (m.t === "editFloor") {           // owner/admin live-edit: move / add / remove placeable elements
+      if (rank(p.role) < RANK.admin) return deny(ws, "edit the floor", "admin");
+      const f = floorOf(p), op = m.op; let changed = false;
+      const cx = (v, max) => clamp(Number(v), 0, max), grid = (v) => Math.round(v / 10) * 10;
+      if (op === "move") {
+        const arr = m.kind === "portal" ? f.portals : f.widgets;
+        const o = arr.find((x) => x.id === m.id);
+        if (o) { o.x = grid(cx(m.x, f.w - (o.w || 40))); o.y = grid(cx(m.y, f.h - (o.h || 40))); changed = true; }
+      } else if (op === "add") {
+        const id = "w-" + crypto.randomBytes(3).toString("hex");
+        const type = ["note", "timer", "embed"].includes(m.wtype) ? m.wtype : "note";
+        const wd = { id, type, x: grid(cx(m.x, f.w - 180)), y: grid(cx(m.y, f.h - 120)), w: type === "embed" ? 280 : 180, h: type === "embed" ? 160 : 120 };
+        if (type === "note") { wd.text = String(m.text || "New note").slice(0, 300); wd.color = "#ffd166"; }
+        else if (type === "timer") { wd.label = String(m.label || "Timer").slice(0, 40); wd.endsAt = Date.now() + 10 * 60000; }
+        else { wd.kind = "web"; wd.url = String(m.url || "").slice(0, 400); wd.title = String(m.title || "Embed").slice(0, 80); }
+        f.widgets.push(wd); changed = true;
+      } else if (op === "remove") {
+        const arr = m.kind === "portal" ? f.portals : f.widgets;
+        const i = arr.findIndex((x) => x.id === m.id); if (i >= 0) { arr.splice(i, 1); changed = true; }
+      }
+      if (changed) { const wmsg = JSON.stringify({ t: "world", world: worldForClient(f.slug) }); for (const [ws2, q] of clients) if (q.floor === f.slug && ws2.readyState === 1) ws2.send(wmsg); }
     }
   });
 

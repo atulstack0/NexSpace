@@ -33,6 +33,9 @@
   .btn.danger.active{background:var(--danger);border-color:var(--danger)}
   .btn.live.active{background:var(--danger);border-color:var(--danger);animation:pulse 1.2s infinite}
   @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,93,108,.5)}50%{box-shadow:0 0 0 6px rgba(255,93,108,0)}}
+  #editBar{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:19;display:none;gap:7px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:96vw;
+    background:rgba(20,27,44,.96);border:1px solid var(--accent);border-radius:12px;padding:7px 11px;box-shadow:0 8px 28px rgba(0,0,0,.4)}
+  #editBar .elabel{color:var(--muted);font-size:12px}
   .seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
   .seg button{background:var(--panel2);color:var(--muted);border:0;padding:6px 9px;font-size:12px;cursor:pointer}
   .seg button.active{background:var(--accent);color:#fff}
@@ -44,11 +47,11 @@
   #statusSel:hover,#floorSel:hover{border-color:var(--accent)}
   /* Shared YouTube TV */
   #tv{position:fixed;inset:0;z-index:62;display:none;align-items:center;justify-content:center;background:rgba(8,12,20,.82);padding:14px}
-  .tvbox{display:flex;flex-direction:column;gap:10px;width:1040px;max-width:96vw;max-height:92vh;background:#0f1626;border:1px solid var(--line);border-radius:14px;padding:12px}
+  .tvbox{display:flex;flex-direction:column;gap:10px;width:1040px;max-width:96vw;height:min(86vh,680px);background:#0f1626;border:1px solid var(--line);border-radius:14px;padding:12px}
   .tvhead{display:flex;align-items:center;gap:10px;font-size:14px}
   #tvNow{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:50%}
   .tvmain{display:flex;gap:12px;min-height:0;flex:1}
-  .tvplayer{flex:1;min-width:0;background:#000;border-radius:10px;overflow:hidden;aspect-ratio:16/9}
+  .tvplayer{flex:1;min-width:0;min-height:200px;background:#000;border-radius:10px;overflow:hidden}
   .tvplayer iframe{width:100%;height:100%;border:0;display:block}
   .tvside{width:320px;max-width:42vw;display:flex;flex-direction:column;gap:8px;min-height:0}
   .tvsearch{display:flex;gap:6px}
@@ -137,7 +140,16 @@
   <button class="btn" id="btnChat" title="Chat (6.9)">💬</button>
   <button class="btn" id="btnWb" title="Whiteboard (6.8)">🖊️</button>
   <button class="btn" id="btnReact" title="React (6.6)">😀</button>
+  <button class="btn" id="btnEdit" title="Edit the floor — move/add/remove elements (owner/admin)" style="display:none">✏️ Edit</button>
   </div>
+</div>
+<div id="editBar">
+  <span class="elabel">✏️ Editing floor</span>
+  <button class="btn" id="edAddNote">＋ Note</button>
+  <button class="btn" id="edAddTimer">＋ Timer</button>
+  <button class="btn warn" id="edDel">🗑 Delete</button>
+  <span id="edHint" class="elabel">drag elements to move · click to select</span>
+  <button class="btn active" id="edDone">✓ Done</button>
 </div>
 <div id="reactBar"></div>
 <div id="chat">
@@ -246,7 +258,8 @@
     return 0;}
   function speakLevel(id){const s=(lvlSmooth.get(id)||0)*0.6+rawLevel(id)*0.4;lvlSmooth.set(id,s<0.003?0:s);return s;}
   let myStatus='available',lastActivity=Date.now(),autoAway=false;
-  let tvData={videoId:'',title:'',queue:[]},tvFrameId=''; // shared YouTube TV state
+  let tvData={videoId:'e5D5h4W7P98',title:'NexSpace TV',queue:[]},tvFrameId=''; // shared YouTube TV state (client default so the TV always has something to show)
+  let editMode=false,editSel=null,editDrag=null; // owner/admin floor editor
   const reactions=new Map(),adminMuted=new Set();
   const lkAudio=new Map(),lkVideo=new Map(),lkScreens=new Map();let screenFocus=null;
   const hsl=h=>'hsl('+h+' 70% 60%)';
@@ -283,7 +296,8 @@
         world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});
         if(m.you){if(m.you.name)myName=m.you.name;if(m.you.role)myRole=m.you.role;if(m.you.avatar)myAvatar=m.you.avatar;
           const rp=document.getElementById('rolePill');if(rp)rp.innerHTML='you: '+escapeHtml(myName||'Guest')+' · <b>'+escapeHtml(myRole||'guest')+'</b>';
-          const so=document.getElementById('btnSignout');if(so)so.style.display=myToken?'':'none';}
+          const so=document.getElementById('btnSignout');if(so)so.style.display=myToken?'':'none';
+          const be=document.getElementById('btnEdit');if(be)be.style.display=(myRole==='admin'||myRole==='owner')?'':'none';}
         if(m.whiteboard)wbStrokes=m.whiteboard.slice();
         if(m.tv)applyTv(m.tv);
         applyBranding(world.branding);populateFloors(world);
@@ -320,11 +334,13 @@
     if(viewMode==='3d'&&k===' '){if(jumpZ<=0.5)jumpV=220;e.preventDefault();return;} // cosmetic jump
     if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','shift'].includes(k)){keys.add(k);if(k!=='shift')target=null;e.preventDefault();}});
   addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
+  const toWorld=e=>({x:(e.clientX-VW/2)/cam.zoom+cam.x,y:(e.clientY-VH/2)/cam.zoom+cam.y});
   canvas.addEventListener('mousedown',e=>{if(e.button!==0)return;
     if(viewMode==='3d'){if(!pointerLocked&&canvas.requestPointerLock)canvas.requestPointerLock();return;} // click to look around
-    const w={x:(e.clientX-VW/2)/cam.zoom+cam.x,y:(e.clientY-VH/2)/cam.zoom+cam.y};
-    if(world&&world.mediaWall){const mc={x:world.mediaWall.x+world.mediaWall.w/2,y:world.mediaWall.y};
-      if(Math.hypot(w.x-mc.x,w.y-mc.y)<90){openTv();return;}}
+    const w=toWorld(e);
+    if(editMode){editDown(w);return;}                       // edit mode: drag/select elements instead of moving
+    if(world&&world.mediaWall){const M=world.mediaWall;
+      if(w.x>=M.x-12&&w.x<=M.x+M.w+12&&w.y>=M.y-(M.screenH||150)-12&&w.y<=M.y+(M.base||16)+12){openTv();return;}}
     if(world&&world.portals){for(const pt of world.portals){if(w.x>=pt.x&&w.x<=pt.x+pt.w&&w.y>=pt.y&&w.y<=pt.y+pt.h){travelTo(pt.to);return;}}}
     if(world&&world.widgets){for(const wd of world.widgets){if(wd.type!=='timer'&&w.x>=wd.x&&w.x<=wd.x+wd.w&&w.y>=wd.y&&w.y<=wd.y+wd.h){openWidget(wd);return;}}}
     target=w;});
@@ -333,6 +349,24 @@
     yaw+=e.movementX*0.0025;pitch=Math.max(-1.1,Math.min(1.1,pitch-e.movementY*0.0025));});
   canvas.addEventListener('wheel',e=>{e.preventDefault();const f=e.deltaY<0?1/1.1:1.1;
     if(viewMode==='3d')tpDist=Math.max(150,Math.min(520,tpDist*f));else cam.zoom=Math.max(.5,Math.min(2,cam.zoom*(e.deltaY<0?1.1:1/1.1)));},{passive:false});
+
+  // ---------- Owner/admin floor editor (move/add/remove elements; live to everyone) ----------
+  function editDown(w){if(!world)return;let hit=null;
+    if(world.widgets)for(let i=world.widgets.length-1;i>=0;i--){const o=world.widgets[i];if(w.x>=o.x&&w.x<=o.x+o.w&&w.y>=o.y&&w.y<=o.y+o.h){hit={kind:'widget',obj:o};break;}}
+    if(!hit&&world.portals)for(let i=world.portals.length-1;i>=0;i--){const o=world.portals[i];if(w.x>=o.x&&w.x<=o.x+o.w&&w.y>=o.y&&w.y<=o.y+o.h){hit={kind:'portal',obj:o};break;}}
+    editSel=hit;updateEditBar();if(hit)editDrag={kind:hit.kind,obj:hit.obj,ox:w.x-hit.obj.x,oy:w.y-hit.obj.y};}
+  document.addEventListener('mousemove',e=>{if(!editDrag||viewMode==='3d')return;const w=toWorld(e);editDrag.obj.x=Math.round((w.x-editDrag.ox)/10)*10;editDrag.obj.y=Math.round((w.y-editDrag.oy)/10)*10;});
+  document.addEventListener('mouseup',()=>{if(!editDrag)return;const o=editDrag.obj;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'editFloor',op:'move',kind:editDrag.kind,id:o.id,x:o.x,y:o.y}));editDrag=null;});
+  function editAdd(wtype){if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'editFloor',op:'add',wtype,x:Math.round(me.x-90),y:Math.round(me.y-60)}));toast('Added a '+wtype+' near you');}
+  function editDelete(){if(!editSel){toast('Select an element first');return;}const o=editSel.obj;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'editFloor',op:'remove',kind:editSel.kind,id:o.id}));editSel=null;updateEditBar();}
+  function editToggle(on){editMode=(on!==undefined)?on:!editMode;editSel=null;editDrag=null;
+    document.getElementById('editBar').style.display=editMode?'flex':'none';
+    const be=document.getElementById('btnEdit');if(be)be.classList.toggle('active',editMode);
+    canvas.style.cursor=editMode?'move':'crosshair';if(editMode)toast('✏️ Edit mode — drag to move, ＋ to add, 🗑 to delete');updateEditBar();}
+  function updateEditBar(){const h=document.getElementById('edHint');if(h)h.textContent=editSel?('selected: '+editSel.kind+' — drag, or click 🗑 Delete'):'drag elements to move · click to select';
+    const d=document.getElementById('edDel');if(d)d.style.opacity=editSel?'1':'.55';}
+  function drawEditSel(){if(!editSel)return;const o=editSel.obj;ctx.strokeStyle='#5b8cff';ctx.lineWidth=3;ctx.setLineDash([9,6]);ctx.strokeRect(o.x-3,o.y-3,(o.w||40)+6,(o.h||40)+6);ctx.setLineDash([]);}
+  addEventListener('keydown',e=>{if(editMode&&(e.key==='Delete'||e.key==='Backspace')&&editSel&&!(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'))){editDelete();e.preventDefault();}});
 
   // ---------- Audio (proximity + room override + broadcast) ----------
   let actx=null,master=null,started=false;const voices=new Map(),SCALE=46;let mediaNode=null;
@@ -492,6 +526,7 @@
     for(const r of world.rooms)drawDoor(r);
     drawMedia();
     drawWidgets();
+    if(editMode)drawEditSel();
     if(showLinks&&!muted){for(const e of peers.values()){const v=e.bcast?1:peerVol(e);
       if(v>0.04){ctx.strokeStyle=(e.bcast?'rgba(255,93,108,':'rgba(57,211,166,')+(0.12+v*0.55)+')';ctx.lineWidth=1+v*2.5;
         ctx.beginPath();ctx.moveTo(me.x,me.y);ctx.lineTo(e.rx,e.ry);ctx.stroke();}}}
@@ -1004,6 +1039,11 @@
   document.getElementById('tvSearchBtn').addEventListener('click',tvSearch);
   document.getElementById('tvQ').addEventListener('keydown',e=>{if(e.key==='Enter')tvSearch();});
   document.getElementById('tvSkip').addEventListener('click',()=>tvSend({t:'tvNext'}));
+  document.getElementById('btnEdit').addEventListener('click',()=>editToggle());
+  document.getElementById('edDone').addEventListener('click',()=>editToggle(false));
+  document.getElementById('edAddNote').addEventListener('click',()=>editAdd('note'));
+  document.getElementById('edAddTimer').addEventListener('click',()=>editAdd('timer'));
+  document.getElementById('edDel').addEventListener('click',editDelete);
   // responsive toolbar: hamburger collapses/expands the controls; collapsed by default on small screens
   (function(){const bar=document.getElementById('bar');if(innerWidth<=820)bar.classList.add('collapsed');
     document.getElementById('barToggle').addEventListener('click',()=>bar.classList.toggle('collapsed'));})();

@@ -57,6 +57,7 @@ function join(name, token) {
       const m = JSON.parse(d.toString());
       if (m.t === "welcome") { st.id = m.id; st.role = m.you.role; st.world = m.world; st.tv = m.tv; resolve(st); }
       if (m.t === "floor") { st.floorMsg = m; st.world = m.world; } // arrived on a new floor via portal
+      if (m.t === "world") st.world = m.world; // live layout reload / owner edit
       if (m.t === "tv") st.tv = m;
       if (m.t === "snapshot") st.last = m;
       if (m.t === "denied") st.denied.push(m.action);
@@ -233,6 +234,15 @@ try {
   admin.ws.send(JSON.stringify({ t: "tvQueue", videoId: "abc123XYZ_-", title: "Queued" }));
   await wait(200);
   (guest.tv?.queue?.some((q) => q.videoId === "abc123XYZ_-")) ? ok("tvQueue appends to the shared queue") : bad("tvQueue did not propagate");
+
+  // owner/admin floor editor (live add / move / remove, broadcast to everyone)
+  const wBefore = guest.world?.widgets?.length || 0;
+  admin.ws.send(JSON.stringify({ t: "editFloor", op: "add", wtype: "note", x: 640, y: 640 }));
+  await wait(250);
+  ((guest.world?.widgets?.length || 0) === wBefore + 1) ? ok("owner editFloor add broadcasts a new element") : bad("editFloor add did not broadcast");
+  guest.ws.send(JSON.stringify({ t: "editFloor", op: "add", wtype: "note", x: 100, y: 100 }));
+  await wait(200);
+  (guest.denied.includes("edit the floor")) ? ok("guest denied floor editing (RBAC)") : bad("guest floor edit was NOT blocked");
 
   // reactions (6.6)
   admin.ws.send(JSON.stringify({ t: "react", emoji: "🎉" }));

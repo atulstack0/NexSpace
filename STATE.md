@@ -63,6 +63,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Multi-floor + portals — independent floors, floor-scoped presence/chat/snapshots, portal travel + floor switcher | ✅ | `apps/api` (Floor/portal objects), realtime, web |
 | Interactive objects — sticky notes, embeds (YouTube/Spotify/web → iframe), shared countdown timers; placed in the editor, synced live | ✅ | `apps/api` (widget objects), realtime, web, editor |
 | Responsive UI — collapsible toolbar (hamburger), mobile-friendly overlays | ✅ | `apps/web/index.html` |
+| In-office floor editor — owner/admin drag-move, add, delete elements live (no separate editor needed); RBAC-gated | ✅ | realtime `editFloor`, web |
 | Branding / white-label — per-space name, accent color, logo; served in world + applied live | ✅ | `apps/api` (Floor.branding), realtime, web |
 | CI — GitHub Actions (`check` + `redis-multinode` + `api-smoke`) | ✅ | `.github/workflows/ci.yml` |
 

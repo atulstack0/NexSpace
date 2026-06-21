@@ -41,7 +41,7 @@ const DEFAULT_FLOOR: FloorDef = {
     { key: "board", name: "Boardroom", color: "#39d3a6", x: 1516, y: 136, w: 300, h: 546,
       doorX: 1796, doorY: 356, doorW: 18, doorH: 96, doorState: "locked" },
   ],
-  media: { x: 1180, y: 980, w: 300, base: 16, screenH: 150, title: "📺 NexSpace TV — click to watch", dur: 213 },
+  media: { x: 940, y: 212, w: 320, base: 16, screenH: 196, title: "📺 NexSpace TV — click to watch", dur: 213 },
   portals: [{ x: 2030, y: 1290, w: 96, h: 96, to: "rooftop", label: "Rooftop ↑", color: "#ffb454" }],
   widgets: [
     { type: "note", x: 360, y: 980, config: { w: 190, h: 130, text: "Welcome to NexSpace! Click the 📺 TV to watch & queue songs together, or pop up to the rooftop 🌇", color: "#ffd166" } },
