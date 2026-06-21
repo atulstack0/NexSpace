@@ -288,6 +288,16 @@ if (REDIS_URL) {
   console.log("Redis fan-out enabled (node " + NODE_ID + ")");
 }
 
+// Dedicated, LOW-FREQUENCY Redis for durable persistence only (no 250ms fan-out) — fits a free Upstash
+// quota easily. Set PERSIST_REDIS_URL to an Upstash rediss:// URL to survive Render redeploys.
+let persistRedis = null;
+if (process.env.PERSIST_REDIS_URL) {
+  try { const Redis = require("ioredis"); persistRedis = new Redis(process.env.PERSIST_REDIS_URL, { maxRetriesPerRequest: 2 });
+    persistRedis.on("error", (e) => console.warn("persist redis:", e.message)); console.log("Durable edit persistence via PERSIST_REDIS_URL");
+  } catch (e) { console.warn("persist redis init:", e.message); }
+}
+const persistClient = () => persistRedis || pub; // prefer the dedicated client; fall back to the fan-out client
+
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".ico": "image/x-icon" };
 const server = http.createServer((req, res) => {
   let urlPath = (req.url || "/").split("?")[0];   // strip query first, so "/?sso=…" still serves the app
@@ -683,7 +693,7 @@ async function loadWorld() {
   }
 }
 // ---------- Persist owner edits (§6.10) — survive restarts without the API. Saves the editable parts of each
-// floor to Redis (if REDIS_URL) else a JSON file; loads them on boot over the built-in floors. Off when WORLD_API is set. ----------
+// floor to Redis (if PERSIST_REDIS_URL/REDIS_URL) else a JSON file; loads them on boot over the built-in floors. Off when WORLD_API is set. ----------
 const PERSIST_FILE = path.join(process.env.DATA_DIR || __dirname, "floors-data.json");
 let persistTimer = null;
 function snapshotFloors() {
@@ -695,15 +705,15 @@ function persistFloors() {
   if (process.env.WORLD_API || process.env.NO_PERSIST) return; // API/DB is the source of truth when configured
   clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
-    const data = JSON.stringify(snapshotFloors());
-    if (pub) { try { pub.set("nexspace:floors", data); } catch {} }
+    const data = JSON.stringify(snapshotFloors()), rc = persistClient();
+    if (rc) { try { rc.set("nexspace:floors", data); } catch {} }
     else fs.writeFile(PERSIST_FILE, data, () => {});
   }, 800);
 }
 async function loadPersisted() {
   if (process.env.WORLD_API || process.env.NO_PERSIST) return;
-  let data = null;
-  try { if (pub) data = await pub.get("nexspace:floors"); else if (fs.existsSync(PERSIST_FILE)) data = fs.readFileSync(PERSIST_FILE, "utf8"); } catch {}
+  let data = null; const rc = persistClient();
+  try { if (rc) data = await rc.get("nexspace:floors"); else if (fs.existsSync(PERSIST_FILE)) data = fs.readFileSync(PERSIST_FILE, "utf8"); } catch {}
   let saved; try { saved = data ? JSON.parse(data) : null; } catch { saved = null; }
   if (!saved) return;
   for (const slug in saved) {
