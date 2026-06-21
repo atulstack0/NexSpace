@@ -53,6 +53,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Walk animation — procedural leg/arm swing on the styled avatar when moving; GLB models play embedded **Walk/Idle** clips (AnimationMixer), blended by movement | ✅ | `apps/web/index.html` (Three3D) |
 | 3D TV — live video **matrix3d-skewed onto the wall screen** (perspective-correct, wall-mounted, occluded by walls); the poster shows only while paused/out-of-view, hidden while playing (no double) | ✅ | `apps/web/index.html` |
 | Mobile/touch — on-screen joystick to walk, drag-to-look in 3D (no pointer-lock needed), tap to move/interact in 2D; no-zoom viewport, larger touch targets, compact panels/minimap | ✅ | `apps/web/index.html` |
+| Avatar customization — 🎨 panel to pick suit/tie/skin colour + display name (+ optional own GLB url); synced to everyone via presence, saved on device, applied in 2D + 3D | ✅ | realtime `appearance`, web |
 | PUBG-style 3D camera — third/first person, mouse-look, sprint, jump, camera collision | ✅ | `apps/web/index.html` |
 | Presence & status (5 states) + idle auto-away | ✅ | realtime + web |
 | Auth (JWT login) + server-enforced RBAC | ✅ | `apps/api/src/auth`, realtime |

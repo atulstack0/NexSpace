@@ -285,6 +285,16 @@ try {
   await wait(220);
   (guest.bookings.focus === null) ? ok("cancelling a booking clears it for everyone") : bad("cancel did not clear the booking");
 
+  // avatar customization — appearance (colours + name) syncs to others via presence; invalid colours sanitized
+  admin.ws.send(JSON.stringify({ t: "appearance", name: "Ada A", appear: { suit: "#112233", tie: "#aabbcc", skin: "#ddccbb" } }));
+  await wait(320);
+  const ap = guest.last?.players?.find((p) => p.id === admin.id);
+  (ap && ap.appear && ap.appear.suit === "#112233" && ap.name === "Ada A") ? ok("avatar appearance + display name sync to others") : bad("appearance did not sync");
+  admin.ws.send(JSON.stringify({ t: "appearance", appear: { suit: "not-a-color", tie: "#00ff00", skin: "x" } }));
+  await wait(300);
+  const ap2 = guest.last?.players?.find((p) => p.id === admin.id);
+  (ap2 && ap2.appear && ap2.appear.suit === "#24272f" && ap2.appear.tie === "#00ff00") ? ok("invalid appearance colours are sanitized to defaults") : bad("appearance not sanitized");
+
   // reactions (6.6)
   admin.ws.send(JSON.stringify({ t: "react", emoji: "🎉" }));
   await wait(300);

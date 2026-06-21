@@ -27,7 +27,7 @@
     #barItems .btn,#barItems select{padding:10px 12px;font-size:14px}      /* bigger touch targets */
     .tvmain{flex-direction:column} .tvside{width:100%;max-width:none} .tvplayer{aspect-ratio:16/9}
     #chat,#wb{max-width:96vw}
-    #tv,#rooms{bottom:auto;top:64px}                                       /* keep panels clear of the joystick */
+    #tv,#rooms,#customize{bottom:auto;top:64px}                            /* keep panels clear of the joystick */
     .tvbox{width:96vw!important;max-height:62vh}
     #minimapWrap canvas{width:124px;height:auto}
     #hint{font-size:11px;left:8px;right:auto;bottom:8px;max-width:64vw;padding:6px 9px}
@@ -70,6 +70,10 @@
   /* compact controls panel (search + queue); the video stays on the wall, so this doesn't cover it */
   #tv{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:30;display:none;max-width:94vw}
   #rooms{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:30;display:none;max-width:94vw}
+  #customize{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:31;display:none;max-width:94vw}
+  .custrow{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;color:var(--text)}
+  .custrow input[type=color]{width:48px;height:30px;padding:0;border:1px solid var(--line);border-radius:8px;background:none;cursor:pointer}
+  .custrow input:not([type=color]){flex:1;max-width:210px;background:#0d1424;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:12px}
   .roomrow{display:flex;flex-direction:column;gap:6px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
   .roomrow .rt{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
   .roomrow .rb{font-size:12px;color:var(--muted)}
@@ -173,6 +177,7 @@
   <button class="btn" id="btnReact" title="React (6.6)">😀</button>
   <button class="btn" id="btnTv" title="Open the TV (or press T)">📺 TV</button>
   <button class="btn" id="btnRooms" title="Book a room / today's schedule">📅 Rooms</button>
+  <button class="btn" id="btnCustomize" title="Customize your avatar">🎨 Avatar</button>
   <button class="btn" id="btnEdit" title="Edit the floor — move/add/remove elements (owner/admin)" style="display:none">✏️ Edit</button>
   </div>
 </div>
@@ -232,6 +237,18 @@
     <div id="roomsList" class="tvlist" style="max-height:48vh"></div>
   </div>
 </div>
+<div id="customize">
+  <div class="tvbox" style="width:380px">
+    <div class="tvhead"><b>🎨 Customize avatar</b><button class="btn" id="custClose" style="margin-left:auto;padding:3px 10px">✕</button></div>
+    <label class="custrow">Display name<input id="custName" maxlength="16" placeholder="Your name" /></label>
+    <label class="custrow">Suit / vest<input id="custSuit" type="color" /></label>
+    <label class="custrow">Tie<input id="custTie" type="color" /></label>
+    <label class="custrow">Skin tone<input id="custSkin" type="color" /></label>
+    <label class="custrow">Your own model (GLB url, optional)<input id="custModel" placeholder="https://…/character.glb" /></label>
+    <div style="display:flex;gap:8px;margin-top:4px"><button class="btn active" id="custSave" style="flex:1">Save &amp; apply</button><button class="btn" id="custReset">Reset</button></div>
+    <div class="tip" style="font-size:11px;color:var(--muted)">Your look syncs to everyone and is saved on this device. A custom model must allow cross-origin (CORS) loading.</div>
+  </div>
+</div>
 <div id="banner"><span class="l"></span><span id="bannerText"></span></div>
 <div id="recind"></div>
 <div id="knock"><span id="knockText"></span><button class="btn" id="knockBtn">Knock</button></div>
@@ -277,6 +294,9 @@
   // LiveKit (optional real media). API runs on :3001 (same host as the page).
   const API_BASE='';   // same-origin: the realtime server serves /auth/login (single-service). Local full-API setups also handle it.
   let lkRoom=null,lkActive=false,localVideoEl=null,myToken=null,myRole='guest',myAvatar='';
+  function loadAppear(){try{const s=localStorage.getItem('nexspace_appear');return s?JSON.parse(s):null;}catch(_){return null;}}
+  function saveAppear(a){try{localStorage.setItem('nexspace_appear',JSON.stringify(a));}catch(_){}}
+  let myAppear=loadAppear();   // {suit,tie,skin,model} or null (null = default hue-based look)
   const avatarImgs=new Map(); // url -> HTMLImageElement (Google profile pics, cached)
   function getAvatarImg(url){if(!url)return null;let im=avatarImgs.get(url);if(im!==undefined)return im;im=new Image();im.referrerPolicy='no-referrer';im.src=url;avatarImgs.set(url,im);return im;}
   // Real speaking detection: read each participant's live mic level from LiveKit (0..1), smoothed.
@@ -297,7 +317,7 @@
   function speakLevel(id){const s=(lvlSmooth.get(id)||0)*0.6+rawLevel(id)*0.4;lvlSmooth.set(id,s<0.003?0:s);return s;}
   let myStatus='available',lastActivity=Date.now(),autoAway=false;
   let tvData={videoId:'e5D5h4W7P98',title:'NexSpace TV',queue:[]}; // shared YouTube TV state (client default so the TV always has something to show)
-  let ytPlayer=null,ytReady=false,tvApplyingRemote=false,tvUnmuted=false,tvRaw=false,tvKickTimer=null,tvWallShown=false,tvSync={pos:0,at:0,playing:true}; // synced watch-party playback
+  let ytPlayer=null,ytReady=false,tvApplyingRemote=false,tvUnmuted=false,tvRaw=false,tvRawVid='',tvKickTimer=null,tvWallShown=false,tvSync={pos:0,at:0,playing:true}; // synced watch-party playback
   window.onYouTubeIframeAPIReady=function(){ytReady=true;clearTimeout(tvKickTimer);if(myId)tvEnsurePlayer();}; // build the wall player as soon as we've joined
   (function(){const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);})();
   let editMode=false,editSel=null,editDrag=null; // owner/admin floor editor
@@ -329,7 +349,7 @@
     const proto=location.protocol==='https:'?'wss':'ws';
     ws=new WebSocket(proto+'://'+location.host);
     const conn=document.getElementById('conn'),ct=document.getElementById('connText');
-    ws.onopen=()=>{conn.classList.remove('bad');ct.textContent='connected';ws.send(JSON.stringify({t:'join',name,token:myToken}));};
+    ws.onopen=()=>{conn.classList.remove('bad');ct.textContent='connected';ws.send(JSON.stringify({t:'join',name,token:myToken,appear:myAppear||undefined}));};
     ws.onclose=()=>{conn.classList.add('bad');ct.textContent='reconnecting…';setTimeout(()=>connect(name),1500);};
     ws.onerror=()=>{conn.classList.add('bad');ct.textContent='connection error';};
     ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch{return;}
@@ -352,7 +372,7 @@
         const seen=new Set();
         for(const p of m.players){if(p.id===myId){seen.add(p.id);continue;}seen.add(p.id);
           let e=peers.get(p.id);if(!e){e={rx:p.x,ry:p.y};peers.set(p.id,e);}
-          Object.assign(e,{x:p.x,y:p.y,facing:p.facing,name:p.name,status:p.status,talking:p.talking,bcast:p.bcast,avatar:p.avatar});}
+          Object.assign(e,{x:p.x,y:p.y,facing:p.facing,name:p.name,status:p.status,talking:p.talking,bcast:p.bcast,avatar:p.avatar,appear:p.appear});}
         for(const id of [...peers.keys()])if(!seen.has(id)){removeVoice(id);peers.delete(id);}
         document.getElementById('count').textContent=m.players.length;
       }
@@ -614,8 +634,8 @@
     if(showLinks&&!muted){for(const e of peers.values()){const v=e.bcast?1:peerVol(e);
       if(v>0.04){ctx.strokeStyle=(e.bcast?'rgba(255,93,108,':'rgba(57,211,166,')+(0.12+v*0.55)+')';ctx.lineWidth=1+v*2.5;
         ctx.beginPath();ctx.moveTo(me.x,me.y);ctx.lineTo(e.rx,e.ry);ctx.stroke();}}}
-    for(const [id,e] of peers){const lv=lkVideo.get(id);const rc=reactions.get(id);const re=(rc&&performance.now()-rc.t<2200)?rc.emoji:null;avatar(e.rx,e.ry,hueOf(id),e.name||'Guest',e.status,e.talking,e.bcast,false,lv&&lv.el,re,speakLevel(id),e.avatar);}
-    {const rc=reactions.get(myId);const re=(rc&&performance.now()-rc.t<2200)?rc.emoji:null;avatar(me.x,me.y,212,'You',null,false,myBcast,true,localVideoEl,re,speakLevel(myId),myAvatar);}
+    for(const [id,e] of peers){const lv=lkVideo.get(id);const rc=reactions.get(id);const re=(rc&&performance.now()-rc.t<2200)?rc.emoji:null;avatar(e.rx,e.ry,hueOf(id),e.name||'Guest',e.status,e.talking,e.bcast,false,lv&&lv.el,re,speakLevel(id),e.avatar,e.appear);}
+    {const rc=reactions.get(myId);const re=(rc&&performance.now()-rc.t<2200)?rc.emoji:null;avatar(me.x,me.y,212,'You',null,false,myBcast,true,localVideoEl,re,speakLevel(myId),myAvatar,myAppear);}
     ctx.restore();
     drawMinimap();
   }
@@ -654,7 +674,7 @@
   function speakWaves(x,y,r,color,amp){const reach=8+amp*40,rings=amp>0.55?3:2;
     for(let i=0;i<rings;i++){const t=((frame*0.045)+i/rings)%1;const rad=r+3+t*reach;
       ctx.strokeStyle=hexA(color,(1-t)*(0.3+amp*0.5));ctx.lineWidth=2+amp*2.5;ctx.beginPath();ctx.arc(x,y,rad,0,7);ctx.stroke();}}
-  function avatar(x,y,hue,name,status,talking,bcast,isMe,videoEl,reactEmoji,level,avatarUrl){
+  function avatar(x,y,hue,name,status,talking,bcast,isMe,videoEl,reactEmoji,level,avatarUrl,appear){
     let alpha=1;if(!isMe){const sameRoom=roomAtPt(me.x,me.y)&&roomAtPt(me.x,me.y)===roomAtPt(x,y);const d=Math.hypot(x-me.x,y-me.y);
       alpha=(sameRoom||bcast)?1:Math.max(0.32,1-Math.max(0,d-R().inner)/(R().outer*1.25));}
     ctx.globalAlpha=alpha;const r=16;
@@ -673,8 +693,9 @@
         try{ctx.drawImage(pic,(s-sw)/2,(d-sh)/2,sw,sh,x-r,y-r,2*r,2*r);}catch(_){pic.naturalWidth=0;}
         ctx.restore();
       }else{
-        ctx.fillStyle=hsl(hue);ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();
-        ctx.fillStyle='#0b1019';ctx.font='700 16px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(isMe?(myName?myName[0].toUpperCase():'Y'):(name[0]||'?'),x,y+1);
+        ctx.fillStyle=(appear&&appear.suit)?appear.suit:hsl(hue);ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();
+        if(appear&&appear.tie){ctx.fillStyle=appear.tie;ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.arc(x,y,r*0.5,0,7,true);ctx.fill('evenodd');} // tie = a coloured ring
+        ctx.fillStyle=appear?'#eaf0ff':'#0b1019';ctx.font='700 16px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(isMe?(myName?myName[0].toUpperCase():'Y'):(name[0]||'?'),x,y+1);
       }
     }
     ctx.lineWidth=3;ctx.strokeStyle=isMe?'#fff':'rgba(255,255,255,.7)';ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.stroke();
@@ -798,27 +819,54 @@
       } catch (_) { ericState = "failed"; }
     }
     function tintMat(mm, tint) { const c = mm.clone(); if (c.color) c.color.lerp(tint, 0.16); c.skinning = mm.skinning; return c; }
-    function attachEric(a) {
-      if (!ericProto || a.model) return;
-      let m; try { m = THREE.SkeletonUtils ? THREE.SkeletonUtils.clone(ericProto) : ericProto.clone(true); } catch (_) { try { m = ericProto.clone(true); } catch (e) { return; } }
-      let box = new THREE.Box3().setFromObject(m), h = box.max.y - box.min.y;          // auto-fit to ~64 units tall (source units unknown)
+    // Attach a GLB model (clone of `proto`) to an avatar: auto-fit height, drop feet to floor, subtle per-person tint, play walk/idle clips.
+    function attachModelObj(a, proto, clips) {
+      if (!proto || a.model) return;
+      let m; try { m = THREE.SkeletonUtils ? THREE.SkeletonUtils.clone(proto) : proto.clone(true); } catch (_) { try { m = proto.clone(true); } catch (e) { return; } }
+      let box = new THREE.Box3().setFromObject(m), h = box.max.y - box.min.y;
       const s = (h > 0.0001) ? 64 / h : 1; m.scale.setScalar(s);
-      box = new THREE.Box3().setFromObject(m); m.position.y = -box.min.y;               // feet on the ground
+      box = new THREE.Box3().setFromObject(m); m.position.y = -box.min.y;
       m.rotation.y = ERIC_FACE;
-      const tint = new THREE.Color("hsl(" + a.hue + ",60%,55%)");                       // subtle per-person tint
+      const tint = new THREE.Color("hsl(" + a.hue + ",60%,55%)");
       m.traverse((n) => { if (n.isMesh && n.material) { n.frustumCulled = false; n.material = Array.isArray(n.material) ? n.material.map((mm) => tintMat(mm, tint)) : tintMat(n.material, tint); } });
       a.model = m; a.group.add(m); a.bodyGroup.visible = false; if (a.head) a.head.visible = false;
-      try {                                                                            // play embedded walk/idle clips if the GLB has them (e.g. a Mixamo export)
-        if (ericClips && ericClips.length && THREE.AnimationMixer) {
+      try {
+        if (clips && clips.length && THREE.AnimationMixer) {
           a.mixer = new THREE.AnimationMixer(m);
-          const find = (re) => ericClips.find((c) => re.test(c.name || ""));
-          const walkClip = find(/walk/i) || ericClips[ericClips.length - 1];
-          const idleClip = find(/idle|stand|breath/i) || (ericClips.length > 1 ? ericClips[0] : null);
+          const find = (re) => clips.find((c) => re.test(c.name || ""));
+          const walkClip = find(/walk/i) || clips[clips.length - 1];
+          const idleClip = find(/idle|stand|breath/i) || (clips.length > 1 ? clips[0] : null);
           a.walkAction = a.mixer.clipAction(walkClip); a.walkAction.play();
           if (idleClip && idleClip !== walkClip) { a.idleAction = a.mixer.clipAction(idleClip); a.idleAction.play(); a.idleAction.weight = 1; a.walkAction.weight = 0; }
           else { a.walkAction.weight = 1; }
         }
       } catch (_) {}
+    }
+    function attachEric(a) { attachModelObj(a, ericProto, ericClips); }
+    const modelCache = new Map();   // per-user custom GLB url -> {proto, clips, state}
+    function loadModelUrl(url) {
+      let rec = modelCache.get(url); if (rec) return rec;
+      rec = { proto: null, clips: [], state: "loading" }; modelCache.set(url, rec);
+      if (typeof THREE === "undefined" || !THREE.GLTFLoader) { rec.state = "failed"; return rec; }
+      try { new THREE.GLTFLoader().load(url, (g) => { rec.proto = (g && (g.scene || (g.scenes && g.scenes[0]))) || null; rec.clips = (g && g.animations) || []; rec.state = rec.proto ? "ready" : "failed"; }, undefined, () => { rec.state = "failed"; }); }
+      catch (_) { rec.state = "failed"; }
+      return rec;
+    }
+    // Recolour the styled avatar from a user's chosen appearance (suit/tie/skin). No-op once a GLB model is attached.
+    function applyAppear3D(a, appear) {
+      if (!a || !a.mats) return; const key = appear ? (appear.suit + appear.tie + appear.skin) : "";
+      if (a.appearKey === key) return; a.appearKey = key;
+      try {
+        if (appear) { a.mats.vest.color.set(appear.suit); a.mats.tie.color.set(appear.tie); a.mats.skin.color.set(appear.skin); }
+        else { a.mats.vest.color.set(0x24272f); a.mats.tie.color.set("hsl(" + a.hue + ",72%,52%)"); a.mats.skin.color.set(0xf1c9a5); } // back to default hue-based look
+      } catch (_) {}
+    }
+    // Pick the right model for an avatar: a user's own GLB url, else the global eric.glb (when ERIC_FOR allows). Attach once.
+    function ensureModel(a, appear, isMe) {
+      if (a.model) return;
+      const url = (appear && appear.model) ? appear.model : "";
+      if (url) { const rec = loadModelUrl(url); if (rec.state === "ready") { attachModelObj(a, rec.proto, rec.clips); a.modelUrl = url; } return; }
+      if (ericState === "ready" && (ERIC_FOR === "all" || isMe)) attachEric(a);
     }
     const avatars = new Map(), picTexCache = new Map(), tvThumbCache = new Map(); // id->avatar, url->tex, videoId->tex
     const roomSprites = new Map(); // roomId -> floating "booked" nameplate sprite
@@ -999,7 +1047,7 @@
       const shadow = new THREE.Mesh(new THREE.CircleGeometry(15, 24), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28 })); // contact shadow (stays under the GLB too)
       shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.6;
       group.add(shadow); avatarGroup.add(group);
-      a = { group, bodyGroup, head, headMat, legP, armP, videoTex: null, picUrl: null, model: null, mixer: null, hue }; avatars.set(id, a); return a;
+      a = { group, bodyGroup, head, headMat, legP, armP, mats: { vest: matVest, tie: matTie, skin: matSkin }, appearKey: "", videoTex: null, picUrl: null, model: null, modelUrl: "", mixer: null, hue }; avatars.set(id, a); return a;
     }
     // Procedural walk: swing legs/arms while the avatar is moving; settle when idle. GLB models use their own clips.
     function walkAnim(a, x, z, dt) {
@@ -1036,7 +1084,7 @@
       const seen = new Set();
       for (const [id, e] of peers) {
         seen.add(id); const a = ensure(id, hueOf(id), e.name); a.group.position.set(e.rx, 0, e.ry); a.group.rotation.y = Math.PI / 2 - (e.facing || 0); a.head.lookAt(camera.position); setNameSprite(a, e.name || "Guest");
-        if (ericState === "ready" && !a.model && ERIC_FOR === "all") attachEric(a);   // upgrade to the real character when it loads
+        applyAppear3D(a, e.appear); ensureModel(a, e.appear, false);   // custom colours + (custom or global) GLB model
         walkAnim(a, e.rx, e.ry, dt);
         const lv = lkVideo.get(id);
         if (lv && lv.el && lv.el.readyState >= 2 && !a.videoTex) { a.videoTex = new THREE.VideoTexture(lv.el); a.headMat.map = a.videoTex; a.headMat.needsUpdate = true; }
@@ -1044,7 +1092,7 @@
       }
       if (cameraMode !== "firstPerson") {
         seen.add("__me"); const a = ensure("__me", 212, "You"); a.group.visible = true; a.group.position.set(me.x, 0, me.y); a.group.rotation.y = Math.PI / 2 - (me.facing || 0); a.head.lookAt(camera.position); setNameSprite(a, myName || "You");
-        if (ericState === "ready" && !a.model) attachEric(a);                          // your avatar uses the real character (ERIC_FOR all or me)
+        applyAppear3D(a, myAppear); ensureModel(a, myAppear, true);     // my custom look + model
         walkAnim(a, me.x, me.y, dt);
         if (localVideoEl && localVideoEl.readyState >= 2 && !a.videoTex) { a.videoTex = new THREE.VideoTexture(localVideoEl); a.headMat.map = a.videoTex; a.headMat.needsUpdate = true; }
         else if (!a.videoTex && myAvatar) applyPic(a, myAvatar);
@@ -1230,6 +1278,28 @@
   function roomsOpen(){const r=document.getElementById('rooms');return r&&r.style.display==='block';}
   function openRooms(){document.getElementById('rooms').style.display='block';renderRooms();}
   function closeRooms(){document.getElementById('rooms').style.display='none';}
+  // ---------- Avatar customization (colours + name + optional GLB model; synced to everyone, saved on this device) ----------
+  function hslHex(h,s,l){s/=100;l/=100;const a=s*Math.min(l,1-l),k=n=>(n+h/30)%12,f=n=>l-a*Math.max(-1,Math.min(k(n)-3,9-k(n),1)),c=n=>Math.round(255*f(n)).toString(16).padStart(2,'0');return '#'+c(0)+c(8)+c(4);}
+  function openCustomize(){const a=myAppear||{};
+    document.getElementById('custName').value=myName||'';
+    document.getElementById('custSuit').value=a.suit||'#24272f';
+    document.getElementById('custTie').value=a.tie||hslHex(212,72,52);
+    document.getElementById('custSkin').value=a.skin||'#f1c9a5';
+    document.getElementById('custModel').value=a.model||'';
+    document.getElementById('customize').style.display='block';}
+  function closeCustomize(){document.getElementById('customize').style.display='none';}
+  function customizeOpen(){const c=document.getElementById('customize');return c&&c.style.display==='block';}
+  function applyCustomize(){
+    const suit=document.getElementById('custSuit').value,tie=document.getElementById('custTie').value,skin=document.getElementById('custSkin').value,model=document.getElementById('custModel').value.trim();
+    const name=document.getElementById('custName').value.trim();
+    myAppear={suit,tie,skin,model:/^https:\/\//.test(model)?model:''};saveAppear(myAppear);
+    if(name){myName=name;const rp=document.getElementById('rolePill');if(rp)rp.innerHTML='you: '+escapeHtml(myName)+' · <b>'+escapeHtml(myRole||'guest')+'</b>';}
+    if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'appearance',name:name||undefined,appear:myAppear}));
+    toast('🎨 Avatar updated');closeCustomize();}
+  function resetCustomize(){myAppear=null;try{localStorage.removeItem('nexspace_appear');}catch(_){}
+    const def={suit:'#24272f',tie:hslHex(212,72,52),skin:'#f1c9a5',model:''};
+    if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'appearance',appear:def}));   // others fall back to the default look
+    toast('🎨 Avatar reset');openCustomize();}
   function renderRooms(){const box=document.getElementById('roomsList');if(!box||!world)return;
     const rms=world.rooms||[],sub=document.getElementById('roomsSub');
     const booked=rms.filter(r=>r.booking).length;if(sub)sub.textContent=rms.length?(booked?booked+' in use':'all free'):'';
@@ -1443,6 +1513,10 @@
   document.getElementById('btnTv').addEventListener('click',openTv);
   document.getElementById('btnRooms').addEventListener('click',()=>{roomsOpen()?closeRooms():openRooms();});
   document.getElementById('roomsClose').addEventListener('click',closeRooms);
+  document.getElementById('btnCustomize').addEventListener('click',()=>{customizeOpen()?closeCustomize():openCustomize();});
+  document.getElementById('custClose').addEventListener('click',closeCustomize);
+  document.getElementById('custSave').addEventListener('click',applyCustomize);
+  document.getElementById('custReset').addEventListener('click',resetCustomize);
   document.getElementById('tvMute').addEventListener('click',tvUnmute);
   document.addEventListener('click',()=>{if(ytPlayer&&!tvUnmuted)tvUnmute();}); // first real click → enable TV sound (browser autoplay rule)
   document.getElementById('btnEdit').addEventListener('click',()=>editToggle());

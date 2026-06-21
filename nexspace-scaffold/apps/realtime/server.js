@@ -257,7 +257,14 @@ const NODE_ID = crypto.randomBytes(4).toString("hex");
 const remoteByNode = new Map(); // nodeId -> { players, ts }
 let pub = null;
 function localPlayers() {
-  return [...clients.values()].map((p) => ({ id: p.id, name: p.name, x: p.x, y: p.y, facing: p.facing, status: p.status, talking: p.talking, bcast: p.bcast, role: p.role, floor: p.floor, avatar: p.avatar }));
+  return [...clients.values()].map((p) => ({ id: p.id, name: p.name, x: p.x, y: p.y, facing: p.facing, status: p.status, talking: p.talking, bcast: p.bcast, role: p.role, floor: p.floor, avatar: p.avatar, appear: p.appear || null }));
+}
+// validate a user-chosen avatar appearance (hex colours + optional https GLB url)
+function sanitizeAppear(a) {
+  if (!a || typeof a !== "object") return null;
+  const hex = (v, d) => (typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v)) ? v.toLowerCase() : d;
+  const model = (typeof a.model === "string" && /^https:\/\//.test(a.model)) ? a.model.slice(0, 300) : "";
+  return { suit: hex(a.suit, "#24272f"), tie: hex(a.tie, "#5b8cff"), skin: hex(a.skin, "#f1c9a5"), model };
 }
 function remotePlayers() {
   const out = [], now = Date.now();
@@ -448,7 +455,7 @@ wss.on("connection", (ws) => {
       const f0 = anyFloor();
       const player = { id, name, role, avatar, floor: f0.slug, joinedAt: Date.now(), lastMoveAt: Date.now(),
         x: f0.spawn.x + (Math.random() - 0.5) * 120, y: f0.spawn.y + (Math.random() - 0.5) * 100, facing: 0,
-        status: "available", talking: m.talking !== false, bcast: false };
+        status: "available", talking: m.talking !== false, bcast: false, appear: sanitizeAppear(m.appear) };
       clients.set(ws, player);
       A.sessions++; if (clients.size > A.peak) A.peak = clients.size;
       fireWebhook("user.joined", { id, name, role });
@@ -476,6 +483,9 @@ wss.on("connection", (ws) => {
       if (dist > maxDist) { const s = maxDist / dist; nx = p.x + dx * s; ny = p.y + dy * s; }
       p.x = nx; p.y = ny;
       if (Number.isFinite(m.facing)) p.facing = m.facing;
+    } else if (m.t === "appearance") {                         // avatar customization: colours + display name (+ optional GLB url)
+      if (typeof m.name === "string" && m.name.trim()) p.name = m.name.trim().slice(0, 16);
+      if (m.appear) p.appear = sanitizeAppear(m.appear);        // broadcast to others via the next presence snapshot
     } else if (m.t === "state") {
       if (m.status && ["available", "away", "busy", "dnd", "inMeeting"].includes(m.status)) p.status = m.status;
       if ("talking" in m) p.talking = !!m.talking;
