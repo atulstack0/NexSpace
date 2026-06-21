@@ -145,10 +145,10 @@ function makeDefaultFloor() {
     { x: 1500, y: 120, w: 16, h: 560 }, { x: 1516, y: 120, w: 300, h: 16 }, { x: 1516, y: 666, w: 300, h: 16 },
     { x: 1800, y: 120, w: 16, h: 236 }, { x: 1800, y: 452, w: 16, h: 230 },
   ];
-  const furniture = [ // editable (owner can move/add/delete)
-    { id: "f-d1", x: 980, y: 560, w: 240, h: 120, r: 14 }, { id: "f-d2", x: 300, y: 300, w: 150, h: 80, r: 12 },
-    { id: "f-d3", x: 1600, y: 330, w: 170, h: 90, r: 12 }, { id: "f-d4", x: 900, y: 1150, w: 120, h: 120, r: 60 },
-    { id: "f-d5", x: 1750, y: 1150, w: 150, h: 80, r: 12 }, { id: "f-d6", x: 250, y: 1150, w: 90, h: 90, r: 10 },
+  const furniture = [ // editable (owner can move/add/delete). kind drives the 3D prop model.
+    { id: "f-d1", x: 980, y: 560, w: 240, h: 120, r: 14, kind: "table" }, { id: "f-d2", x: 300, y: 300, w: 150, h: 80, r: 12, kind: "desk" },
+    { id: "f-d3", x: 1600, y: 330, w: 170, h: 90, r: 12, kind: "desk" }, { id: "f-d4", x: 900, y: 1150, w: 120, h: 120, r: 60, kind: "plant" },
+    { id: "f-d5", x: 1750, y: 1150, w: 150, h: 90, r: 12, kind: "couch" }, { id: "f-d6", x: 250, y: 1150, w: 90, h: 90, r: 10, kind: "plant" },
   ];
   const rooms = [
     { id: "focus", name: "Focus Room", color: "#7c6bff",
@@ -175,8 +175,8 @@ function makeRooftopFloor() {
     { x: 0, y: 0, w: 16, h: H }, { x: W - 16, y: 0, w: 16, h: H },
   ];
   const furniture = [
-    { id: "f-r1", x: 700, y: 300, w: 200, h: 120, r: 18 },
-    { id: "f-r2", x: 220, y: 760, w: 140, h: 90, r: 12 }, { id: "f-r3", x: 1240, y: 760, w: 140, h: 90, r: 12 },
+    { id: "f-r1", x: 700, y: 300, w: 200, h: 120, r: 18, kind: "table" },
+    { id: "f-r2", x: 220, y: 760, w: 140, h: 90, r: 12, kind: "couch" }, { id: "f-r3", x: 1240, y: 760, w: 140, h: 90, r: 12, kind: "couch" },
   ];
   const rooms = [
     { id: "cabana", name: "Cabana", color: "#39d3a6",
@@ -569,7 +569,9 @@ wss.on("connection", (ws) => {
         const o = arrFor(m.kind).find((x) => x.id === m.id);
         if (o) { o.x = grid(cx(m.x, f.w - (o.w || 40))); o.y = grid(cx(m.y, f.h - (o.h || 40))); changed = true; }
       } else if (op === "add" && m.kind === "furniture") {
-        f.furniture.push({ id: "f-" + crypto.randomBytes(3).toString("hex"), x: grid(cx(m.x, f.w - 120)), y: grid(cx(m.y, f.h - 80)), w: 120, h: 80, r: 12 });
+        const fk = ["desk", "table", "couch", "plant", "chair", "rug"].includes(m.furnitureKind) ? m.furnitureKind : "desk";
+        const dim = fk === "plant" ? { w: 80, h: 80, r: 40 } : fk === "chair" ? { w: 70, h: 70, r: 30 } : fk === "couch" ? { w: 150, h: 90, r: 12 } : fk === "table" ? { w: 200, h: 120, r: 16 } : fk === "rug" ? { w: 260, h: 180, r: 0 } : { w: 150, h: 80, r: 12 };
+        f.furniture.push({ id: "f-" + crypto.randomBytes(3).toString("hex"), x: grid(cx(m.x, f.w - dim.w)), y: grid(cx(m.y, f.h - dim.h)), ...dim, kind: fk });
         changed = true;
       } else if (op === "add") {
         const id = "w-" + crypto.randomBytes(3).toString("hex");
