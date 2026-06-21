@@ -258,8 +258,8 @@
   function speakLevel(id){const s=(lvlSmooth.get(id)||0)*0.6+rawLevel(id)*0.4;lvlSmooth.set(id,s<0.003?0:s);return s;}
   let myStatus='available',lastActivity=Date.now(),autoAway=false;
   let tvData={videoId:'e5D5h4W7P98',title:'NexSpace TV',queue:[]}; // shared YouTube TV state (client default so the TV always has something to show)
-  let ytPlayer=null,ytReady=false,tvApplyingRemote=false,tvUnmuted=false,tvSync={pos:0,at:0,playing:true}; // synced watch-party playback
-  window.onYouTubeIframeAPIReady=function(){ytReady=true;if(myId)tvEnsurePlayer();}; // build the wall player as soon as we've joined
+  let ytPlayer=null,ytReady=false,tvApplyingRemote=false,tvUnmuted=false,tvRaw=false,tvKickTimer=null,tvSync={pos:0,at:0,playing:true}; // synced watch-party playback
+  window.onYouTubeIframeAPIReady=function(){ytReady=true;clearTimeout(tvKickTimer);if(myId)tvEnsurePlayer();}; // build the wall player as soon as we've joined
   (function(){const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);})();
   let editMode=false,editSel=null,editDrag=null; // owner/admin floor editor
   const reactions=new Map(),adminMuted=new Set();
@@ -303,6 +303,7 @@
           const be=document.getElementById('btnEdit');if(be)be.style.display=(myRole==='admin'||myRole==='owner')?'':'none';}
         if(m.whiteboard)wbStrokes=m.whiteboard.slice();
         if(m.tv)applyTv(m.tv);
+        tvKick();                                          // start the wall player now (API), or raw-embed fallback if the API is blocked
         applyBranding(world.branding);populateFloors(world);
         initLiveKit();}
       else if(m.t==='floor'){applyFloorChange(m);}
@@ -916,7 +917,7 @@
   function onYtState(e){if(tvApplyingRemote||!ytPlayer)return;       // user pressed play/pause/seek → drive the party
     if(e.data===1||e.data===2){try{tvSend({t:'tvCtrl',playing:e.data===1,position:ytPlayer.getCurrentTime()});}catch(_){}}}
   // ONE player that lives on the wall TV (#tvWorld) — created on join so the video plays for everyone, synced.
-  function tvEnsurePlayer(){if(ytPlayer||!ytReady||!window.YT||!YT.Player)return;
+  function tvEnsurePlayer(){if(ytPlayer||tvRaw||!ytReady||!window.YT||!YT.Player)return; // tvRaw: raw embed already playing, don't tear it down
     document.getElementById('tvFrameWrap').innerHTML='<div id="ytplayer"></div>';
     ytPlayer=new YT.Player('ytplayer',{width:'100%',height:'100%',videoId:tvData.videoId||'e5D5h4W7P98',
       playerVars:{autoplay:1,mute:1,rel:0,modestbranding:1,playsinline:1,controls:1}, // muted autoplay (browsers block sound until a gesture); unmuted on first click
@@ -928,16 +929,23 @@
       const st=ytPlayer.getPlayerState?ytPlayer.getPlayerState():-1;
       if(tvSync.playing){if(st!==1)ytPlayer.playVideo();}else{if(st!==2)ytPlayer.pauseVideo();}
     }catch(_){}setTimeout(()=>{tvApplyingRemote=false;},1000);}
-  function applyTv(t){tvData={videoId:t.videoId||'',title:t.title||'',queue:t.queue||[]};
+  // Fallback when the IFrame API is blocked (e.g. Brave Shields / ad-blockers): a raw embed that still plays,
+  // seeked to roughly the shared position via &start= (no live play/pause sync, but everyone sees the video).
+  function tvRawFallback(){if(ytPlayer&&ytPlayer.getCurrentTime)return;tvRaw=true;
+    document.getElementById('tvFrameWrap').innerHTML='<iframe src="https://www.youtube.com/embed/'+encodeURIComponent(tvData.videoId||'e5D5h4W7P98')+'?autoplay=1&rel=0&playsinline=1&start='+Math.floor(Math.max(0,tvExpectedPos()))+'" allow="autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>';
+    const mm=document.getElementById('tvMute');if(mm)mm.style.display='none';}
+  function tvKick(){if(ytReady)tvEnsurePlayer();clearTimeout(tvKickTimer);tvKickTimer=setTimeout(()=>{if(!(ytPlayer&&ytPlayer.getCurrentTime))tvRawFallback();},5000);} // give the API 5s, else raw embed
+  function applyTv(t){const changed=t.videoId&&t.videoId!==tvData.videoId;
+    tvData={videoId:t.videoId||'',title:t.title||'',queue:t.queue||[]};
     tvSync={pos:Math.max(0,+t.position||0),at:Date.now(),playing:t.playing!==false};
-    if(ytPlayer)tvApplyRemote();else if(ytReady)tvEnsurePlayer();        // player is always on; apply the synced state
+    if(ytPlayer&&ytPlayer.getCurrentTime)tvApplyRemote();else if(ytReady&&!ytPlayer)tvEnsurePlayer();else if(tvRaw&&changed)tvRawFallback(); // apply synced state (or reload the raw embed on video change)
     if(document.getElementById('tv').style.display==='block'){renderTvQueue();tvNowText();}}
   function openTv(){const ov=document.getElementById('tv');ov.style.display='block';   // controls panel only — the video stays on the wall
     if(ytReady&&!ytPlayer)tvEnsurePlayer();renderTvQueue();tvNowText();document.getElementById('tvResults').innerHTML='';const q=document.getElementById('tvQ');if(q){q.value='';setTimeout(()=>q.focus(),50);}}
   function closeTv(){document.getElementById('tv').style.display='none';}            // keep the video playing on the wall
   // position the wall-TV player over the actual screen each frame (2D camera transform, or projected in 3D)
   function tvPositionWorld(){const wd=document.getElementById('tvWorld');if(!wd)return;
-    if(!world||!world.mediaWall||!ytPlayer){wd.style.display='none';return;}
+    if(!world||!world.mediaWall||!((ytPlayer&&ytPlayer.getCurrentTime)||tvRaw)){wd.style.display='none';return;}
     const m=world.mediaWall;let px,py,pw,ph;
     if(viewMode==='3d'){const r=tvScreenRect3D(m);if(!r){wd.style.display='none';return;}px=r.x;py=r.y;pw=r.w;ph=r.h;}
     else{px=(m.x-cam.x)*cam.zoom+VW/2;py=((m.y-m.screenH)-cam.y)*cam.zoom+VH/2;pw=m.w*cam.zoom;ph=m.screenH*cam.zoom;}
