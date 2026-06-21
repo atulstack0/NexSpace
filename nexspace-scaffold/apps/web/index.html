@@ -395,7 +395,7 @@
   const keys=new Set();let target=null;const joy={x:0,y:0,active:false}; // virtual joystick vector (mobile)
   addEventListener('keydown',e=>{const tg=e.target; if(tg&&(tg.tagName==='INPUT'||tg.tagName==='TEXTAREA'))return; const _wb=document.getElementById('wb'); if(_wb&&_wb.style.display==='flex')return; const k=e.key.toLowerCase();
     if(k==='t'){openTv();e.preventDefault();return;}                 // open the TV from any view
-    if(k==='escape'){closeTv();closeWidget();return;}
+    if(k==='escape'){closeTv();closeWidget();closeRooms();closeCustomize();return;}
     if(viewMode==='3d'&&k==='v'){cameraMode=cameraMode==='thirdPerson'?'firstPerson':'thirdPerson';toast(cameraMode==='firstPerson'?'👁️ First-person':'🎥 Third-person');return;}
     if(viewMode==='3d'&&k===' '){if(jumpZ<=0.5)jumpV=220;e.preventDefault();return;} // cosmetic jump
     if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','shift'].includes(k)){keys.add(k);if(k!=='shift')target=null;e.preventDefault();}});
@@ -961,11 +961,18 @@
       ground.rotation.x = -Math.PI / 2; ground.position.set(WORLD.w / 2, 0, WORLD.h / 2); worldGroup.add(ground);
       const grid = new THREE.GridHelper(Math.max(WORLD.w, WORLD.h), Math.round(Math.max(WORLD.w, WORLD.h) / 80), 0x2b3654, 0x1b2438);
       grid.position.set(WORLD.w / 2, 0.3, WORLD.h / 2); worldGroup.add(grid);
+      doorMeshes.clear();
       for (const r of world.rooms) {
-        const b = r.bounds, H = 120, mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(r.color), transparent: true, opacity: 0.18, side: THREE.DoubleSide });
-        for (const [ex, ey, ew, eh] of [[b.x, b.y, b.w, 8], [b.x, b.y + b.h, b.w, 8], [b.x, b.y, 8, b.h], [b.x + b.w, b.y, 8, b.h]]) {
-          const m = new THREE.Mesh(new THREE.BoxGeometry(ew, H, eh), mat); m.position.set(ex + ew / 2, H / 2, ey + eh / 2); m.userData.occluder = true; worldGroup.add(m);
-        }
+        const b = r.bounds, H = 120, d = r.door, mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(r.color), transparent: true, opacity: 0.18, side: THREE.DoubleSide });
+        const seg = (x, y, w, h) => { if (w <= 1 || h <= 1) return; const m = new THREE.Mesh(new THREE.BoxGeometry(w, H, h), mat); m.position.set(x + w / 2, H / 2, y + h / 2); m.userData.occluder = true; worldGroup.add(m); };
+        const cx = d.x + d.w / 2, cy = d.y + d.h / 2;                                   // leave a real opening on whichever edge holds the door
+        const dT = Math.abs(cy - b.y), dB = Math.abs(cy - (b.y + b.h)), dL = Math.abs(cx - b.x), dR = Math.abs(cx - (b.x + b.w)), e = Math.min(dT, dB, dL, dR);
+        if (e === dT) { seg(b.x, b.y, d.x - b.x, 8); seg(d.x + d.w, b.y, (b.x + b.w) - (d.x + d.w), 8); } else seg(b.x, b.y, b.w, 8);
+        if (e === dB) { seg(b.x, b.y + b.h, d.x - b.x, 8); seg(d.x + d.w, b.y + b.h, (b.x + b.w) - (d.x + d.w), 8); } else seg(b.x, b.y + b.h, b.w, 8);
+        if (e === dL) { seg(b.x, b.y, 8, d.y - b.y); seg(b.x, d.y + d.h, 8, (b.y + b.h) - (d.y + d.h)); } else seg(b.x, b.y, 8, b.h);
+        if (e === dR) { seg(b.x + b.w, b.y, 8, d.y - b.y); seg(b.x + b.w, d.y + d.h, 8, (b.y + b.h) - (d.y + d.h)); } else seg(b.x + b.w, b.y, 8, b.h);
+        const dm = new THREE.Mesh(new THREE.BoxGeometry(Math.max(8, d.w), H - 8, Math.max(8, d.h)), new THREE.MeshStandardMaterial({ color: 0x9aa3b6, transparent: true, opacity: 0.9 })); // door panel (state-coloured in frame)
+        dm.position.set(d.x + d.w / 2, (H - 8) / 2, d.y + d.h / 2); worldGroup.add(dm); doorMeshes.set(r.id, dm);
       }
       for (const o of world.obstacles) {
         if ((o.w || 0) > WORLD.w - 100 || (o.h || 0) > WORLD.h - 100) continue;
@@ -1099,6 +1106,8 @@
         else if (!a.videoTex && myAvatar) applyPic(a, myAvatar);
       } else { const a = avatars.get("__me"); if (a) a.group.visible = false; }
       for (const [id, a] of avatars) { if (!seen.has(id)) { avatarGroup.remove(a.group); avatars.delete(id); } }
+      // doors: open → hidden (walk through the gap); closed → grey panel; locked → red
+      for (const r of ((world && world.rooms) || [])) { const dm = doorMeshes.get(r.id); if (!dm) continue; const st = (doors && doors[r.id]) || "closed"; dm.visible = st !== "open"; dm.material.color.set(st === "locked" ? 0xff5d6c : 0x9aa3b6); dm.material.opacity = st === "locked" ? 0.82 : 0.9; }
       // booked-room nameplates floating above each room
       for (const [, sp] of roomSprites) sp.visible = false;
       for (const r of ((world && world.rooms) || [])) {
@@ -1277,14 +1286,15 @@
     tvSync={pos:Math.max(0,+t.position||0),at:Date.now(),playing:t.playing!==false};
     if(ytPlayer&&ytPlayer.getCurrentTime)tvApplyRemote();else if(ytReady&&!ytPlayer)tvEnsurePlayer();else if(tvRaw)tvRawSync(); // apply the shared play/pause + position
     if(document.getElementById('tv').style.display==='block'){renderTvQueue();tvNowText();}}
-  function openTv(){const ov=document.getElementById('tv');ov.style.display='block';   // controls panel only — the video stays on the wall
+  function hidePanels(except){['tv','rooms','customize'].forEach(id=>{if(id!==except){const el=document.getElementById(id);if(el)el.style.display='none';}});} // one bottom panel at a time
+  function openTv(){hidePanels('tv');const ov=document.getElementById('tv');ov.style.display='block';   // controls panel only — the video stays on the wall
     if(ytReady&&!ytPlayer)tvEnsurePlayer();renderTvQueue();tvNowText();document.getElementById('tvResults').innerHTML='';const q=document.getElementById('tvQ');if(q){q.value='';setTimeout(()=>q.focus(),50);}}
   function closeTv(){document.getElementById('tv').style.display='none';}            // keep the video playing on the wall
   // ---------- Meeting rooms & schedule (book a room → nameplate + presence flips to "In a meeting") ----------
   function roomSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o));}
   function fmtUntil(ts){try{return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}catch(_){return'';}}
   function roomsOpen(){const r=document.getElementById('rooms');return r&&r.style.display==='block';}
-  function openRooms(){document.getElementById('rooms').style.display='block';renderRooms();}
+  function openRooms(){hidePanels('rooms');document.getElementById('rooms').style.display='block';renderRooms();}
   function closeRooms(){document.getElementById('rooms').style.display='none';}
   // ---------- Avatar customization (colours + name + optional GLB model; synced to everyone, saved on this device) ----------
   function hslHex(h,s,l){s/=100;l/=100;const a=s*Math.min(l,1-l),k=n=>(n+h/30)%12,f=n=>l-a*Math.max(-1,Math.min(k(n)-3,9-k(n),1)),c=n=>Math.round(255*f(n)).toString(16).padStart(2,'0');return '#'+c(0)+c(8)+c(4);}
@@ -1294,7 +1304,7 @@
     document.getElementById('custTie').value=a.tie||hslHex(212,72,52);
     document.getElementById('custSkin').value=a.skin||'#f1c9a5';
     document.getElementById('custModel').value=a.model||'';
-    document.getElementById('customize').style.display='block';}
+    hidePanels('customize');document.getElementById('customize').style.display='block';}
   function closeCustomize(){document.getElementById('customize').style.display='none';}
   function customizeOpen(){const c=document.getElementById('customize');return c&&c.style.display==='block';}
   function applyCustomize(){

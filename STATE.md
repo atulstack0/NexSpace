@@ -39,7 +39,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | 2D world, avatars, WASD + click move, collisions, camera, minimap | ✅ | `apps/web/index.html` |
 | Proximity + room + broadcast spatial audio (Web Audio PannerNode) | ✅ | `apps/web/index.html` |
 | Real voice/video (LiveKit) — video-in-bubble, proximity track culling, mic/cam toggles | ✅ opt-in | `apps/api` (token/egress) + `apps/web` |
-| Rooms, doors (open/closed/locked) + knock-to-enter | ✅ | realtime + web |
+| Rooms, doors (open/closed/locked) + knock-to-enter — closed (unlocked) doors open from outside so empty rooms are enterable; **3D walls have a real door opening** + a state-coloured door panel (hidden when open) | ✅ | realtime + web |
 | Meeting rooms & schedule — book a room (title + duration), nameplate in 2D/3D, today's-schedule panel, presence auto-flips to **In a meeting**, auto-expires; booker/admin can cancel | ✅ | realtime `bookRoom`/`cancelBooking`, web `📅 Rooms` |
 | Broadcast mode | ✅ | realtime + web |
 | Shared YouTube TV (watch-party) — one screen, search/paste, shared queue, **playback synced to the same second** + shared play/pause (YouTube IFrame API), thumbnail on the wall in 2D/3D | ✅ | realtime `/youtube/search` + `tv*`/`tvCtrl`, web |
