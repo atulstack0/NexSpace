@@ -41,7 +41,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Real voice/video (LiveKit) — video-in-bubble, proximity track culling, mic/cam toggles | ✅ opt-in | `apps/api` (token/egress) + `apps/web` |
 | Rooms, doors (open/closed/locked) + knock-to-enter | ✅ | realtime + web |
 | Broadcast mode | ✅ | realtime + web |
-| Shared YouTube TV — one screen everyone watches; search (YouTube API) or paste a link, shared play queue, skip; synced to all | ✅ | realtime `/youtube/search` + `tv*` msgs, web |
+| Shared YouTube TV (watch-party) — one screen, search/paste, shared queue, **playback synced to the same second** + shared play/pause (YouTube IFrame API), thumbnail on the wall in 2D/3D | ✅ | realtime `/youtube/search` + `tv*`/`tvCtrl`, web |
 | Text chat — nearby / floor / #channels / private DMs, room-aware, cross-node, XSS-safe | ✅ | realtime + web |
 | Screen sharing (LiveKit) — publish + multi-share focus viewer | ✅ opt-in | `apps/web` |
 | Collaborative whiteboard — synced strokes + clear, late-joiner state, cross-node | ✅ | realtime + web |

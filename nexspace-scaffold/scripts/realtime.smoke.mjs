@@ -234,6 +234,9 @@ try {
   admin.ws.send(JSON.stringify({ t: "tvQueue", videoId: "abc123XYZ_-", title: "Queued" }));
   await wait(200);
   (guest.tv?.queue?.some((q) => q.videoId === "abc123XYZ_-")) ? ok("tvQueue appends to the shared queue") : bad("tvQueue did not propagate");
+  admin.ws.send(JSON.stringify({ t: "tvCtrl", playing: false, position: 42 }));
+  await wait(200);
+  (guest.tv?.playing === false && Math.abs((guest.tv?.position || 0) - 42) < 2) ? ok("tvCtrl syncs pause + position to everyone (watch-party)") : bad("tvCtrl did not sync playback");
 
   // owner/admin floor editor (live add / move / remove, broadcast to everyone)
   const wBefore = guest.world?.widgets?.length || 0;

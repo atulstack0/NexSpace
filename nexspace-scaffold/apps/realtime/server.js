@@ -117,8 +117,10 @@ function verifyState(s) { if (!s || s.indexOf(".") < 0) return false; const n = 
 // ---------- Shared YouTube TV (§6.22) — one screen everyone watches; a queue anyone can add to. ----------
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || process.env.GOOGLE_API_KEY || "";
 const validVideoId = (v) => typeof v === "string" && /^[A-Za-z0-9_-]{6,20}$/.test(v);
-let tv = { videoId: "e5D5h4W7P98", title: "NexSpace TV", by: "", queue: [] }; // default video = the link the team shared
-function tvState() { return { t: "tv", videoId: tv.videoId, title: tv.title, by: tv.by, queue: tv.queue }; }
+let tv = { videoId: "e5D5h4W7P98", title: "NexSpace TV", by: "", queue: [], playing: true, position: 0, updatedAt: Date.now() };
+const tvLivePos = () => tv.playing ? tv.position + (Date.now() - tv.updatedAt) / 1000 : tv.position; // current second, server-authoritative
+function tvState() { return { t: "tv", videoId: tv.videoId, title: tv.title, by: tv.by, queue: tv.queue, playing: tv.playing, position: tvLivePos() }; }
+function tvSetVideo(videoId, title, by) { tv.videoId = videoId; tv.title = title; tv.by = by; tv.position = 0; tv.playing = true; tv.updatedAt = Date.now(); }
 
 // ---------- Authoritative world(s) — multi-floor (spec §6: multiple maps + portals) ----------
 // Each floor is an independent world; a player belongs to exactly one floor at a time, and
@@ -505,7 +507,10 @@ wss.on("connection", (ws) => {
       console.log(`~ ${p.name} (${p.id}) → floor '${dest.slug}'`);
     } else if (m.t === "tvPlay") {            // shared TV: play a video now (everyone's screen switches)
       if (!validVideoId(m.videoId)) return;
-      tv.videoId = m.videoId; tv.title = String(m.title || "").slice(0, 140); tv.by = p.name;
+      tvSetVideo(m.videoId, String(m.title || "").slice(0, 140), p.name);
+      broadcastLocal(tvState()); publishEvent("tv", tv);
+    } else if (m.t === "tvCtrl") {            // shared play/pause + seek — anyone can drive the watch-party
+      tv.playing = !!m.playing; tv.position = Math.max(0, Number(m.position) || 0); tv.updatedAt = Date.now();
       broadcastLocal(tvState()); publishEvent("tv", tv);
     } else if (m.t === "tvQueue") {           // add to the shared queue
       if (!validVideoId(m.videoId) || tv.queue.length >= 50) return;
@@ -513,7 +518,7 @@ wss.on("connection", (ws) => {
       broadcastLocal(tvState()); publishEvent("tv", tv);
     } else if (m.t === "tvNext") {            // skip to the next queued video
       if (!tv.queue.length) return;
-      const n = tv.queue.shift(); tv.videoId = n.videoId; tv.title = n.title; tv.by = n.by;
+      const n = tv.queue.shift(); tvSetVideo(n.videoId, n.title, n.by);
       broadcastLocal(tvState()); publishEvent("tv", tv);
     } else if (m.t === "tvRemove") {
       const i = Number(m.index); if (Number.isInteger(i) && i >= 0 && i < tv.queue.length) { tv.queue.splice(i, 1); broadcastLocal(tvState()); publishEvent("tv", tv); }
@@ -573,6 +578,9 @@ setInterval(() => {
 setInterval(() => {
   for (const p of clients.values()) { const f = floorOf(p); const r = f.rooms.find((rm) => inRoom(p, rm)); const k = f.slug + ":" + (r ? r.id : "open"); roomSeconds[k] = (roomSeconds[k] || 0) + 5; }
 }, 5000);
+
+// keep the shared TV aligned for everyone — re-broadcast the live playback position periodically
+setInterval(() => { if (clients.size && tv.playing) broadcastLocal(tvState()); }, 15000);
 
 // heartbeat — terminate sockets that stop responding so presence/analytics stay accurate (§8)
 const heartbeat = setInterval(() => {
