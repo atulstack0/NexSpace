@@ -54,6 +54,15 @@
   #tvMute{position:absolute;left:0;right:0;bottom:0;text-align:center;font-size:11px;font-weight:600;color:#fff;background:rgba(0,0,0,.55);padding:3px;cursor:pointer}
   /* compact controls panel (search + queue); the video stays on the wall, so this doesn't cover it */
   #tv{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:30;display:none;max-width:94vw}
+  #rooms{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:30;display:none;max-width:94vw}
+  .roomrow{display:flex;flex-direction:column;gap:6px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+  .roomrow .rt{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
+  .roomrow .rb{font-size:12px;color:var(--muted)}
+  .roomrow .rf{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .roomrow input,.roomrow select{background:#0d1424;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px}
+  .roomrow input{flex:1;min-width:120px}
+  .rdot{width:10px;height:10px;border-radius:50%;flex:0 0 auto}
+  .rbusy{color:#ffb454}
   .tvbox{display:flex;flex-direction:column;gap:8px;width:600px;max-width:94vw;max-height:54vh;background:rgba(15,22,38,.97);border:1px solid var(--line);border-radius:14px;padding:12px;box-shadow:0 10px 34px rgba(0,0,0,.45)}
   .tvhead{display:flex;align-items:center;gap:10px;font-size:14px;flex:0 0 auto}
   #tvNow{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%}
@@ -148,6 +157,7 @@
   <button class="btn" id="btnWb" title="Whiteboard (6.8)">🖊️</button>
   <button class="btn" id="btnReact" title="React (6.6)">😀</button>
   <button class="btn" id="btnTv" title="Open the TV (or press T)">📺 TV</button>
+  <button class="btn" id="btnRooms" title="Book a room / today's schedule">📅 Rooms</button>
   <button class="btn" id="btnEdit" title="Edit the floor — move/add/remove elements (owner/admin)" style="display:none">✏️ Edit</button>
   </div>
 </div>
@@ -199,6 +209,12 @@
     <div id="tvResults" class="tvlist"></div>
     <div class="tvqhead">Up next</div>
     <div id="tvQueue" class="tvlist"></div>
+  </div>
+</div>
+<div id="rooms">
+  <div class="tvbox" style="width:520px">
+    <div class="tvhead"><b>📅 Rooms &amp; schedule</b><span id="roomsSub" style="color:var(--muted);font-size:12px"></span><button class="btn" id="roomsClose" style="margin-left:auto;padding:3px 10px">✕</button></div>
+    <div id="roomsList" class="tvlist" style="max-height:48vh"></div>
   </div>
 </div>
 <div id="banner"><span class="l"></span><span id="bannerText"></span></div>
@@ -325,6 +341,7 @@
         document.getElementById('count').textContent=m.players.length;
       }
       else if(m.t==='world'){world=m.world;WORLD={w:world.w,h:world.h};world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});applyBranding(world.branding);if(threeMode)Three3D.rebuild();toast('🛠️ Office layout updated');}
+      else if(m.t==='booking'){if(world&&(!m.floor||m.floor===myFloor)){const r=(world.rooms||[]).find(x=>x.id===m.roomId);if(r){r.booking=m.booking;if(roomsOpen())renderRooms();const who=m.booking?('📅 '+(m.booking.by||'Someone')+' booked '+(r.name||'a room')):('🟢 '+(r.name||'A room')+' is free');toast(who);}}}
       else if(m.t==='denied')toast('🔒 You need '+m.need+' role to '+m.action+'.');
       else if(m.t==='chat')addChat(m);
       else if(m.t==='draw'){wbStrokes.push(m.stroke);if(document.getElementById('wb').style.display==='flex')wbDrawStroke(m.stroke);}
@@ -531,7 +548,10 @@
     for(let y=0;y<=WORLD.h;y+=80){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(WORLD.w,y);ctx.stroke();}
     for(const r of world.rooms){const b=r.bounds;ctx.fillStyle=hexA(r.color,.10);rr(b.x,b.y,b.w,b.h,18);ctx.fill();
       ctx.strokeStyle=hexA(r.color,.55);ctx.lineWidth=2;ctx.setLineDash([10,8]);rr(b.x,b.y,b.w,b.h,18);ctx.stroke();ctx.setLineDash([]);
-      ctx.fillStyle=hexA(r.color,.9);ctx.font='600 18px sans-serif';ctx.textAlign='left';ctx.fillText(r.name,b.x+16,b.y+28);}
+      ctx.fillStyle=hexA(r.color,.9);ctx.font='600 18px sans-serif';ctx.textAlign='left';ctx.fillText(r.name,b.x+16,b.y+28);
+      if(r.booking){const lbl='📅 '+r.booking.title+' · until '+fmtUntil(r.booking.endsAt);
+        ctx.font='600 14px sans-serif';const w2=ctx.measureText(lbl).width;ctx.fillStyle='rgba(12,18,30,.82)';rr(b.x+16,b.y+38,w2+20,26,8);ctx.fill();
+        ctx.fillStyle='#ffd27a';ctx.fillText(lbl,b.x+26,b.y+55);ctx.fillStyle=hexA(r.color,.9);}}
     if(!roomAtPt(me.x,me.y)&&!myBcast){const g=ctx.createRadialGradient(me.x,me.y,R().inner*.4,me.x,me.y,R().outer);
       g.addColorStop(0,'rgba(91,140,255,.16)');g.addColorStop(1,'rgba(91,140,255,0)');ctx.fillStyle=g;
       ctx.beginPath();ctx.arc(me.x,me.y,R().outer,0,7);ctx.fill();
@@ -754,6 +774,7 @@
       } catch (_) {}
     }
     const avatars = new Map(), picTexCache = new Map(), tvThumbCache = new Map(); // id->avatar, url->tex, videoId->tex
+    const roomSprites = new Map(); // roomId -> floating "booked" nameplate sprite
     function available() { return typeof THREE !== "undefined"; }
     // YouTube thumbnail as a TV texture (CORS-loaded so it's a valid WebGL texture; can't paint the live player on a 3D surface).
     function tvThumbTex(id) {
@@ -981,6 +1002,16 @@
         else if (!a.videoTex && myAvatar) applyPic(a, myAvatar);
       } else { const a = avatars.get("__me"); if (a) a.group.visible = false; }
       for (const [id, a] of avatars) { if (!seen.has(id)) { avatarGroup.remove(a.group); avatars.delete(id); } }
+      // booked-room nameplates floating above each room
+      for (const [, sp] of roomSprites) sp.visible = false;
+      for (const r of ((world && world.rooms) || [])) {
+        if (!r.booking) continue;
+        const label = "📅 " + r.booking.title;
+        let sp = roomSprites.get(r.id);
+        if (!sp) { sp = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: false })); sp.renderOrder = 14; scene.add(sp); roomSprites.set(r.id, sp); sp._lbl = ""; }
+        if (sp._lbl !== label) { if (sp.material.map) sp.material.map.dispose(); const nt = nameTex(label); sp.material.map = nt.tex; sp.material.needsUpdate = true; sp.scale.set(nt.w * 0.5, nt.h * 0.5, 1); sp._lbl = label; }
+        const b = r.bounds; sp.position.set(b.x + b.w / 2, 150, b.y + b.h / 2); sp.visible = true;
+      }
       renderer.render(scene, camera);
     }
     function project3D(x, y, z) { if (!camera) return null; const v = new THREE.Vector3(x, y, z).project(camera); if (v.z > 1) return null; return { x: (v.x * 0.5 + 0.5) * VW, y: (-v.y * 0.5 + 0.5) * VH }; }
@@ -1122,6 +1153,39 @@
   function openTv(){const ov=document.getElementById('tv');ov.style.display='block';   // controls panel only — the video stays on the wall
     if(ytReady&&!ytPlayer)tvEnsurePlayer();renderTvQueue();tvNowText();document.getElementById('tvResults').innerHTML='';const q=document.getElementById('tvQ');if(q){q.value='';setTimeout(()=>q.focus(),50);}}
   function closeTv(){document.getElementById('tv').style.display='none';}            // keep the video playing on the wall
+  // ---------- Meeting rooms & schedule (book a room → nameplate + presence flips to "In a meeting") ----------
+  function roomSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o));}
+  function fmtUntil(ts){try{return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}catch(_){return'';}}
+  function roomsOpen(){const r=document.getElementById('rooms');return r&&r.style.display==='block';}
+  function openRooms(){document.getElementById('rooms').style.display='block';renderRooms();}
+  function closeRooms(){document.getElementById('rooms').style.display='none';}
+  function renderRooms(){const box=document.getElementById('roomsList');if(!box||!world)return;
+    const rms=world.rooms||[],sub=document.getElementById('roomsSub');
+    const booked=rms.filter(r=>r.booking).length;if(sub)sub.textContent=rms.length?(booked?booked+' in use':'all free'):'';
+    box.innerHTML='';
+    if(!rms.length){box.innerHTML='<div style="color:var(--muted);font-size:12px;padding:6px">No rooms on this floor.</div>';return;}
+    for(const r of rms){
+      const row=document.createElement('div');row.className='roomrow';
+      const head=document.createElement('div');head.className='rt';
+      head.innerHTML='<span class="rdot" style="background:'+escapeHtml(r.color||'#5b8cff')+'"></span>'+escapeHtml(r.name);
+      row.appendChild(head);
+      const f=document.createElement('div');f.className='rf';
+      if(r.booking){
+        const b=document.createElement('div');b.className='rb';
+        b.innerHTML='<span class="rbusy">📅 '+escapeHtml(r.booking.title)+'</span> · '+escapeHtml(r.booking.by)+' · until <b>'+fmtUntil(r.booking.endsAt)+'</b>';
+        row.appendChild(b);
+        const cancel=document.createElement('button');cancel.className='btn';cancel.textContent='✕ Cancel';cancel.onclick=()=>roomSend({t:'cancelBooking',roomId:r.id});
+        f.appendChild(cancel);
+      }else{
+        const inp=document.createElement('input');inp.placeholder='Meeting title';inp.maxLength=60;
+        const sel=document.createElement('select');[['15','15 min'],['30','30 min'],['45','45 min'],['60','1 hour']].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;if(v==='30')o.selected=true;sel.appendChild(o);});
+        const book=document.createElement('button');book.className='btn';book.textContent='Book';
+        book.onclick=()=>roomSend({t:'bookRoom',roomId:r.id,title:inp.value||'Meeting',minutes:+sel.value});
+        inp.addEventListener('keydown',e=>{if(e.key==='Enter')book.click();});
+        f.appendChild(inp);f.appendChild(sel);f.appendChild(book);
+      }
+      row.appendChild(f);box.appendChild(row);
+    }}
   // position the wall-TV player over the actual screen each frame (2D camera transform, or projected in 3D)
   function tvPositionWorld(){const wd=document.getElementById('tvWorld');if(!wd)return;
     if(!world||!world.mediaWall||!((ytPlayer&&ytPlayer.getCurrentTime)||tvRaw)){wd.style.display='none';return;}
@@ -1298,6 +1362,8 @@
   document.getElementById('tvSkip').addEventListener('click',()=>tvSend({t:'tvNext'}));
   document.getElementById('tvPlayPause').addEventListener('click',()=>{if(!ytPlayer)return;tvSend({t:'tvCtrl',playing:!tvSync.playing,position:ytPlayer.getCurrentTime?ytPlayer.getCurrentTime():tvExpectedPos()});});
   document.getElementById('btnTv').addEventListener('click',openTv);
+  document.getElementById('btnRooms').addEventListener('click',()=>{roomsOpen()?closeRooms():openRooms();});
+  document.getElementById('roomsClose').addEventListener('click',closeRooms);
   document.getElementById('tvMute').addEventListener('click',tvUnmute);
   document.addEventListener('click',()=>{if(ytPlayer&&!tvUnmuted)tvUnmute();}); // first real click → enable TV sound (browser autoplay rule)
   document.getElementById('btnEdit').addEventListener('click',()=>editToggle());

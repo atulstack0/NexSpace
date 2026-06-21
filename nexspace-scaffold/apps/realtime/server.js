@@ -210,7 +210,7 @@ function worldForClient(slug) {
   return {
     slug: f.slug, name: f.name, w: f.w, h: f.h, obstacles,
     furniture: (f.furniture || []).map(o => ({ ...o })),
-    rooms: f.rooms.map(r => ({ id: r.id, name: r.name, color: r.color, bounds: r.bounds, door: { x: r.door.x, y: r.door.y, w: r.door.w, h: r.door.h, state: r.door.state } })),
+    rooms: f.rooms.map(r => ({ id: r.id, name: r.name, color: r.color, bounds: r.bounds, door: { x: r.door.x, y: r.door.y, w: r.door.w, h: r.door.h, state: r.door.state }, booking: r.booking || null })),
     mediaWall: f.mediaWall ? { x: f.mediaWall.x, y: f.mediaWall.y, w: f.mediaWall.w, base: f.mediaWall.base, screenH: f.mediaWall.screenH, title: f.mediaWall.title, dur: f.mediaWall.dur } : null,
     portals: f.portals.map(pt => ({ id: pt.id, x: pt.x, y: pt.y, w: pt.w, h: pt.h, to: pt.to, label: pt.label, color: pt.color })),
     widgets: (f.widgets || []).map(wd => ({ ...wd })),
@@ -499,6 +499,18 @@ wss.on("connection", (ws) => {
       d.knocking = true;
       const occupied = [...clients.values()].some(q => q.floor === p.floor && inRoom(q, room));
       setTimeout(() => { d.knocking = false; if (occupied) { d.state = "open"; publishEvent("door", { floor: p.floor, roomId: room.id, state: "open" }); } }, 1300);
+    } else if (m.t === "bookRoom") {
+      if (rank(p.role) < RANK.member) return deny(ws, "book a room", "member");
+      const f = floorOf(p); const room = f.rooms.find((r) => r.id === m.roomId); if (!room) return;
+      const mins = Math.max(5, Math.min(240, Math.round(Number(m.minutes) || 30)));
+      room.booking = { title: String(m.title || "Meeting").slice(0, 60), by: p.name, byId: p.id, endsAt: Date.now() + mins * 60000 };
+      p.status = "inMeeting";                                  // presence auto-flips to "In a meeting"
+      broadcastBooking(f, room);
+    } else if (m.t === "cancelBooking") {
+      const f = floorOf(p); const room = f.rooms.find((r) => r.id === m.roomId); if (!room || !room.booking) return;
+      if (room.booking.byId !== p.id && rank(p.role) < RANK.admin) return deny(ws, "cancel this booking", "admin"); // only the booker or an admin
+      if (p.status === "inMeeting" && room.booking.byId === p.id) p.status = "available";
+      room.booking = null; broadcastBooking(f, room);
     } else if (m.t === "recording") {
       if (rank(p.role) < RANK.admin) return deny(ws, "record", "admin");
       recording = m.on ? { on: true, by: p.name, egressId: m.egressId || null } : { on: false, by: null, egressId: null };
@@ -602,6 +614,10 @@ let lastTick = Date.now();
 setInterval(() => {
   const now = Date.now(), dt = (now - lastTick) / 1000; lastTick = now;
   for (const f of floors.values()) if (f.mediaWall && f.mediaWall.playing) { f.mediaWall.pos += dt; if (f.mediaWall.pos > f.mediaWall.dur) f.mediaWall.pos = 0; }
+  for (const f of floors.values()) for (const r of f.rooms) if (r.booking && r.booking.endsAt <= now) {  // expire finished meetings
+    const owner = [...clients.values()].find((q) => q.id === r.booking.byId); if (owner && owner.status === "inMeeting") owner.status = "available";
+    r.booking = null; broadcastBooking(f, r);
+  }
   if (clients.size === 0) return;
   // group all presence (local + cross-node) by floor, then send each client only its own floor's snapshot
   const all = localPlayers().concat(remotePlayers());
@@ -659,6 +675,7 @@ async function startEgress(room) {
 }
 async function stopEgress(egressId) { const info = await egressClient().stopEgress(egressId); return { egressId, status: info.status }; }
 function broadcastLocal(msg) { const s = JSON.stringify(msg); for (const ws of clients.keys()) if (ws.readyState === 1) ws.send(s); }
+function broadcastBooking(f, room) { const msg = JSON.stringify({ t: "booking", floor: f.slug, roomId: room.id, booking: room.booking || null }); for (const [ws, q] of clients) if (q.floor === f.slug && ws.readyState === 1) ws.send(msg); }
 // chat routing (§6.9): channels are org-wide (cross-floor); floor + nearby are local to the sender's floor
 function deliverChat(d) {
   const dfloor = d.floor || DEFAULT_FLOOR;

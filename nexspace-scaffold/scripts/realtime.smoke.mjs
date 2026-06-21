@@ -51,7 +51,7 @@ await new Promise((res, rej) => {
 function join(name, token) {
   return new Promise((resolve) => {
     const ws = new WebSocket(`ws://localhost:${PORT}`);
-    const st = { ws, name, id: null, role: null, world: null, floorMsg: null, tv: null, last: null, denied: [], rateLimited: false, chats: [], draws: [], cleared: false, reacts: [], nudged: false, kicked: false };
+    const st = { ws, name, id: null, role: null, world: null, floorMsg: null, tv: null, last: null, denied: [], rateLimited: false, chats: [], draws: [], cleared: false, reacts: [], nudged: false, kicked: false, bookings: {} };
     ws.on("open", () => ws.send(JSON.stringify({ t: "join", name, token })));
     ws.on("message", (d) => {
       const m = JSON.parse(d.toString());
@@ -60,6 +60,7 @@ function join(name, token) {
       if (m.t === "world") st.world = m.world; // live layout reload / owner edit
       if (m.t === "tv") st.tv = m;
       if (m.t === "snapshot") st.last = m;
+      if (m.t === "booking") st.bookings[m.roomId] = m.booking;
       if (m.t === "denied") st.denied.push(m.action);
       if (m.t === "rateLimited") st.rateLimited = true;
       if (m.t === "chat") st.chats.push(m);
@@ -266,6 +267,18 @@ try {
   guest.ws.send(JSON.stringify({ t: "editFloor", op: "add", wtype: "note", x: 100, y: 100 }));
   await wait(200);
   (guest.denied.includes("edit the floor")) ? ok("guest denied floor editing (RBAC)") : bad("guest floor edit was NOT blocked");
+
+  // meeting rooms — book → broadcast + presence flips to inMeeting; guest denied; booker/admin cancels
+  admin.ws.send(JSON.stringify({ t: "bookRoom", roomId: "focus", title: "Standup", minutes: 30 }));
+  await wait(320);
+  (guest.bookings.focus && guest.bookings.focus.title === "Standup") ? ok("room booking broadcasts to others (title + endsAt)") : bad("room booking not broadcast");
+  (admin.last?.players?.find((p) => p.id === admin.id)?.status === "inMeeting") ? ok("booker presence auto-flips to inMeeting") : bad("booker status did not flip");
+  guest.ws.send(JSON.stringify({ t: "bookRoom", roomId: "board", title: "x", minutes: 15 }));
+  await wait(200);
+  (guest.denied.includes("book a room")) ? ok("guest denied booking a room (RBAC member+)") : bad("guest booking was NOT blocked");
+  admin.ws.send(JSON.stringify({ t: "cancelBooking", roomId: "focus" }));
+  await wait(220);
+  (guest.bookings.focus === null) ? ok("cancelling a booking clears it for everyone") : bad("cancel did not clear the booking");
 
   // reactions (6.6)
   admin.ws.send(JSON.stringify({ t: "react", emoji: "🎉" }));
