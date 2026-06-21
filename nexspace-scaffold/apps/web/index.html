@@ -870,6 +870,7 @@
     }
     const avatars = new Map(), picTexCache = new Map(), tvThumbCache = new Map(); // id->avatar, url->tex, videoId->tex
     const roomSprites = new Map(); // roomId -> floating "booked" nameplate sprite
+    const doorMeshes = new Map();  // roomId -> 3D door panel (shown/coloured by state; hidden when open)
     function available() { return typeof THREE !== "undefined"; }
     // YouTube thumbnail as a TV texture (CORS-loaded so it's a valid WebGL texture; can't paint the live player on a 3D surface).
     function tvThumbTex(id) {
