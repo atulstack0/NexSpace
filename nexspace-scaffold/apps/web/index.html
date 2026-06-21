@@ -147,7 +147,8 @@
 </div>
 <div id="editBar">
   <span class="elabel">✏️ Editing floor</span>
-  <button class="btn" id="edAddFurniture">＋ Furniture</button>
+  <select id="edFurnKind" class="btn" title="Furniture type" style="padding:6px 8px"><option value="desk">🖥 Desk</option><option value="table">🪑 Table</option><option value="couch">🛋 Couch</option><option value="plant">🪴 Plant</option><option value="chair">💺 Chair</option><option value="rug">🟫 Rug</option></select>
+  <button class="btn" id="edAddFurniture">＋ Add</button>
   <button class="btn" id="edAddNote">＋ Note</button>
   <button class="btn" id="edAddTimer">＋ Timer</button>
   <button class="btn warn" id="edDel">🗑 Delete</button>
@@ -364,8 +365,9 @@
   document.addEventListener('mousemove',e=>{if(!editDrag||viewMode==='3d')return;const w=toWorld(e);editDrag.obj.x=Math.round((w.x-editDrag.ox)/10)*10;editDrag.obj.y=Math.round((w.y-editDrag.oy)/10)*10;});
   document.addEventListener('mouseup',()=>{if(!editDrag)return;const o=editDrag.obj;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'editFloor',op:'move',kind:editDrag.kind,id:o.id,x:o.x,y:o.y}));editDrag=null;});
   function editAdd(what){const x=Math.round(me.x-90),y=Math.round(me.y-60);
-    const msg=(what==='furniture')?{t:'editFloor',op:'add',kind:'furniture',x,y}:{t:'editFloor',op:'add',wtype:what,x,y};
-    if(ws&&ws.readyState===1)ws.send(JSON.stringify(msg));toast('Added '+what+' near you');}
+    const fk=(document.getElementById('edFurnKind')||{}).value||'desk';
+    const msg=(what==='furniture')?{t:'editFloor',op:'add',kind:'furniture',furnitureKind:fk,x,y}:{t:'editFloor',op:'add',wtype:what,x,y};
+    if(ws&&ws.readyState===1)ws.send(JSON.stringify(msg));toast('Added '+(what==='furniture'?fk:what)+' near you');}
   function editDelete(){if(!editSel){toast('Select an element first');return;}const o=editSel.obj;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'editFloor',op:'remove',kind:editSel.kind,id:o.id}));editSel=null;updateEditBar();}
   function editToggle(on){editMode=(on!==undefined)?on:!editMode;editSel=null;editDrag=null;
     document.getElementById('editBar').style.display=editMode?'flex':'none';
@@ -530,7 +532,7 @@
       ctx.strokeStyle='rgba(91,140,255,.5)';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(me.x,me.y,R().outer,0,7);ctx.stroke();}
     if(myBcast)ripples(me.x,me.y);
     for(const o of world.obstacles){ctx.fillStyle='#222c44';if(o.r){rr(o.x,o.y,o.w,o.h,o.r);ctx.fill();}else ctx.fillRect(o.x,o.y,o.w,o.h);}
-    if(world.furniture)for(const o of world.furniture){ctx.fillStyle='#2a3552';rr(o.x,o.y,o.w,o.h,o.r||8);ctx.fill();ctx.strokeStyle='rgba(255,255,255,.08)';ctx.lineWidth=1;rr(o.x,o.y,o.w,o.h,o.r||8);ctx.stroke();}
+    if(world.furniture)for(const o of world.furniture)drawFurniture2D(o);
     drawPortals();
     for(const r of world.rooms)drawDoor(r);
     drawMedia();
@@ -549,6 +551,20 @@
   function drawDoor(r){const d=r.door,st=doors[r.id]||'closed';const col=st==='open'?'#39d3a6':st==='locked'?'#ff5d6c':'#ffb454';
     ctx.fillStyle=hexA(col,st==='open'?.25:.7);rr(d.x,d.y,d.w,d.h,4);ctx.fill();ctx.strokeStyle=col;ctx.lineWidth=2;rr(d.x,d.y,d.w,d.h,4);ctx.stroke();
     if(st==='locked'){ctx.fillStyle='#fff';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.fillText('🔒',d.x+d.w/2,d.y+d.h/2+4);}}
+  // Top-down 2D icon per furniture kind (matches the 3D props).
+  function drawFurniture2D(o){const k=o.kind||'desk',x=o.x,y=o.y,w=o.w,h=o.h;
+    const fill=(c,rad)=>{ctx.fillStyle=c;rr(x,y,w,h,rad==null?8:rad);ctx.fill();};
+    const edge=(rad)=>{ctx.strokeStyle='rgba(255,255,255,.10)';ctx.lineWidth=1;rr(x,y,w,h,rad==null?8:rad);ctx.stroke();};
+    if(k==='rug'){ctx.fillStyle='rgba(58,77,114,.55)';rr(x,y,w,h,10);ctx.fill();ctx.strokeStyle='rgba(120,150,210,.35)';ctx.lineWidth=2;rr(x+6,y+6,w-12,h-12,8);ctx.stroke();return;}
+    if(k==='plant'){const cx=x+w/2,cy=y+h/2,r=Math.min(w,h)/2;ctx.fillStyle='#86503a';rr(cx-r*0.5,cy-r*0.2,r,r*0.9,4);ctx.fill();ctx.fillStyle='#3f9b5a';ctx.beginPath();ctx.arc(cx,cy-r*0.2,r*0.85,0,7);ctx.fill();ctx.fillStyle='#4caa63';ctx.beginPath();ctx.arc(cx-r*0.3,cy-r*0.4,r*0.4,0,7);ctx.fill();return;}
+    if(k==='chair'){fill('#42577d',10);edge(10);return;}
+    if(k==='couch'){fill('#42577d',10);ctx.fillStyle='#37496a';rr(x+6,y+10,w-12,h-14,7);ctx.fill();ctx.fillStyle='#42577d';rr(x,y,w,12,6);ctx.fill();edge(10);return;}
+    if(k==='table'){const round=(o.r||0)>30;fill('#8c6a47',round?Math.min(w,h)/2:10);edge(round?Math.min(w,h)/2:10);return;}
+    // desk: wood top + monitor strip at the back + chair pad in front
+    fill('#8c6a47',8);edge(8);
+    ctx.fillStyle='#12233f';rr(x+w*0.28,y+4,w*0.44,8,3);ctx.fill();              // monitor (back edge)
+    ctx.fillStyle='rgba(40,46,64,.85)';rr(x+w*0.32,y+h-16,w*0.36,10,4);ctx.fill(); // chair pad (front)
+  }
   function drawMedia(){if(!world.mediaWall)return;const m=world.mediaWall,sx=m.x,sy=m.y-m.screenH,sw=m.w,sh=m.screenH;
     ctx.fillStyle='#222c44';ctx.fillRect(m.x,m.y,m.w,m.base);
     ctx.fillStyle='#0a0f1c';rr(sx,sy,sw,sh,8);ctx.fill();ctx.save();rr(sx,sy,sw,sh,8);ctx.clip();
@@ -735,7 +751,49 @@
       ready = true; return true;
     }
     function resize() { if (renderer && camera) { renderer.setSize(VW, VH); camera.aspect = VW / VH; camera.updateProjectionMatrix(); } }
-    function dispose(g) { while (g.children.length) { const c = g.children.pop(); if (c.geometry) c.geometry.dispose(); } }
+    function dispose(g) { g.children.slice().forEach((c) => { c.traverse((n) => { if (n.geometry) n.geometry.dispose(); }); g.remove(c); }); }
+    // A detailed office prop (group of primitives) chosen by furniture.kind. Centred on the item's footprint.
+    function pMat(c, r) { return new THREE.MeshStandardMaterial({ color: c, roughness: r == null ? 0.7 : r, metalness: 0.04 }); }
+    function buildProp(o) {
+      const w = o.w || 80, d = o.h || 60, kind = o.kind || "desk";
+      const g = new THREE.Group(); g.position.set(o.x + w / 2, 0, o.y + d / 2);
+      const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); g.add(m); return m; };
+      const wood = pMat(0x7a5a3c), woodTop = pMat(0x8c6a47), metal = pMat(0x99a3b0, 0.5), dark = pMat(0x222838), fabric = pMat(0x42577d), fabricA = pMat(0x37496a), screen = new THREE.MeshBasicMaterial({ color: 0x12233f }), pot = pMat(0x86503a);
+      const chair = (gp, z) => { const c = new THREE.Group(); c.position.set(0, 0, z); const ca = (geo, mat, x, y, zz) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, zz); c.add(m); };
+        ca(new THREE.BoxGeometry(30, 7, 30), fabric, 0, 24, 0); ca(new THREE.BoxGeometry(30, 26, 6), fabric, 0, 40, 13); ca(new THREE.CylinderGeometry(3, 3, 22, 10), metal, 0, 12, 0); ca(new THREE.CylinderGeometry(14, 14, 3, 5), dark, 0, 3, 0); gp.add(c); };
+      if (kind === "rug") {
+        const rug = new THREE.Mesh(new THREE.PlaneGeometry(w, d), pMat(0x3a4d72, 0.97)); rug.rotation.x = -Math.PI / 2; rug.position.y = 0.6; g.add(rug);
+        const inner = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.84, d * 0.74), pMat(0x4a3f6b, 0.97)); inner.rotation.x = -Math.PI / 2; inner.position.y = 0.7; g.add(inner);
+      } else if (kind === "plant") {
+        const r = Math.max(14, Math.min(w, d) / 2);
+        add(new THREE.CylinderGeometry(r * 0.5, r * 0.62, 22, 16), pot, 0, 11, 0);
+        const f1 = add(new THREE.SphereGeometry(r * 0.95, 12, 12), pMat(0x3f9b5a, 0.85), 0, 22 + r * 0.8, 0); f1.scale.y = 1.3;
+        add(new THREE.SphereGeometry(r * 0.6, 10, 10), pMat(0x2f7d46, 0.85), r * 0.4, 22 + r * 0.5, -r * 0.2);
+        add(new THREE.SphereGeometry(r * 0.55, 10, 10), pMat(0x4caa63, 0.85), -r * 0.45, 22 + r * 0.65, r * 0.2);
+      } else if (kind === "chair") {
+        chair(g, 0);
+      } else if (kind === "couch") {
+        const aw = Math.max(14, w * 0.12);
+        add(new THREE.BoxGeometry(w, 16, d), fabric, 0, 12, 0);
+        add(new THREE.BoxGeometry(w - 2 * aw, 10, d - 14), fabricA, 0, 24, 4);
+        add(new THREE.BoxGeometry(w, 26, 12), fabric, 0, 28, -d / 2 + 6);
+        add(new THREE.BoxGeometry(aw, 24, d), fabric, -w / 2 + aw / 2, 24, 0);
+        add(new THREE.BoxGeometry(aw, 24, d), fabric, w / 2 - aw / 2, 24, 0);
+      } else if (kind === "table") {
+        const topY = 30;
+        if ((o.r || 0) > 30) { const r = Math.min(w, d) / 2; add(new THREE.CylinderGeometry(r, r, 6, 28), woodTop, 0, topY, 0); add(new THREE.CylinderGeometry(5, 7, topY - 3, 12), wood, 0, (topY - 3) / 2, 0); add(new THREE.CylinderGeometry(r * 0.6, r * 0.6, 2, 16), dark, 0, 2, 0); }
+        else { add(new THREE.BoxGeometry(w, 6, d), woodTop, 0, topY, 0); for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.CylinderGeometry(3.5, 3.5, topY - 3, 8), wood, sx * (w / 2 - 8), (topY - 3) / 2, sz * (d / 2 - 8)); }
+      } else { // desk (default) — desktop + side panels + monitor + keyboard + a chair in front
+        const topY = 30;
+        add(new THREE.BoxGeometry(w, 5, d), woodTop, 0, topY, 0);
+        for (const sx of [-1, 1]) add(new THREE.BoxGeometry(5, topY - 3, d - 8), wood, sx * (w / 2 - 6), (topY - 3) / 2, 0);
+        add(new THREE.BoxGeometry(Math.min(54, w * 0.42), 30, 3), screen, 0, topY + 20, -d / 2 + 12);
+        add(new THREE.BoxGeometry(8, 6, 8), dark, 0, topY + 5, -d / 2 + 12);
+        add(new THREE.BoxGeometry(Math.min(40, w * 0.35), 2, 12), dark, 0, topY + 3.5, d * 0.1);
+        chair(g, d / 2 + 14);
+      }
+      worldGroup.add(g);
+    }
     function buildWorld() {
       if (!ready || !world) return; dispose(worldGroup);
       const ground = new THREE.Mesh(new THREE.PlaneGeometry(WORLD.w, WORLD.h), new THREE.MeshStandardMaterial({ color: 0x141b2c }));
@@ -753,10 +811,7 @@
         const w = o.w || 40, h = o.h || 40, bh = (o.r && o.r > 30) ? 22 : 46;
         const m = new THREE.Mesh(new THREE.BoxGeometry(w, bh, h), new THREE.MeshStandardMaterial({ color: 0x2a3552 })); m.position.set(o.x + w / 2, bh / 2, o.y + h / 2); m.userData.occluder = true; worldGroup.add(m);
       }
-      for (const o of (world.furniture || [])) {   // editable furniture
-        const w = o.w || 40, h = o.h || 40, bh = (o.r && o.r > 30) ? 22 : 46;
-        const m = new THREE.Mesh(new THREE.BoxGeometry(w, bh, h), new THREE.MeshStandardMaterial({ color: 0x33405f, roughness: 0.7 })); m.position.set(o.x + w / 2, bh / 2, o.y + h / 2); worldGroup.add(m);
-      }
+      for (const o of (world.furniture || [])) buildProp(o);   // editable furniture → detailed 3D prop by kind
       const mw = world.mediaWall; tvPanelMat = null; tvPanelMesh = null;
       if (mw) {
         const sh = mw.screenH || 150;
@@ -782,6 +837,25 @@
       x.fillStyle = color; x.beginPath(); x.arc(64, 64, 60, 0, 7); x.fill();
       x.fillStyle = "#0b1019"; x.font = "bold 70px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(ch, 64, 70);
       return new THREE.CanvasTexture(c);
+    }
+    // Floating name label: a rounded pill canvas → sprite that always faces the camera.
+    function nameTex(name) {
+      const txt = String(name || "Guest").slice(0, 18), font = "600 30px system-ui, sans-serif";
+      const meas = document.createElement("canvas").getContext("2d"); meas.font = font;
+      const tw = Math.ceil(meas.measureText(txt).width), pad = 22, W = tw + pad * 2, H = 50;
+      const c = document.createElement("canvas"); c.width = W; c.height = H; const x = c.getContext("2d");
+      x.font = font; x.textAlign = "center"; x.textBaseline = "middle";
+      x.fillStyle = "rgba(12,18,30,0.74)"; const rad = 16;
+      x.beginPath(); x.moveTo(rad, 0); x.arcTo(W, 0, W, H, rad); x.arcTo(W, H, 0, H, rad); x.arcTo(0, H, 0, 0, rad); x.arcTo(0, 0, W, 0, rad); x.closePath(); x.fill();
+      x.fillStyle = "#eaf0ff"; x.fillText(txt, W / 2, H / 2 + 1);
+      return { tex: new THREE.CanvasTexture(c), w: W, h: H };
+    }
+    function setNameSprite(a, name) {
+      if (a.nameStr === name) return; a.nameStr = name;
+      const nt = nameTex(name), s = 0.34;
+      if (!a.nameSprite) { a.nameSprite = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: false })); a.nameSprite.renderOrder = 12; a.nameSprite.position.set(0, 88, 0); a.group.add(a.nameSprite); }
+      else if (a.nameSprite.material.map) a.nameSprite.material.map.dispose();
+      a.nameSprite.material.map = nt.tex; a.nameSprite.material.needsUpdate = true; a.nameSprite.scale.set(nt.w * s, nt.h * s, 1);
     }
     function ensure(id, hue, name) {
       let a = avatars.get(id); if (a) return a;
@@ -832,13 +906,13 @@
       }
       const seen = new Set();
       for (const [id, e] of peers) {
-        seen.add(id); const a = ensure(id, hueOf(id), e.name); a.group.position.set(e.rx, 0, e.ry); a.head.lookAt(camera.position);
+        seen.add(id); const a = ensure(id, hueOf(id), e.name); a.group.position.set(e.rx, 0, e.ry); a.group.rotation.y = Math.PI / 2 - (e.facing || 0); a.head.lookAt(camera.position); setNameSprite(a, e.name || "Guest");
         const lv = lkVideo.get(id);
         if (lv && lv.el && lv.el.readyState >= 2 && !a.videoTex) { a.videoTex = new THREE.VideoTexture(lv.el); a.headMat.map = a.videoTex; a.headMat.needsUpdate = true; }
         else if (!a.videoTex && e.avatar) applyPic(a, e.avatar); // Google profile photo (when no live video)
       }
       if (cameraMode !== "firstPerson") {
-        seen.add("__me"); const a = ensure("__me", 212, "You"); a.group.visible = true; a.group.position.set(me.x, 0, me.y); a.head.lookAt(camera.position);
+        seen.add("__me"); const a = ensure("__me", 212, "You"); a.group.visible = true; a.group.position.set(me.x, 0, me.y); a.group.rotation.y = Math.PI / 2 - (me.facing || 0); a.head.lookAt(camera.position); setNameSprite(a, myName || "You");
         if (localVideoEl && localVideoEl.readyState >= 2 && !a.videoTex) { a.videoTex = new THREE.VideoTexture(localVideoEl); a.headMat.map = a.videoTex; a.headMat.needsUpdate = true; }
         else if (!a.videoTex && myAvatar) applyPic(a, myAvatar);
       } else { const a = avatars.get("__me"); if (a) a.group.visible = false; }

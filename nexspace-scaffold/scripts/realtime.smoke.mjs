@@ -82,7 +82,7 @@ try {
   (admin.world?.branding && typeof admin.world.branding.name === "string" && typeof admin.world.branding.color === "string") ? ok("welcome carries branding (name+color)") : bad("welcome world.branding missing/malformed");
   (admin.world?.floors?.length >= 2 && admin.world?.portals?.some((p) => p.to === "rooftop")) ? ok("welcome lists floors + portals (multi-floor)") : bad("multi-floor world blob missing floors/portals");
   (admin.world?.widgets?.some((wd) => wd.type === "note") && admin.world?.widgets?.some((wd) => wd.type === "timer")) ? ok("welcome carries interactive widgets (note+timer)") : bad("interactive widgets missing from world");
-  (admin.world?.furniture?.length > 0 && admin.world?.furniture[0].id) ? ok("welcome carries editable furniture (with ids)") : bad("furniture missing from world");
+  (admin.world?.furniture?.length > 0 && admin.world?.furniture[0].id && admin.world?.furniture.every((o) => o.kind)) ? ok("welcome carries editable furniture (with ids + kinds)") : bad("furniture missing from world or lacks kinds");
   (admin.tv && typeof admin.tv.videoId === "string" && admin.tv.videoId) ? ok("welcome carries shared TV state") : bad("TV state missing from welcome");
 
   // walk into the Focus Room at (500,500). The server-authoritative speed cap (MAX_SPEED) only
@@ -259,9 +259,10 @@ try {
   await wait(250);
   ((guest.world?.widgets?.length || 0) === wBefore + 1) ? ok("owner editFloor add broadcasts a new element") : bad("editFloor add did not broadcast");
   const fBefore = guest.world?.furniture?.length || 0;
-  admin.ws.send(JSON.stringify({ t: "editFloor", op: "add", kind: "furniture", x: 700, y: 700 }));
+  admin.ws.send(JSON.stringify({ t: "editFloor", op: "add", kind: "furniture", furnitureKind: "plant", x: 700, y: 700 }));
   await wait(220);
   ((guest.world?.furniture?.length || 0) === fBefore + 1) ? ok("owner editFloor add furniture broadcasts") : bad("furniture add did not broadcast");
+  (guest.world?.furniture?.some((o) => o.kind === "plant")) ? ok("furniture carries its kind (plant) through the world state") : bad("furniture kind not round-tripped");
   guest.ws.send(JSON.stringify({ t: "editFloor", op: "add", wtype: "note", x: 100, y: 100 }));
   await wait(200);
   (guest.denied.includes("edit the floor")) ? ok("guest denied floor editing (RBAC)") : bad("guest floor edit was NOT blocked");

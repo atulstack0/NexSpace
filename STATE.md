@@ -47,6 +47,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Collaborative whiteboard — synced strokes + clear, late-joiner state, cross-node | ✅ | realtime + web |
 | Reactions (floating emoji), nudge, moderation (admin mute / kick) | ✅ | realtime + web |
 | 2D ⇄ 3D toggle — pseudo-3D **and** real Three.js WebGL | ✅ | `apps/web/index.html` |
+| 3D office props — desks (monitor + chair), meeting tables, sofas, plants, chairs, rugs by `furniture.kind`; humanoid avatars (head/torso/arms/hands/legs/feet) that turn to face their walk direction with floating name tags; TV overlay perspective-sized + wall-occluded | ✅ | `apps/web/index.html` (Three3D) |
 | PUBG-style 3D camera — third/first person, mouse-look, sprint, jump, camera collision | ✅ | `apps/web/index.html` |
 | Presence & status (5 states) + idle auto-away | ✅ | realtime + web |
 | Auth (JWT login) + server-enforced RBAC | ✅ | `apps/api/src/auth`, realtime |
