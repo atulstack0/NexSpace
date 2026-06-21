@@ -138,6 +138,7 @@
   <button class="btn" id="btnChat" title="Chat (6.9)">💬</button>
   <button class="btn" id="btnWb" title="Whiteboard (6.8)">🖊️</button>
   <button class="btn" id="btnReact" title="React (6.6)">😀</button>
+  <button class="btn" id="btnTv" title="Open the TV (or press T)">📺 TV</button>
   <button class="btn" id="btnEdit" title="Edit the floor — move/add/remove elements (owner/admin)" style="display:none">✏️ Edit</button>
   </div>
 </div>
@@ -324,6 +325,8 @@
   // ---------- Input ----------
   const keys=new Set();let target=null;
   addEventListener('keydown',e=>{const tg=e.target; if(tg&&(tg.tagName==='INPUT'||tg.tagName==='TEXTAREA'))return; const _wb=document.getElementById('wb'); if(_wb&&_wb.style.display==='flex')return; const k=e.key.toLowerCase();
+    if(k==='t'){openTv();e.preventDefault();return;}                 // open the TV from any view
+    if(k==='escape'){closeTv();closeWidget();return;}
     if(viewMode==='3d'&&k==='v'){cameraMode=cameraMode==='thirdPerson'?'firstPerson':'thirdPerson';toast(cameraMode==='firstPerson'?'👁️ First-person':'🎥 Third-person');return;}
     if(viewMode==='3d'&&k===' '){if(jumpZ<=0.5)jumpV=220;e.preventDefault();return;} // cosmetic jump
     if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','shift'].includes(k)){keys.add(k);if(k!=='shift')target=null;e.preventDefault();}});
@@ -537,13 +540,15 @@
   function drawMedia(){if(!world.mediaWall)return;const m=world.mediaWall,sx=m.x,sy=m.y-m.screenH,sw=m.w,sh=m.screenH;
     ctx.fillStyle='#222c44';ctx.fillRect(m.x,m.y,m.w,m.base);
     ctx.fillStyle='#0a0f1c';rr(sx,sy,sw,sh,8);ctx.fill();ctx.save();rr(sx,sy,sw,sh,8);ctx.clip();
-    if(media.playing){for(let i=0;i<22;i++){const bh=18+Math.abs(Math.sin(frame*.06+i))*Math.abs(Math.sin(frame*.013+i*1.7))*(sh-30);
-      ctx.fillStyle='hsl('+(200+i*6)+' 70% 55%)';ctx.fillRect(sx+8+i*((sw-16)/22),sy+sh-bh-6,((sw-16)/22)-3,bh);}}
-    else{ctx.fillStyle='#5b8cff';ctx.font='28px sans-serif';ctx.textAlign='center';ctx.fillText('⏸',sx+sw/2,sy+sh/2+10);}
+    const th=tvData.videoId?getAvatarImg('https://i.ytimg.com/vi/'+tvData.videoId+'/hqdefault.jpg'):null; // current video's poster on the screen
+    if(th&&th.complete&&th.naturalWidth>0){const sc=Math.max(sw/th.naturalWidth,sh/th.naturalHeight),dw=th.naturalWidth*sc,dh=th.naturalHeight*sc;ctx.drawImage(th,sx+(sw-dw)/2,sy+(sh-dh)/2,dw,dh);}
+    else{ctx.fillStyle='#11182a';ctx.fillRect(sx,sy,sw,sh);}
+    const cx=sx+sw/2,cy=sy+sh/2;ctx.fillStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.arc(cx,cy,26,0,7);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.95)';ctx.beginPath();ctx.moveTo(cx-9,cy-13);ctx.lineTo(cx-9,cy+13);ctx.lineTo(cx+15,cy);ctx.closePath();ctx.fill();
     ctx.restore();ctx.strokeStyle=hexA('#5b8cff',.6);ctx.lineWidth=2;rr(sx,sy,sw,sh,8);ctx.stroke();
     ctx.fillStyle='rgba(8,11,18,.8)';rr(sx,sy-24,sw,22,6);ctx.fill();
-    ctx.fillStyle='#e8edf7';ctx.font='600 12px sans-serif';ctx.textAlign='left';ctx.fillText((media.playing?'▶ ':'⏸ ')+m.title,sx+8,sy-9);
-    ctx.textAlign='right';ctx.fillStyle='#8a96b3';ctx.fillText(fmt(media.pos)+' / '+fmt(m.dur),sx+sw-8,sy-9);}
+    ctx.fillStyle='#e8edf7';ctx.font='600 12px sans-serif';ctx.textAlign='left';
+    let tt='📺 '+(tvData.title||m.title||'TV');if(ctx.measureText(tt).width>sw-16)tt=tt.slice(0,Math.floor((sw-16)/7))+'…';ctx.fillText(tt,sx+8,sy-9);}
   // expanding concentric "sound waves"; amp (0..1) scales reach, ring count, width and opacity with volume
   function speakWaves(x,y,r,color,amp){const reach=8+amp*40,rings=amp>0.55?3:2;
     for(let i=0;i<rings;i++){const t=((frame*0.045)+i/rings)%1;const rad=r+3+t*reach;
@@ -671,9 +676,17 @@
   // ---------- Real 3D renderer (Three.js via CDN; falls back to pseudo-3D if unavailable) ----------
   let threeMode = false;
   const Three3D = (function () {
-    let ready = false, worldBuilt = false, renderer, scene, camera, worldGroup, avatarGroup;
-    const avatars = new Map(), picTexCache = new Map(); // id->avatar, url->THREE.CanvasTexture (round profile pics)
+    let ready = false, worldBuilt = false, renderer, scene, camera, worldGroup, avatarGroup, tvPanelMat = null;
+    const avatars = new Map(), picTexCache = new Map(), tvThumbCache = new Map(); // id->avatar, url->tex, videoId->tex
     function available() { return typeof THREE !== "undefined"; }
+    // YouTube thumbnail as a TV texture (CORS-loaded so it's a valid WebGL texture; can't paint the live player on a 3D surface).
+    function tvThumbTex(id) {
+      if (!id) return null; const c = tvThumbCache.get(id); if (c) return c; if (tvThumbCache.has(id)) return null;
+      tvThumbCache.set(id, null);
+      const img = new Image(); img.crossOrigin = "anonymous"; img.referrerPolicy = "no-referrer";
+      img.onload = () => { try { const cv = document.createElement("canvas"); cv.width = 480; cv.height = 360; cv.getContext("2d").drawImage(img, 0, 0, 480, 360); tvThumbCache.set(id, new THREE.CanvasTexture(cv)); } catch (_) {} };
+      img.src = "https://i.ytimg.com/vi/" + id + "/hqdefault.jpg"; return null;
+    }
     // Build a circular profile-pic texture (CORS-loaded so the canvas isn't tainted → valid WebGL texture).
     function picTex(url) {
       if (!url) return null;
@@ -724,10 +737,11 @@
         const w = o.w || 40, h = o.h || 40, bh = (o.r && o.r > 30) ? 22 : 46;
         const m = new THREE.Mesh(new THREE.BoxGeometry(w, bh, h), new THREE.MeshStandardMaterial({ color: 0x2a3552 })); m.position.set(o.x + w / 2, bh / 2, o.y + h / 2); worldGroup.add(m);
       }
-      const mw = world.mediaWall;
+      const mw = world.mediaWall; tvPanelMat = null;
       if (mw) {
         const sh = mw.screenH || 150;
-        const panel = new THREE.Mesh(new THREE.PlaneGeometry(mw.w, sh), new THREE.MeshBasicMaterial({ color: 0x123, side: THREE.DoubleSide }));
+        tvPanelMat = new THREE.MeshBasicMaterial({ color: 0x11182a, side: THREE.DoubleSide });
+        const panel = new THREE.Mesh(new THREE.PlaneGeometry(mw.w, sh), tvPanelMat);
         panel.position.set(mw.x + mw.w / 2, sh / 2 + (mw.base || 16), mw.y); worldGroup.add(panel);
       }
       for (const pt of (world.portals || [])) { // glowing portal pillar (§6 multi-floor)
@@ -762,6 +776,9 @@
     }
     function frame() {
       if (!ready) return; if (!worldBuilt) buildWorld();
+      if (tvPanelMat && tvData.videoId && tvPanelMat._vid !== tvData.videoId) {   // show the current video's poster on the 3D TV
+        const t = tvThumbTex(tvData.videoId); if (t) { tvPanelMat.map = t; tvPanelMat.color.set(0xffffff); tvPanelMat.needsUpdate = true; tvPanelMat._vid = tvData.videoId; }
+      }
       const eye = 46;
       if (cameraMode === "firstPerson") {
         camera.position.set(me.x, eye, me.y);
@@ -1033,6 +1050,7 @@
   document.getElementById('tvSearchBtn').addEventListener('click',tvSearch);
   document.getElementById('tvQ').addEventListener('keydown',e=>{if(e.key==='Enter')tvSearch();});
   document.getElementById('tvSkip').addEventListener('click',()=>tvSend({t:'tvNext'}));
+  document.getElementById('btnTv').addEventListener('click',openTv);
   document.getElementById('btnEdit').addEventListener('click',()=>editToggle());
   document.getElementById('edDone').addEventListener('click',()=>editToggle(false));
   document.getElementById('edAddNote').addEventListener('click',()=>editAdd('note'));
