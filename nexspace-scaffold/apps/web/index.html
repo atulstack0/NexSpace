@@ -317,18 +317,15 @@
     if(L.positionX){L.positionX.value=me.x/SCALE;L.positionY.value=0;L.positionZ.value=me.y/SCALE;}else if(L.setPosition)L.setPosition(me.x/SCALE,0,me.y/SCALE);
     const t=actx.currentTime,mr=roomAtPt(me.x,me.y);
     for(const [id,e] of peers){
-      const real=lkActive&&lkAudio.has(id);
       if(lkActive&&voices.has(id))voices.get(id).voice.gain.setTargetAtTime(0,t,0.05); // silence synth once real media is live
-      let chain;
-      if(real)chain=lkAudio.get(id);
-      else if(lkActive)continue;                 // LiveKit on but this peer's track not subscribed yet → silent
-      else{ensureVoice(id);chain=voices.get(id);} // synth fallback
-      if(!chain)continue;
+      const a=lkActive&&lkAudio.get(id);
+      if(a&&a.el){ a.el.volume=muted?0:Math.max(0,Math.min(1,peerVol(e))); continue; } // real voice: distance-scaled element volume
+      if(lkActive)continue;                        // LiveKit on but this peer's track not subscribed yet → silent
+      ensureVoice(id);const chain=voices.get(id);if(!chain)continue; // synth fallback (no LiveKit)
       if(e.bcast||(mr&&mr===roomAtPt(e.rx,e.ry))){const dx=e.rx-me.x,dy=e.ry-me.y,dd=Math.hypot(dx,dy)||1,near=R().inner*.5;
         setPos(chain.pan,me.x+dx/dd*near,me.y+dy/dd*near);}else setPos(chain.pan,e.rx,e.ry);
-      let vol=peerVol(e);
-      if(!real&&!e.bcast&&!e.talking)vol=0;       // synth gated by the simulated "talking" flag; real mic carries its own speech
-      chain.voice.gain.setTargetAtTime(muted?0:(real?vol:vol*0.16),t,0.08);}
+      let vol=peerVol(e);if(!e.bcast&&!e.talking)vol=0;
+      chain.voice.gain.setTargetAtTime(muted?0:vol*0.16,t,0.08);}
     // proximity track culling (spec 6.3): don't subscribe to far peers' media
     if(lkActive&&lkRoom&&lkRoom.remoteParticipants){for(const part of lkRoom.remoteParticipants.values()){
       const e=peers.get(part.identity);let want=true;
@@ -374,22 +371,28 @@
   }
   function onTrack(track,pub,participant){const id=participant.identity;
     if(track.kind==='audio'){
-      try{const src=actx.createMediaStreamSource(new MediaStream([track.mediaStreamTrack]));
-        const voice=actx.createGain();voice.gain.value=0;const pan=mkPan();
-        src.connect(voice);voice.connect(pan);pan.connect(master);
-        const el=track.attach();el.muted=true;el.style.display='none';document.body.appendChild(el); // keeps the track pulling in some browsers
-        lkAudio.set(id,{src,voice,pan,el});}catch(e){}
+      // Play the LiveKit audio element directly (NOT through Web Audio: createMediaStreamSource on a remote
+      // WebRTC track is silent in Chromium). Proximity is applied via element.volume in updateAudio().
+      const el=track.attach();el.autoplay=true;el.playsInline=true;el.volume=0;el.style.display='none';document.body.appendChild(el);
+      lkAudio.set(id,{el});
+      try{el.play&&el.play().catch(()=>{});}catch(_){}
+      if(lkRoom&&lkRoom.startAudio)lkRoom.startAudio().catch(()=>{});
     }else if(track.kind==='video'){const el=track.attach();el.muted=true;el.playsInline=true;el.style.display='none';
       if(LK&&track.source===LK.Track.Source.ScreenShare){document.getElementById('screenHolder').appendChild(el);lkScreens.set(id,{el,name:(participant.name||id)});updateScreens();}
       else{document.body.appendChild(el);lkVideo.set(id,{el});}}
   }
   function offTrack(track,pub,participant){const id=participant.identity;
-    if(track.kind==='audio'){const a=lkAudio.get(id);if(a){try{a.src.disconnect();a.voice.disconnect();a.pan.disconnect();}catch(e){}if(a.el)a.el.remove();lkAudio.delete(id);}}
+    if(track.kind==='audio'){const a=lkAudio.get(id);if(a){if(a.el){try{a.el.pause();}catch(_){}a.el.remove();}lkAudio.delete(id);}}
     else if(track.kind==='video'){
       if(LK&&track.source===LK.Track.Source.ScreenShare){const s=lkScreens.get(id);if(s&&s.el)s.el.remove();lkScreens.delete(id);if(screenFocus===id)screenFocus=null;updateScreens();}
       else{const v=lkVideo.get(id);if(v&&v.el)v.el.remove();lkVideo.delete(id);}}
     try{track.detach&&track.detach();}catch(e){}
   }
+  // Audio diagnostics — run nexAudio() in the browser console to see why you can/can't hear people.
+  window.nexAudio=()=>({lkActive,deafened:muted,ctx:actx&&actx.state,
+    micEnabled:!!(lkRoom&&lkRoom.localParticipant&&lkRoom.localParticipant.isMicrophoneEnabled),
+    remoteParticipants:lkRoom?lkRoom.remoteParticipants.size:0,
+    remoteAudio:[...lkAudio.entries()].map(([id,a])=>({id,volume:a.el&&+a.el.volume.toFixed(2),paused:a.el&&a.el.paused}))});
 
   // ---------- Loop ----------
   const SPEED=230;
