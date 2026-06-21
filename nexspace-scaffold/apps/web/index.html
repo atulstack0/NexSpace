@@ -691,7 +691,8 @@
   // ---------- Real 3D renderer (Three.js via CDN; falls back to pseudo-3D if unavailable) ----------
   let threeMode = false;
   const Three3D = (function () {
-    let ready = false, worldBuilt = false, renderer, scene, camera, worldGroup, avatarGroup, tvPanelMat = null;
+    let ready = false, worldBuilt = false, renderer, scene, camera, worldGroup, avatarGroup, tvPanelMat = null, tvPanelMesh = null;
+    let _ray = null;   // reused raycaster for TV occlusion (lazy so THREE is loaded)
     const avatars = new Map(), picTexCache = new Map(), tvThumbCache = new Map(); // id->avatar, url->tex, videoId->tex
     function available() { return typeof THREE !== "undefined"; }
     // YouTube thumbnail as a TV texture (CORS-loaded so it's a valid WebGL texture; can't paint the live player on a 3D surface).
@@ -744,24 +745,24 @@
       for (const r of world.rooms) {
         const b = r.bounds, H = 120, mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(r.color), transparent: true, opacity: 0.18, side: THREE.DoubleSide });
         for (const [ex, ey, ew, eh] of [[b.x, b.y, b.w, 8], [b.x, b.y + b.h, b.w, 8], [b.x, b.y, 8, b.h], [b.x + b.w, b.y, 8, b.h]]) {
-          const m = new THREE.Mesh(new THREE.BoxGeometry(ew, H, eh), mat); m.position.set(ex + ew / 2, H / 2, ey + eh / 2); worldGroup.add(m);
+          const m = new THREE.Mesh(new THREE.BoxGeometry(ew, H, eh), mat); m.position.set(ex + ew / 2, H / 2, ey + eh / 2); m.userData.occluder = true; worldGroup.add(m);
         }
       }
       for (const o of world.obstacles) {
         if ((o.w || 0) > WORLD.w - 100 || (o.h || 0) > WORLD.h - 100) continue;
         const w = o.w || 40, h = o.h || 40, bh = (o.r && o.r > 30) ? 22 : 46;
-        const m = new THREE.Mesh(new THREE.BoxGeometry(w, bh, h), new THREE.MeshStandardMaterial({ color: 0x2a3552 })); m.position.set(o.x + w / 2, bh / 2, o.y + h / 2); worldGroup.add(m);
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, bh, h), new THREE.MeshStandardMaterial({ color: 0x2a3552 })); m.position.set(o.x + w / 2, bh / 2, o.y + h / 2); m.userData.occluder = true; worldGroup.add(m);
       }
       for (const o of (world.furniture || [])) {   // editable furniture
         const w = o.w || 40, h = o.h || 40, bh = (o.r && o.r > 30) ? 22 : 46;
         const m = new THREE.Mesh(new THREE.BoxGeometry(w, bh, h), new THREE.MeshStandardMaterial({ color: 0x33405f, roughness: 0.7 })); m.position.set(o.x + w / 2, bh / 2, o.y + h / 2); worldGroup.add(m);
       }
-      const mw = world.mediaWall; tvPanelMat = null;
+      const mw = world.mediaWall; tvPanelMat = null; tvPanelMesh = null;
       if (mw) {
         const sh = mw.screenH || 150;
         tvPanelMat = new THREE.MeshBasicMaterial({ color: 0x11182a, side: THREE.DoubleSide });
         const panel = new THREE.Mesh(new THREE.PlaneGeometry(mw.w, sh), tvPanelMat);
-        panel.position.set(mw.x + mw.w / 2, sh / 2 + (mw.base || 16), mw.y); worldGroup.add(panel);
+        panel.position.set(mw.x + mw.w / 2, sh / 2 + (mw.base || 16), mw.y); worldGroup.add(panel); tvPanelMesh = panel;
       }
       for (const pt of (world.portals || [])) { // glowing portal pillar (§6 multi-floor)
         const col = new THREE.Color(pt.color || "#ffb454");
@@ -784,13 +785,35 @@
     }
     function ensure(id, hue, name) {
       let a = avatars.get(id); if (a) return a;
-      const group = new THREE.Group(), col = new THREE.Color("hsl(" + hue + ",70%,60%)");
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(8, 12, 46, 12), new THREE.MeshStandardMaterial({ color: col, roughness: 0.6, metalness: 0.05 })); body.position.y = 23;
+      const group = new THREE.Group();
+      const body = new THREE.Color("hsl(" + hue + ",65%,58%)");                       // shirt / torso
+      const limb = new THREE.Color("hsl(" + hue + ",40%,40%)");                        // pants / sleeves (darker)
+      const skin = new THREE.Color(0xf1c9a5);                                          // hands
+      const matBody = new THREE.MeshStandardMaterial({ color: body, roughness: 0.62, metalness: 0.04 });
+      const matLimb = new THREE.MeshStandardMaterial({ color: limb, roughness: 0.7, metalness: 0.04 });
+      const matSkin = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.6 });
+      const mesh = (geo, mat, x, y, z, rz) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); if (rz) m.rotation.z = rz; group.add(m); return m; };
+      // legs + feet (y: 0..24)
+      for (const sx of [-5.2, 5.2]) {
+        mesh(new THREE.CylinderGeometry(4, 3.4, 24, 10), matLimb, sx, 12, 0);          // leg
+        mesh(new THREE.BoxGeometry(7, 4.5, 13), matLimb, sx, 2.2, 3);                  // foot (points +z/forward)
+      }
+      // hips + torso (y: 24..50)
+      mesh(new THREE.CylinderGeometry(9.5, 8, 6, 12), matLimb, 0, 26, 0);              // hips
+      mesh(new THREE.CylinderGeometry(8.5, 9.5, 22, 14), matBody, 0, 38, 0);           // torso
+      mesh(new THREE.SphereGeometry(7, 14, 12), matBody, 0, 50, 0);                    // shoulders cap
+      // arms + hands (hang at the sides, y: ~30..50)
+      for (const sx of [-1, 1]) {
+        mesh(new THREE.CylinderGeometry(2.8, 2.4, 22, 10), matBody, sx * 12.5, 39, 0, sx * 0.14); // upper+fore arm
+        mesh(new THREE.SphereGeometry(3.1, 10, 10), matSkin, sx * 14.6, 28.5, 0);      // hand
+      }
+      // neck + head billboard (name initial or profile photo), faces the camera
+      mesh(new THREE.CylinderGeometry(2.6, 2.6, 4, 8), matSkin, 0, 56, 0);             // neck
       const headMat = new THREE.MeshBasicMaterial({ map: letterTex((name && name[0]) || "?", "hsl(" + hue + ",70%,60%)"), transparent: true });
-      const head = new THREE.Mesh(new THREE.PlaneGeometry(34, 34), headMat); head.position.y = 58;
-      const shadow = new THREE.Mesh(new THREE.CircleGeometry(14, 24), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28 })); // soft contact shadow
+      const head = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), headMat); head.position.y = 70;
+      const shadow = new THREE.Mesh(new THREE.CircleGeometry(15, 24), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28 })); // soft contact shadow
       shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.6;
-      group.add(shadow); group.add(body); group.add(head); avatarGroup.add(group);
+      group.add(shadow); group.add(head); avatarGroup.add(group);
       a = { group, head, headMat, videoTex: null, picUrl: null }; avatars.set(id, a); return a;
     }
     function frame() {
@@ -823,7 +846,25 @@
       renderer.render(scene, camera);
     }
     function project3D(x, y, z) { if (!camera) return null; const v = new THREE.Vector3(x, y, z).project(camera); if (v.z > 1) return null; return { x: (v.x * 0.5 + 0.5) * VW, y: (-v.y * 0.5 + 0.5) * VH }; }
-    return { available, init, frame, resize, project3D, rebuild() { worldBuilt = false; } };
+    // Where to place the live-video HTML overlay so it sits exactly on the 3D TV — sized by perspective
+    // (worldSize * focal / depth, so it keeps the TV's aspect ratio and never balloons), and HIDDEN when a
+    // wall is between the camera and the TV (raycast occlusion) so the video no longer shows through walls.
+    function tvRect() {
+      if (!ready || !camera || !world || !world.mediaWall || !tvPanelMesh) return null;
+      const mw = world.mediaWall, sh = mw.screenH || 150, base = mw.base || 16;
+      const center = new THREE.Vector3(mw.x + mw.w / 2, base + sh / 2, mw.y);
+      const toTv = center.clone().sub(camera.position), dist = toTv.length();
+      const camDir = new THREE.Vector3(); camera.getWorldDirection(camDir);
+      const depth = toTv.dot(camDir); if (depth <= 30) return null;          // behind / right on top of the camera
+      if (!_ray) _ray = new THREE.Raycaster();                               // occlusion: any structural wall in the way hides the TV
+      _ray.set(camera.position, toTv.clone().normalize()); _ray.near = 0; _ray.far = Math.max(1, dist - 40); // -40 so the TV's own mounting wall doesn't count
+      for (const h of _ray.intersectObjects(worldGroup.children, false)) { if (h.object !== tvPanelMesh && h.object.userData && h.object.userData.occluder) return null; }
+      const v = center.clone().project(camera); if (v.z > 1) return null;
+      const focal = (VH / 2) / Math.tan(camera.fov * Math.PI / 360);          // px per world-unit at depth=1
+      const pw = mw.w * focal / depth, ph = sh * focal / depth;
+      return { x: (v.x * 0.5 + 0.5) * VW - pw / 2, y: (-v.y * 0.5 + 0.5) * VH - ph / 2, w: pw, h: ph };
+    }
+    return { available, init, frame, resize, project3D, tvRect, rebuild() { worldBuilt = false; } };
   })();
 
   // ---------- Banner / knock ----------
@@ -947,15 +988,15 @@
   function tvPositionWorld(){const wd=document.getElementById('tvWorld');if(!wd)return;
     if(!world||!world.mediaWall||!((ytPlayer&&ytPlayer.getCurrentTime)||tvRaw)){wd.style.display='none';return;}
     const m=world.mediaWall;let px,py,pw,ph;
-    if(viewMode==='3d'){const r=tvScreenRect3D(m);if(!r){wd.style.display='none';return;}px=r.x;py=r.y;pw=r.w;ph=r.h;}
+    if(viewMode==='3d'){const r=(threeMode&&Three3D.tvRect)?Three3D.tvRect():tvScreenRect3D(m);if(!r){wd.style.display='none';return;}px=r.x;py=r.y;pw=r.w;ph=r.h;}
     else{px=(m.x-cam.x)*cam.zoom+VW/2;py=((m.y-m.screenH)-cam.y)*cam.zoom+VH/2;pw=m.w*cam.zoom;ph=m.screenH*cam.zoom;}
     if(pw<24||ph<16||px+pw<0||py+ph<0||px>VW||py>VH){wd.style.display='none';return;}
     wd.style.display='block';wd.style.left=Math.round(px)+'px';wd.style.top=Math.round(py)+'px';wd.style.width=Math.round(pw)+'px';wd.style.height=Math.round(ph)+'px';}
+  // Pseudo-3D fallback (no WebGL): size the overlay from the projected scale at the TV centre (s = focal/depth),
+  // so it keeps the TV's aspect ratio and never balloons. project() takes [worldX, worldY, height].
   function tvScreenRect3D(m){const base=m.base||16,sh=m.screenH||150;
-    const pts=[[m.x,base,m.y],[m.x+m.w,base,m.y],[m.x,base+sh,m.y],[m.x+m.w,base+sh,m.y]]; // (x, height, z=floorY)
-    const proj=(threeMode&&Three3D.project3D)?(p)=>Three3D.project3D(p[0],p[1],p[2]):(p)=>{const r=project([p[0],p[2],p[1]]);return r?{x:r.x,y:r.y}:null;};
-    let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;for(const p of pts){const s=proj(p);if(!s)return null;minx=Math.min(minx,s.x);miny=Math.min(miny,s.y);maxx=Math.max(maxx,s.x);maxy=Math.max(maxy,s.y);}
-    return{x:minx,y:miny,w:maxx-minx,h:maxy-miny};}
+    const sc=project([m.x+m.w/2, m.y, base+sh/2]);if(!sc)return null;
+    const pw=m.w*sc.s,ph=sh*sc.s;return{x:sc.x-pw/2,y:sc.y-ph/2,w:pw,h:ph};}
   setInterval(()=>{if(!ytPlayer||!ytPlayer.getCurrentTime||tvApplyingRemote||!tvSync.playing)return; // drift-correct (player always running)
     const cur=ytPlayer.getCurrentTime(),target=tvExpectedPos();if(Math.abs(cur-target)>1.8){tvApplyingRemote=true;try{ytPlayer.seekTo(Math.max(0,target),true);}catch(_){}setTimeout(()=>{tvApplyingRemote=false;},600);}},2000);
   function tvItemRow(title,btns){const d=document.createElement('div');d.className='tvitem';const t=document.createElement('span');t.className='tt';t.textContent=title;t.title=title;d.appendChild(t);for(const b of btns){const bt=document.createElement('button');bt.textContent=b.label;bt.onclick=b.fn;d.appendChild(bt);}return d;}
