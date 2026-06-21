@@ -47,18 +47,16 @@
   #statusSel:hover,#floorSel:hover{border-color:var(--accent)}
   /* Shared YouTube TV */
   #tv{position:fixed;inset:0;z-index:62;display:none;align-items:center;justify-content:center;background:rgba(8,12,20,.82);padding:14px}
-  .tvbox{display:flex;flex-direction:column;gap:10px;width:1040px;max-width:96vw;height:min(86vh,680px);background:#0f1626;border:1px solid var(--line);border-radius:14px;padding:12px}
-  .tvhead{display:flex;align-items:center;gap:10px;font-size:14px}
+  .tvbox{display:flex;flex-direction:column;gap:10px;width:900px;max-width:96vw;height:min(92vh,820px);background:#0f1626;border:1px solid var(--line);border-radius:14px;padding:12px}
+  .tvhead{display:flex;align-items:center;gap:10px;font-size:14px;flex:0 0 auto}
   #tvNow{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:50%}
-  .tvmain{display:flex;gap:12px;min-height:0;flex:1}
-  .tvplayer{flex:1;min-width:0;min-height:200px;background:#000;border-radius:10px;overflow:hidden}
+  .tvsearch{display:flex;gap:6px;flex:0 0 auto}
+  .tvsearch input{flex:1;background:#0d1424;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:9px 11px;font-size:14px}
+  .tvplayer{flex:1 1 auto;min-height:240px;background:#000;border-radius:10px;overflow:hidden}
   .tvplayer iframe{width:100%;height:100%;border:0;display:block}
-  .tvside{width:320px;max-width:42vw;display:flex;flex-direction:column;gap:8px;min-height:0}
-  .tvsearch{display:flex;gap:6px}
-  .tvsearch input{flex:1;background:#0d1424;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:8px 10px;font-size:13px}
-  .tvqhead{display:flex;align-items:center;font-size:12px;color:var(--muted);font-weight:600;margin-top:2px}
-  .tvlist{overflow-y:auto;display:flex;flex-direction:column;gap:5px;min-height:0}
-  #tvResults{max-height:34%} #tvQueue{flex:1}
+  .tvqhead{font-size:12px;color:var(--muted);font-weight:600;flex:0 0 auto}
+  .tvlist{overflow-y:auto;display:flex;flex-direction:column;gap:5px}
+  #tvResults{flex:0 0 auto;max-height:190px} #tvQueue{flex:0 0 auto;max-height:120px}
   .tvitem{display:flex;align-items:center;gap:7px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px}
   .tvitem .tt{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .tvitem button{background:#0d1424;border:1px solid var(--line);color:var(--text);border-radius:6px;padding:3px 7px;font-size:12px;cursor:pointer}
@@ -184,15 +182,11 @@
 <div id="tv">
   <div class="tvbox">
     <div class="tvhead"><b>📺 NexSpace TV</b><span id="tvNow"></span><button class="btn" id="tvClose" style="margin-left:auto;padding:3px 10px">✕ Close</button></div>
-    <div class="tvmain">
-      <div id="tvFrameWrap" class="tvplayer"></div>
-      <div class="tvside">
-        <div class="tvsearch"><input id="tvQ" placeholder="Search YouTube or paste a link…" /><button class="btn" id="tvSearchBtn">Search</button></div>
-        <div id="tvResults" class="tvlist"></div>
-        <div class="tvqhead">Up next <button class="btn" id="tvSkip" style="margin-left:auto;padding:2px 9px">⏭ Skip</button></div>
-        <div id="tvQueue" class="tvlist"></div>
-      </div>
-    </div>
+    <div class="tvsearch"><input id="tvQ" placeholder="🔍 Search YouTube or paste a link…" /><button class="btn" id="tvSearchBtn">Search</button><button class="btn" id="tvSkip" title="Play next in queue">⏭ Skip</button></div>
+    <div id="tvResults" class="tvlist"></div>
+    <div id="tvFrameWrap" class="tvplayer"></div>
+    <div class="tvqhead">Up next</div>
+    <div id="tvQueue" class="tvlist"></div>
   </div>
 </div>
 <div id="banner"><span class="l"></span><span id="bannerText"></span></div>
@@ -883,7 +877,7 @@
   function applyTv(t){tvData={videoId:t.videoId||'',title:t.title||'',queue:t.queue||[]};
     const ov=document.getElementById('tv');if(ov&&ov.style.display==='flex'){tvSetFrame(tvData.videoId);renderTvQueue();const now=document.getElementById('tvNow');if(now)now.textContent=tvData.title?('▶ '+tvData.title):'';}}
   function tvSetFrame(id){if(!id||id===tvFrameId)return;tvFrameId=id;
-    document.getElementById('tvFrameWrap').innerHTML='<iframe src="https://www.youtube.com/embed/'+encodeURIComponent(id)+'?autoplay=1&rel=0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>';}
+    document.getElementById('tvFrameWrap').innerHTML='<iframe src="https://www.youtube.com/embed/'+encodeURIComponent(id)+'?autoplay=1&rel=0&modestbranding=1&playsinline=1" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>';}
   function openTv(){const ov=document.getElementById('tv');ov.style.display='flex';tvFrameId='';tvSetFrame(tvData.videoId);renderTvQueue();
     const now=document.getElementById('tvNow');if(now)now.textContent=tvData.title?('▶ '+tvData.title):'';document.getElementById('tvResults').innerHTML='';const q=document.getElementById('tvQ');if(q){q.value='';setTimeout(()=>q.focus(),50);}}
   function closeTv(){const ov=document.getElementById('tv');ov.style.display='none';document.getElementById('tvFrameWrap').innerHTML='';tvFrameId='';}
