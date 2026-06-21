@@ -486,10 +486,12 @@ wss.on("connection", (ws) => {
     } else if (m.t === "media") {
       const f = floorOf(p); if (f.mediaWall) { f.mediaWall.playing = !!m.playing; publishEvent("media", { floor: f.slug, playing: f.mediaWall.playing }); }
     } else if (m.t === "door") {
-      if (rank(p.role) < RANK.member) return deny(ws, "change doors", "member");
-      if (m.state === "locked" && rank(p.role) < RANK.admin) return deny(ws, "lock doors", "admin");
       const room = floorOf(p).rooms.find(r => r.id === m.roomId);
-      if (room && ["open", "closed", "locked"].includes(m.state)) { room.door.state = m.state; publishEvent("door", { floor: p.floor, roomId: m.roomId, state: m.state }); }
+      if (!room || !["open", "closed", "locked"].includes(m.state)) return;
+      const cur = room.door.state;
+      if (m.state === "locked" && rank(p.role) < RANK.admin) return deny(ws, "lock doors", "admin");      // only admins can lock
+      if (cur === "locked" && rank(p.role) < RANK.member) return deny(ws, "unlock the door", "member");   // unlocking a locked door needs member+
+      room.door.state = m.state; publishEvent("door", { floor: p.floor, roomId: m.roomId, state: m.state }); // anyone may open/close an unlocked door
     } else if (m.t === "knock") {
       const room = floorOf(p).rooms.find(r => r.id === m.roomId);
       if (!room) return;

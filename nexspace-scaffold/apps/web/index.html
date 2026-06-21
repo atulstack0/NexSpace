@@ -1120,15 +1120,19 @@
     if(!autoAway&&myStatus==='available'&&Date.now()-lastActivity>60000){autoAway=true;setStatus('away');} // idle auto-away (6.19)
     // knock prompt
     if(!world){knockEl.style.display='none';return;}
-    const myRoom=roomAtPt(me.x,me.y);let found=null;
+    const myRoom=roomAtPt(me.x,me.y);let found=null;const RKN={guest:0,member:1,admin:2,owner:3},rk=r=>RKN[r]||0;
     for(const r of world.rooms){const d=r.door,cx=d.x+d.w/2,cy=d.y+d.h/2,dist=Math.hypot(me.x-cx,me.y-cy),st=doors[r.id]||'closed';
-      if(dist<90){if(myRoom===r&&st==='open')found={r,a:'close'};else if(myRoom!==r&&st!=='open')found={r,a:'knock'};else if(myRoom===r&&st!=='open')found={r,a:'open'};}}
+      if(dist<90){
+        if(myRoom===r&&st==='open')found={r,a:'close'};              // inside, open → close it
+        else if(st==='locked')found={r,a:rk(myRole)>=1?'open':'knock'}; // locked: member+ can unlock & enter; guests knock
+        else if(st!=='open')found={r,a:'open'};                       // closed: anyone can open the door and walk in
+      }}
     activeDoor=found;
     if(!found){knockEl.style.display='none';return;}
     knockEl.style.display='flex';const st=doors[found.r.id]||'closed';
-    if(found.a==='knock'){knockText.innerHTML='🚪 <b>'+found.r.name+'</b> is '+st+'.';knockBtn.textContent='Knock';}
+    if(found.a==='knock'){knockText.innerHTML='🔒 <b>'+found.r.name+'</b> is locked.';knockBtn.textContent='🔔 Knock';}
     else if(found.a==='close'){knockText.innerHTML='🚪 You\'re in <b>'+found.r.name+'</b>.';knockBtn.textContent='Close door';}
-    else{knockText.innerHTML='🚪 <b>'+found.r.name+'</b> door.';knockBtn.textContent='Open door';}
+    else{knockText.innerHTML='🚪 Enter <b>'+found.r.name+'</b>'+(st==='locked'?' (locked)':'')+'.';knockBtn.textContent=st==='locked'?'🔓 Unlock & enter':'Open door';}
   }
   knockBtn.addEventListener('click',()=>{if(!activeDoor||!ws||ws.readyState!==1)return;const {r,a}=activeDoor;
     if(a==='close')ws.send(JSON.stringify({t:'door',roomId:r.id,state:'closed'}));

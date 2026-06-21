@@ -145,15 +145,20 @@ try {
   (guest.last?.recording?.on === true) ? ok("admin recording starts → indicator syncs to guest") : bad("admin recording did not start");
   admin.ws.send(JSON.stringify({ t: "recording", on: false }));
 
-  // RBAC — guest cannot open the locked Boardroom door
+  // a guest CAN open a closed (unlocked) door and enter an empty room
+  guest.ws.send(JSON.stringify({ t: "door", roomId: "focus", state: "open" }));
+  await wait(350);
+  (guest.last?.doors?.focus === "open") ? ok("guest can open a closed (unlocked) door → enter empty room") : bad("guest could NOT open a closed door");
+
+  // RBAC — guest cannot unlock the locked Boardroom door
   guest.ws.send(JSON.stringify({ t: "door", roomId: "board", state: "open" }));
   await wait(350);
-  (guest.last?.doors?.board === "locked" && guest.denied.includes("change doors")) ? ok("guest denied changing the locked door") : bad("guest door change was NOT blocked");
+  (guest.last?.doors?.board === "locked" && guest.denied.includes("unlock the door")) ? ok("guest denied unlocking the locked door") : bad("guest unlock was NOT blocked");
 
-  // RBAC — admin can open it
+  // RBAC — admin can open (unlock) it
   admin.ws.send(JSON.stringify({ t: "door", roomId: "board", state: "open" }));
   await wait(350);
-  (guest.last?.doors?.board === "open") ? ok("admin opened the Boardroom door") : bad("admin could not open door");
+  (guest.last?.doors?.board === "open") ? ok("admin opened the locked Boardroom door") : bad("admin could not open door");
 
   // Live reload — admin push broadcasts a {world} to everyone; a guest cannot trigger it
   let worldMsgs = 0;
