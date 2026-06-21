@@ -131,15 +131,17 @@ const floors = new Map(); // slug -> floor state { slug, name, w, h, obstacles, 
 
 function makeDefaultFloor() {
   const W = 2200, H = 1500;
-  const obstacles = [
+  const walls = [ // structural (not editable)
     { x: 0, y: 0, w: W, h: 16 }, { x: 0, y: H - 16, w: W, h: 16 },
     { x: 0, y: 0, w: 16, h: H }, { x: W - 16, y: 0, w: 16, h: H },
     { x: 520, y: 120, w: 16, h: 300 }, { x: 520, y: 520, w: 16, h: 240 }, { x: 120, y: 760, w: 430, h: 16 },
     { x: 1500, y: 120, w: 16, h: 560 }, { x: 1516, y: 120, w: 300, h: 16 }, { x: 1516, y: 666, w: 300, h: 16 },
     { x: 1800, y: 120, w: 16, h: 236 }, { x: 1800, y: 452, w: 16, h: 230 },
-    { x: 980, y: 560, w: 240, h: 120, r: 14 }, { x: 300, y: 300, w: 150, h: 80, r: 12 },
-    { x: 1600, y: 330, w: 170, h: 90, r: 12 }, { x: 900, y: 1150, w: 120, h: 120, r: 60 },
-    { x: 1750, y: 1150, w: 150, h: 80, r: 12 }, { x: 250, y: 1150, w: 90, h: 90, r: 10 },
+  ];
+  const furniture = [ // editable (owner can move/add/delete)
+    { id: "f-d1", x: 980, y: 560, w: 240, h: 120, r: 14 }, { id: "f-d2", x: 300, y: 300, w: 150, h: 80, r: 12 },
+    { id: "f-d3", x: 1600, y: 330, w: 170, h: 90, r: 12 }, { id: "f-d4", x: 900, y: 1150, w: 120, h: 120, r: 60 },
+    { id: "f-d5", x: 1750, y: 1150, w: 150, h: 80, r: 12 }, { id: "f-d6", x: 250, y: 1150, w: 90, h: 90, r: 10 },
   ];
   const rooms = [
     { id: "focus", name: "Focus Room", color: "#7c6bff",
@@ -150,36 +152,36 @@ function makeDefaultFloor() {
   // mounted on the top wall (screen flush against the wall at y0-16; base ledge just below)
   const mediaWall = { x: 940, y: 212, w: 320, base: 16, screenH: 196,
     title: "📺 NexSpace TV — click to watch", playing: true, pos: 74, dur: 213 };
-  obstacles.push({ x: mediaWall.x, y: mediaWall.y, w: mediaWall.w, h: mediaWall.base });
   const portals = [{ id: "to-rooftop", x: 2030, y: 1290, w: 96, h: 96, to: "rooftop", label: "Rooftop ↑", color: "#ffb454" }];
   const widgets = [
     { id: "w-note", type: "note", x: 360, y: 980, w: 190, h: 130, text: "Welcome to NexSpace! Click the 📺 TV to watch & queue songs together, or pop up to the rooftop 🌇", color: "#ffd166" },
     { id: "w-timer", type: "timer", x: 980, y: 300, w: 180, h: 96, label: "Standup ends", endsAt: Date.now() + 30 * 60000 },
   ];
-  return { slug: "default", name: "HQ — Ground Floor", w: W, h: H, obstacles, rooms, mediaWall, portals, widgets,
+  return { slug: "default", name: "HQ — Ground Floor", w: W, h: H, walls, furniture, rooms, mediaWall, portals, widgets,
     branding: { name: "NexSpace", color: "#5b8cff", logo: "", whiteLabel: false }, spawn: { x: 890, y: 920 } };
 }
 
 function makeRooftopFloor() {
   const W = 1600, H = 1100;
-  const obstacles = [
+  const walls = [
     { x: 0, y: 0, w: W, h: 16 }, { x: 0, y: H - 16, w: W, h: 16 },
     { x: 0, y: 0, w: 16, h: H }, { x: W - 16, y: 0, w: 16, h: H },
-    { x: 700, y: 300, w: 200, h: 120, r: 18 },
-    { x: 220, y: 760, w: 140, h: 90, r: 12 }, { x: 1240, y: 760, w: 140, h: 90, r: 12 },
+  ];
+  const furniture = [
+    { id: "f-r1", x: 700, y: 300, w: 200, h: 120, r: 18 },
+    { id: "f-r2", x: 220, y: 760, w: 140, h: 90, r: 12 }, { id: "f-r3", x: 1240, y: 760, w: 140, h: 90, r: 12 },
   ];
   const rooms = [
     { id: "cabana", name: "Cabana", color: "#39d3a6",
       bounds: { x: 120, y: 130, w: 360, h: 360 }, door: { x: 472, y: 290, w: 18, h: 90, state: "open", knocking: false } },
   ];
   const mediaWall = { x: 660, y: 720, w: 280, base: 16, screenH: 140,
-    title: "Sunset Set — Rooftop Radio", playing: true, pos: 12, dur: 240 };
-  obstacles.push({ x: mediaWall.x, y: mediaWall.y, w: mediaWall.w, h: mediaWall.base });
+    title: "📺 Rooftop TV — click to watch", playing: true, pos: 12, dur: 240 };
   const portals = [{ id: "to-default", x: 90, y: 960, w: 96, h: 96, to: "default", label: "Ground ↓", color: "#5b8cff" }];
   const widgets = [
     { id: "w-rnote", type: "note", x: 1180, y: 250, w: 190, h: 120, text: "Rooftop vibes ☕ — grab a seat by the cabana", color: "#39d3a6" },
   ];
-  return { slug: "rooftop", name: "Rooftop Garden", w: W, h: H, obstacles, rooms, mediaWall, portals, widgets,
+  return { slug: "rooftop", name: "Rooftop Garden", w: W, h: H, walls, furniture, rooms, mediaWall, portals, widgets,
     branding: { name: "NexSpace", color: "#39d3a6", logo: "", whiteLabel: false }, spawn: { x: 800, y: 600 } };
 }
 
@@ -196,8 +198,11 @@ function inRoom(p, room) {
 }
 function worldForClient(slug) {
   const f = floors.get(slug) || anyFloor();
+  const obstacles = (f.walls || []).slice();
+  if (f.mediaWall) obstacles.push({ x: f.mediaWall.x, y: f.mediaWall.y, w: f.mediaWall.w, h: f.mediaWall.base }); // TV base is a wall
   return {
-    slug: f.slug, name: f.name, w: f.w, h: f.h, obstacles: f.obstacles,
+    slug: f.slug, name: f.name, w: f.w, h: f.h, obstacles,
+    furniture: (f.furniture || []).map(o => ({ ...o })),
     rooms: f.rooms.map(r => ({ id: r.id, name: r.name, color: r.color, bounds: r.bounds, door: { x: r.door.x, y: r.door.y, w: r.door.w, h: r.door.h, state: r.door.state } })),
     mediaWall: f.mediaWall ? { x: f.mediaWall.x, y: f.mediaWall.y, w: f.mediaWall.w, base: f.mediaWall.base, screenH: f.mediaWall.screenH, title: f.mediaWall.title, dur: f.mediaWall.dur } : null,
     portals: f.portals.map(pt => ({ id: pt.id, x: pt.x, y: pt.y, w: pt.w, h: pt.h, to: pt.to, label: pt.label, color: pt.color })),
@@ -369,7 +374,7 @@ const server = http.createServer((req, res) => {
       return json(res, { online: users.length, users });
     }
     if (urlPath === "/api/v1/floors") return json(res, { floors: floorsList() });
-    if (urlPath === "/api/v1/floor") { const f = anyFloor(); return json(res, { slug: f.slug, name: f.name, width: f.w, height: f.h, rooms: f.rooms.map((r) => ({ id: r.id, name: r.name })), objects: f.obstacles.length, portals: f.portals.length, mediaWall: f.mediaWall ? { title: f.mediaWall.title, playing: f.mediaWall.playing } : null }); }
+    if (urlPath === "/api/v1/floor") { const f = anyFloor(); return json(res, { slug: f.slug, name: f.name, width: f.w, height: f.h, rooms: f.rooms.map((r) => ({ id: r.id, name: r.name })), objects: (f.walls || []).length + (f.furniture || []).length, portals: f.portals.length, mediaWall: f.mediaWall ? { title: f.mediaWall.title, playing: f.mediaWall.playing } : null }); }
     return json(res, { error: "not found" }, 404);
   }
   const safe = path.normalize(urlPath).replace(/^(\.\.[/\\])+/, "");
@@ -526,10 +531,13 @@ wss.on("connection", (ws) => {
       if (rank(p.role) < RANK.admin) return deny(ws, "edit the floor", "admin");
       const f = floorOf(p), op = m.op; let changed = false;
       const cx = (v, max) => clamp(Number(v), 0, max), grid = (v) => Math.round(v / 10) * 10;
+      const arrFor = (kind) => kind === "portal" ? f.portals : kind === "furniture" ? f.furniture : f.widgets;
       if (op === "move") {
-        const arr = m.kind === "portal" ? f.portals : f.widgets;
-        const o = arr.find((x) => x.id === m.id);
+        const o = arrFor(m.kind).find((x) => x.id === m.id);
         if (o) { o.x = grid(cx(m.x, f.w - (o.w || 40))); o.y = grid(cx(m.y, f.h - (o.h || 40))); changed = true; }
+      } else if (op === "add" && m.kind === "furniture") {
+        f.furniture.push({ id: "f-" + crypto.randomBytes(3).toString("hex"), x: grid(cx(m.x, f.w - 120)), y: grid(cx(m.y, f.h - 80)), w: 120, h: 80, r: 12 });
+        changed = true;
       } else if (op === "add") {
         const id = "w-" + crypto.randomBytes(3).toString("hex");
         const type = ["note", "timer", "embed"].includes(m.wtype) ? m.wtype : "note";
@@ -539,10 +547,10 @@ wss.on("connection", (ws) => {
         else { wd.kind = "web"; wd.url = String(m.url || "").slice(0, 400); wd.title = String(m.title || "Embed").slice(0, 80); }
         f.widgets.push(wd); changed = true;
       } else if (op === "remove") {
-        const arr = m.kind === "portal" ? f.portals : f.widgets;
+        const arr = arrFor(m.kind);
         const i = arr.findIndex((x) => x.id === m.id); if (i >= 0) { arr.splice(i, 1); changed = true; }
       }
-      if (changed) { const wmsg = JSON.stringify({ t: "world", world: worldForClient(f.slug) }); for (const [ws2, q] of clients) if (q.floor === f.slug && ws2.readyState === 1) ws2.send(wmsg); }
+      if (changed) { const wmsg = JSON.stringify({ t: "world", world: worldForClient(f.slug) }); for (const [ws2, q] of clients) if (q.floor === f.slug && ws2.readyState === 1) ws2.send(wmsg); persistFloors(); }
     }
   });
 
@@ -644,7 +652,7 @@ function buildFloorFromBlob(slug, w) {
     screenH: w.mediaWall.screenH, title: w.mediaWall.title, playing: true, pos: 0, dur: w.mediaWall.dur } : null;
   const portals = (w.portals || []).map((pt) => ({ id: pt.id, x: pt.x, y: pt.y, w: pt.w, h: pt.h, to: pt.to, label: pt.label, color: pt.color }));
   const widgets = (w.widgets || []).map((wd) => ({ ...wd }));
-  return { slug, name: w.name || slug, w: w.w, h: w.h, obstacles: (w.obstacles || []).slice(), rooms, mediaWall, portals, widgets,
+  return { slug, name: w.name || slug, w: w.w, h: w.h, walls: (w.obstacles || []).slice(), furniture: (w.furniture || []).map((o) => ({ ...o })), rooms, mediaWall, portals, widgets,
     branding: w.branding || { name: "NexSpace", color: "#5b8cff", logo: "", whiteLabel: false },
     spawn: w.spawn || { x: Math.round((w.w || 2000) * 0.4), y: Math.round((w.h || 1400) * 0.6) } };
 }
@@ -674,7 +682,40 @@ async function loadWorld() {
     console.warn(`WORLD_API unavailable (${e.message}) — using built-in floors`);
   }
 }
-loadWorld().finally(() => {
+// ---------- Persist owner edits (§6.10) — survive restarts without the API. Saves the editable parts of each
+// floor to Redis (if REDIS_URL) else a JSON file; loads them on boot over the built-in floors. Off when WORLD_API is set. ----------
+const PERSIST_FILE = path.join(process.env.DATA_DIR || __dirname, "floors-data.json");
+let persistTimer = null;
+function snapshotFloors() {
+  const out = {};
+  for (const [slug, f] of floors) out[slug] = { furniture: f.furniture, widgets: f.widgets, portals: f.portals, mediaWall: f.mediaWall ? { x: f.mediaWall.x, y: f.mediaWall.y } : null };
+  return out;
+}
+function persistFloors() {
+  if (process.env.WORLD_API || process.env.NO_PERSIST) return; // API/DB is the source of truth when configured
+  clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    const data = JSON.stringify(snapshotFloors());
+    if (pub) { try { pub.set("nexspace:floors", data); } catch {} }
+    else fs.writeFile(PERSIST_FILE, data, () => {});
+  }, 800);
+}
+async function loadPersisted() {
+  if (process.env.WORLD_API || process.env.NO_PERSIST) return;
+  let data = null;
+  try { if (pub) data = await pub.get("nexspace:floors"); else if (fs.existsSync(PERSIST_FILE)) data = fs.readFileSync(PERSIST_FILE, "utf8"); } catch {}
+  let saved; try { saved = data ? JSON.parse(data) : null; } catch { saved = null; }
+  if (!saved) return;
+  for (const slug in saved) {
+    const f = floors.get(slug); if (!f) continue; const s = saved[slug];
+    if (Array.isArray(s.furniture)) f.furniture = s.furniture;
+    if (Array.isArray(s.widgets)) f.widgets = s.widgets;
+    if (Array.isArray(s.portals)) f.portals = s.portals;
+    if (s.mediaWall && f.mediaWall) { f.mediaWall.x = s.mediaWall.x; f.mediaWall.y = s.mediaWall.y; }
+  }
+  console.log("Restored persisted floor edits (" + Object.keys(saved).length + " floor[s])");
+}
+loadWorld().then(loadPersisted).finally(() => {
   server.listen(PORT, () => console.log(`NexSpace realtime + web: http://localhost:${PORT}  (open two tabs)`));
 });
 

@@ -16,12 +16,17 @@ export class WorldService {
     });
     if (!floor) throw new NotFoundException(`Floor '${slug}' not found — did you run the seed?`);
 
-    const collidable = floor.objects.filter((o) => o.collidable && (o.type === "wall" || o.type === "furniture"));
-    const obstacles = collidable.map((o) => {
+    // structural walls (not editable); the realtime server adds the media-wall base itself
+    const obstacles = floor.objects.filter((o) => o.collidable && o.type === "wall").map((o) => {
       const c = this.parse(o.config);
       const rect: any = { x: o.x, y: o.y, w: c.w, h: c.h };
       if (c.r != null) rect.r = c.r;
       return rect;
+    });
+    // furniture (editable in the in-office editor) — kept separate so it carries stable ids
+    const furniture = floor.objects.filter((o) => o.type === "furniture").map((o) => {
+      const c = this.parse(o.config);
+      return { id: o.id, x: o.x, y: o.y, w: c.w, h: c.h, ...(c.r != null ? { r: c.r } : {}) };
     });
 
     const mw = floor.objects.find((o) => o.type === "mediaWall");
@@ -29,8 +34,6 @@ export class WorldService {
     const mediaWall = mw
       ? { x: mw.x, y: mw.y, w: mwc.w, base: mwc.base, screenH: mwc.screenH, title: mwc.title, dur: mwc.dur }
       : null;
-    // the media-wall stand is also a physical obstacle
-    if (mw) obstacles.push({ x: mw.x, y: mw.y, w: mwc.w, h: mwc.base });
 
     const rooms = floor.rooms.map((r) => ({
       id: r.key,
@@ -53,7 +56,7 @@ export class WorldService {
     });
 
     const branding = { name: "NexSpace", color: "#5b8cff", logo: "", whiteLabel: false, ...(floor.branding ? this.parse(floor.branding) : {}) };
-    return { slug: floor.slug, name: floor.name, w: floor.width, h: floor.height, environment: floor.environment, supports3d: floor.supports3d, obstacles, rooms, mediaWall, portals, widgets, branding };
+    return { slug: floor.slug, name: floor.name, w: floor.width, h: floor.height, environment: floor.environment, supports3d: floor.supports3d, obstacles, furniture, rooms, mediaWall, portals, widgets, branding };
   }
 
   /** List every floor (slug + name) — feeds the realtime server's multi-floor loader and the client switcher. */

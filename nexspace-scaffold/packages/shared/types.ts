@@ -88,6 +88,7 @@ export interface WorldBlob {
   w: number;
   h: number;
   obstacles: Array<{ x: number; y: number; w: number; h: number; r?: number }>;
+  furniture?: Array<{ id: string; x: number; y: number; w: number; h: number; r?: number }>; // editable in-office (§6.10)
   rooms: Array<{ id: string; name: string; color: string;
     bounds: { x: number; y: number; w: number; h: number };
     door: { x: number; y: number; w: number; h: number; state?: DoorState } }>;

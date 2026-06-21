@@ -23,6 +23,9 @@ out/
 *.db-journal
 *.sqlite
 
+# Persisted owner floor edits (written at runtime by the realtime server)
+floors-data.json
+
 # Logs
 *.log
 npm-debug.log*

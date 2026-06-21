@@ -144,6 +144,7 @@
 </div>
 <div id="editBar">
   <span class="elabel">✏️ Editing floor</span>
+  <button class="btn" id="edAddFurniture">＋ Furniture</button>
   <button class="btn" id="edAddNote">＋ Note</button>
   <button class="btn" id="edAddTimer">＋ Timer</button>
   <button class="btn warn" id="edDel">🗑 Delete</button>
@@ -272,6 +273,7 @@
     const dx=cx-nx,dy=cy-ny;return dx*dx+dy*dy<cr*cr;}
   function blocked(x,y,rad){if(!world)return false;
     for(const o of world.obstacles)if(circleRect(x,y,rad,o))return true;
+    if(world.furniture)for(const o of world.furniture)if(circleRect(x,y,rad,o))return true;
     for(const r of world.rooms){if(doors[r.id]&&doors[r.id]!=='open'&&circleRect(x,y,rad,r.door))return true;}
     return false;}
   function moveMe(dx,dy){const rad=16;
@@ -351,13 +353,15 @@
     if(viewMode==='3d')tpDist=Math.max(150,Math.min(520,tpDist*f));else cam.zoom=Math.max(.5,Math.min(2,cam.zoom*(e.deltaY<0?1.1:1/1.1)));},{passive:false});
 
   // ---------- Owner/admin floor editor (move/add/remove elements; live to everyone) ----------
-  function editDown(w){if(!world)return;let hit=null;
-    if(world.widgets)for(let i=world.widgets.length-1;i>=0;i--){const o=world.widgets[i];if(w.x>=o.x&&w.x<=o.x+o.w&&w.y>=o.y&&w.y<=o.y+o.h){hit={kind:'widget',obj:o};break;}}
-    if(!hit&&world.portals)for(let i=world.portals.length-1;i>=0;i--){const o=world.portals[i];if(w.x>=o.x&&w.x<=o.x+o.w&&w.y>=o.y&&w.y<=o.y+o.h){hit={kind:'portal',obj:o};break;}}
+  function editHit(arr,kind,w){if(!arr)return null;for(let i=arr.length-1;i>=0;i--){const o=arr[i];if(w.x>=o.x&&w.x<=o.x+o.w&&w.y>=o.y&&w.y<=o.y+o.h)return{kind,obj:o};}return null;}
+  function editDown(w){if(!world)return;
+    const hit=editHit(world.widgets,'widget',w)||editHit(world.portals,'portal',w)||editHit(world.furniture,'furniture',w);
     editSel=hit;updateEditBar();if(hit)editDrag={kind:hit.kind,obj:hit.obj,ox:w.x-hit.obj.x,oy:w.y-hit.obj.y};}
   document.addEventListener('mousemove',e=>{if(!editDrag||viewMode==='3d')return;const w=toWorld(e);editDrag.obj.x=Math.round((w.x-editDrag.ox)/10)*10;editDrag.obj.y=Math.round((w.y-editDrag.oy)/10)*10;});
   document.addEventListener('mouseup',()=>{if(!editDrag)return;const o=editDrag.obj;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'editFloor',op:'move',kind:editDrag.kind,id:o.id,x:o.x,y:o.y}));editDrag=null;});
-  function editAdd(wtype){if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'editFloor',op:'add',wtype,x:Math.round(me.x-90),y:Math.round(me.y-60)}));toast('Added a '+wtype+' near you');}
+  function editAdd(what){const x=Math.round(me.x-90),y=Math.round(me.y-60);
+    const msg=(what==='furniture')?{t:'editFloor',op:'add',kind:'furniture',x,y}:{t:'editFloor',op:'add',wtype:what,x,y};
+    if(ws&&ws.readyState===1)ws.send(JSON.stringify(msg));toast('Added '+what+' near you');}
   function editDelete(){if(!editSel){toast('Select an element first');return;}const o=editSel.obj;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'editFloor',op:'remove',kind:editSel.kind,id:o.id}));editSel=null;updateEditBar();}
   function editToggle(on){editMode=(on!==undefined)?on:!editMode;editSel=null;editDrag=null;
     document.getElementById('editBar').style.display=editMode?'flex':'none';
@@ -522,6 +526,7 @@
       ctx.strokeStyle='rgba(91,140,255,.5)';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(me.x,me.y,R().outer,0,7);ctx.stroke();}
     if(myBcast)ripples(me.x,me.y);
     for(const o of world.obstacles){ctx.fillStyle='#222c44';if(o.r){rr(o.x,o.y,o.w,o.h,o.r);ctx.fill();}else ctx.fillRect(o.x,o.y,o.w,o.h);}
+    if(world.furniture)for(const o of world.furniture){ctx.fillStyle='#2a3552';rr(o.x,o.y,o.w,o.h,o.r||8);ctx.fill();ctx.strokeStyle='rgba(255,255,255,.08)';ctx.lineWidth=1;rr(o.x,o.y,o.w,o.h,o.r||8);ctx.stroke();}
     drawPortals();
     for(const r of world.rooms)drawDoor(r);
     drawMedia();
@@ -587,6 +592,7 @@
     mctx.clearRect(0,0,W,H);mctx.fillStyle='#0d1424';mctx.fillRect(0,0,W,H);
     for(const r of world.rooms){const b=r.bounds;mctx.fillStyle=hexA(r.color,.3);mctx.fillRect(b.x*sx,b.y*sy,b.w*sx,b.h*sy);}
     mctx.fillStyle='#2a3552';for(const o of world.obstacles)mctx.fillRect(o.x*sx,o.y*sy,Math.max(1,o.w*sx),Math.max(1,o.h*sy));
+    if(world.furniture){mctx.fillStyle='#3a4a6c';for(const o of world.furniture)mctx.fillRect(o.x*sx,o.y*sy,Math.max(1,o.w*sx),Math.max(1,o.h*sy));}
     if(world.mediaWall){mctx.fillStyle='#5b8cff';mctx.fillRect(world.mediaWall.x*sx,world.mediaWall.y*sy,world.mediaWall.w*sx,3);}
     if(world.portals)for(const pt of world.portals){mctx.fillStyle=pt.color;mctx.fillRect(pt.x*sx,pt.y*sy,Math.max(2,pt.w*sx),Math.max(2,pt.h*sy));}
     if(world.widgets)for(const wd of world.widgets){mctx.fillStyle=wd.type==='embed'?'#ff5d6c':wd.type==='timer'?'#5b8cff':(wd.color||'#ffd166');mctx.fillRect(wd.x*sx,wd.y*sy,Math.max(2,wd.w*sx),Math.max(2,wd.h*sy));}
@@ -627,6 +633,8 @@
     for(const r of world.rooms){const H=120,c=r.color,b=r.bounds,cn=[[b.x,b.y],[b.x+b.w,b.y],[b.x+b.w,b.y+b.h],[b.x,b.y+b.h]];
       for(let i=0;i<4;i++){const a=cn[i],z=cn[(i+1)%4],cz=_dot(_sub([(a[0]+z[0])/2,(a[1]+z[1])/2,H/2],CAM.camPos),CAM.Fc);items.push({cz,k:'wall',a,z,H,c});}}
     for(const o of world.obstacles){if((o.w||0)>WORLD.w-100||(o.h||0)>WORLD.h-100)continue;const cx=o.x+(o.w||40)/2,cy=o.y+(o.h||40)/2,cz=_dot(_sub([cx,cy,20],CAM.camPos),CAM.Fc);
+      items.push({cz,k:'furn',cx,cy,w:Math.min(o.w||40,o.h||40),boxH:(o.r&&o.r>30)?20:46});}
+    if(world.furniture)for(const o of world.furniture){const cx=o.x+(o.w||40)/2,cy=o.y+(o.h||40)/2,cz=_dot(_sub([cx,cy,20],CAM.camPos),CAM.Fc);
       items.push({cz,k:'furn',cx,cy,w:Math.min(o.w||40,o.h||40),boxH:(o.r&&o.r>30)?20:46});}
     if(world.mediaWall){const cx=world.mediaWall.x+world.mediaWall.w/2,cy=world.mediaWall.y,cz=_dot(_sub([cx,cy,(world.mediaWall.screenH||150)/2],CAM.camPos),CAM.Fc);items.push({cz,k:'media'});}
     if(world.portals)for(const pt of world.portals){const cx=pt.x+pt.w/2,cy=pt.y+pt.h/2,cz=_dot(_sub([cx,cy,30],CAM.camPos),CAM.Fc);items.push({cz,k:'portal',cx,cy,w:pt.w,color:pt.color,label:pt.label});}
@@ -739,6 +747,10 @@
         if ((o.w || 0) > WORLD.w - 100 || (o.h || 0) > WORLD.h - 100) continue;
         const w = o.w || 40, h = o.h || 40, bh = (o.r && o.r > 30) ? 22 : 46;
         const m = new THREE.Mesh(new THREE.BoxGeometry(w, bh, h), new THREE.MeshStandardMaterial({ color: 0x2a3552 })); m.position.set(o.x + w / 2, bh / 2, o.y + h / 2); worldGroup.add(m);
+      }
+      for (const o of (world.furniture || [])) {   // editable furniture
+        const w = o.w || 40, h = o.h || 40, bh = (o.r && o.r > 30) ? 22 : 46;
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, bh, h), new THREE.MeshStandardMaterial({ color: 0x33405f, roughness: 0.7 })); m.position.set(o.x + w / 2, bh / 2, o.y + h / 2); worldGroup.add(m);
       }
       const mw = world.mediaWall; tvPanelMat = null;
       if (mw) {
@@ -1076,6 +1088,7 @@
   document.getElementById('btnTv').addEventListener('click',openTv);
   document.getElementById('btnEdit').addEventListener('click',()=>editToggle());
   document.getElementById('edDone').addEventListener('click',()=>editToggle(false));
+  document.getElementById('edAddFurniture').addEventListener('click',()=>editAdd('furniture'));
   document.getElementById('edAddNote').addEventListener('click',()=>editAdd('note'));
   document.getElementById('edAddTimer').addEventListener('click',()=>editAdd('timer'));
   document.getElementById('edDel').addEventListener('click',editDelete);
