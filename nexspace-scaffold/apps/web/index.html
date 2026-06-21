@@ -1258,16 +1258,23 @@
       const st=ytPlayer.getPlayerState?ytPlayer.getPlayerState():-1;
       if(tvSync.playing){if(st!==1)ytPlayer.playVideo();}else{if(st!==2)ytPlayer.pauseVideo();}
     }catch(_){}setTimeout(()=>{tvApplyingRemote=false;},1000);}
-  // Fallback when the IFrame API is blocked (e.g. Brave Shields / ad-blockers): a raw embed that still plays,
-  // seeked to roughly the shared position via &start= (no live play/pause sync, but everyone sees the video).
-  function tvRawFallback(){if(ytPlayer&&ytPlayer.getCurrentTime)return;tvRaw=true;
+  // Fallback when the IFrame API is blocked (e.g. Brave Shields / ad-blockers). The raw embed can't be live-scrubbed,
+  // so we sync it the only way we can: (re)mount it at the shared position via &start= when PLAYING, and unmount it on
+  // PAUSE so it actually stops (a hidden iframe keeps playing audio). Everyone starts together + pauses together.
+  function tvRawMount(){tvRaw=true;tvRawVid=tvData.videoId;
     document.getElementById('tvFrameWrap').innerHTML='<iframe src="https://www.youtube.com/embed/'+encodeURIComponent(tvData.videoId||'e5D5h4W7P98')+'?autoplay=1&rel=0&playsinline=1&start='+Math.floor(Math.max(0,tvExpectedPos()))+'" allow="autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>';
     const mm=document.getElementById('tvMute');if(mm)mm.style.display='none';}
+  function tvRawStop(){const w=document.getElementById('tvFrameWrap');if(w)w.innerHTML='';tvRawVid='';} // unmount → stops audio (shared pause)
+  function tvRawSync(){if(ytPlayer&&ytPlayer.getCurrentTime)return;   // API player active → not raw mode
+    const w=document.getElementById('tvFrameWrap'),mounted=!!(w&&w.querySelector('iframe'));
+    if(tvSync.playing){if(!mounted||tvRawVid!==tvData.videoId)tvRawMount();}   // play / video change → (re)mount at shared pos
+    else if(mounted)tvRawStop();}                                              // pause → stop for everyone
+  function tvRawFallback(){if(ytPlayer&&ytPlayer.getCurrentTime)return;tvRaw=true;tvRawSync();}
   function tvKick(){if(ytReady)tvEnsurePlayer();clearTimeout(tvKickTimer);tvKickTimer=setTimeout(()=>{if(!(ytPlayer&&ytPlayer.getCurrentTime))tvRawFallback();},5000);} // give the API 5s, else raw embed
-  function applyTv(t){const changed=t.videoId&&t.videoId!==tvData.videoId;
+  function applyTv(t){
     tvData={videoId:t.videoId||'',title:t.title||'',queue:t.queue||[]};
     tvSync={pos:Math.max(0,+t.position||0),at:Date.now(),playing:t.playing!==false};
-    if(ytPlayer&&ytPlayer.getCurrentTime)tvApplyRemote();else if(ytReady&&!ytPlayer)tvEnsurePlayer();else if(tvRaw&&changed)tvRawFallback(); // apply synced state (or reload the raw embed on video change)
+    if(ytPlayer&&ytPlayer.getCurrentTime)tvApplyRemote();else if(ytReady&&!ytPlayer)tvEnsurePlayer();else if(tvRaw)tvRawSync(); // apply the shared play/pause + position
     if(document.getElementById('tv').style.display==='block'){renderTvQueue();tvNowText();}}
   function openTv(){const ov=document.getElementById('tv');ov.style.display='block';   // controls panel only — the video stays on the wall
     if(ytReady&&!ytPlayer)tvEnsurePlayer();renderTvQueue();tvNowText();document.getElementById('tvResults').innerHTML='';const q=document.getElementById('tvQ');if(q){q.value='';setTimeout(()=>q.focus(),50);}}
@@ -1509,7 +1516,7 @@
   document.getElementById('tvSearchBtn').addEventListener('click',tvSearch);
   document.getElementById('tvQ').addEventListener('keydown',e=>{if(e.key==='Enter')tvSearch();});
   document.getElementById('tvSkip').addEventListener('click',()=>tvSend({t:'tvNext'}));
-  document.getElementById('tvPlayPause').addEventListener('click',()=>{if(!ytPlayer)return;tvSend({t:'tvCtrl',playing:!tvSync.playing,position:ytPlayer.getCurrentTime?ytPlayer.getCurrentTime():tvExpectedPos()});});
+  document.getElementById('tvPlayPause').addEventListener('click',()=>{const pos=(ytPlayer&&ytPlayer.getCurrentTime)?ytPlayer.getCurrentTime():tvExpectedPos();tvSend({t:'tvCtrl',playing:!tvSync.playing,position:pos});}); // works for API and raw-embed mode
   document.getElementById('btnTv').addEventListener('click',openTv);
   document.getElementById('btnRooms').addEventListener('click',()=>{roomsOpen()?closeRooms():openRooms();});
   document.getElementById('roomsClose').addEventListener('click',closeRooms);
