@@ -599,16 +599,35 @@
   let threeMode = false;
   const Three3D = (function () {
     let ready = false, worldBuilt = false, renderer, scene, camera, worldGroup, avatarGroup;
-    const avatars = new Map();
+    const avatars = new Map(), picTexCache = new Map(); // id->avatar, url->THREE.CanvasTexture (round profile pics)
     function available() { return typeof THREE !== "undefined"; }
+    // Build a circular profile-pic texture (CORS-loaded so the canvas isn't tainted → valid WebGL texture).
+    function picTex(url) {
+      if (!url) return null;
+      const cached = picTexCache.get(url); if (cached) return cached;
+      if (picTexCache.has(url)) return null;     // pending or failed
+      picTexCache.set(url, null);
+      const img = new Image(); img.crossOrigin = "anonymous"; img.referrerPolicy = "no-referrer";
+      img.onload = () => { try {
+        const c = document.createElement("canvas"); c.width = c.height = 128; const x = c.getContext("2d");
+        x.beginPath(); x.arc(64, 64, 64, 0, 7); x.clip();
+        const s = img.naturalWidth, d = img.naturalHeight, sc = Math.max(128 / s, 128 / d), sw = 128 / sc, sh = 128 / sc;
+        x.drawImage(img, (s - sw) / 2, (d - sh) / 2, sw, sh, 0, 0, 128, 128);
+        picTexCache.set(url, new THREE.CanvasTexture(c));
+      } catch (_) {} };
+      img.src = url;
+      return null;
+    }
+    function applyPic(a, url) { if (a.videoTex || a.picUrl === url) return; const t = picTex(url); if (t) { a.headMat.map = t; a.headMat.needsUpdate = true; a.picUrl = url; } }
     function init() {
       if (ready) return true; if (!available()) return false;
       renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("game3d"), antialias: true });
       renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1)); renderer.setSize(VW, VH);
       scene = new THREE.Scene(); scene.background = new THREE.Color(0x0e1320); scene.fog = new THREE.Fog(0x0e1320, 700, 2800);
       camera = new THREE.PerspectiveCamera(70, VW / VH, 1, 7000);
-      scene.add(new THREE.AmbientLight(0xffffff, 0.75));
-      const dir = new THREE.DirectionalLight(0xffffff, 0.6); dir.position.set(400, 900, 250); scene.add(dir);
+      scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+      scene.add(new THREE.HemisphereLight(0xbcd0ff, 0x1a2238, 0.7)); // soft sky/ground fill for nicer avatars
+      const dir = new THREE.DirectionalLight(0xffffff, 0.7); dir.position.set(400, 900, 250); scene.add(dir);
       worldGroup = new THREE.Group(); scene.add(worldGroup);
       avatarGroup = new THREE.Group(); scene.add(avatarGroup);
       ready = true; return true;
@@ -660,11 +679,13 @@
     function ensure(id, hue, name) {
       let a = avatars.get(id); if (a) return a;
       const group = new THREE.Group(), col = new THREE.Color("hsl(" + hue + ",70%,60%)");
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(8, 12, 46, 10), new THREE.MeshStandardMaterial({ color: col })); body.position.y = 23;
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(8, 12, 46, 12), new THREE.MeshStandardMaterial({ color: col, roughness: 0.6, metalness: 0.05 })); body.position.y = 23;
       const headMat = new THREE.MeshBasicMaterial({ map: letterTex((name && name[0]) || "?", "hsl(" + hue + ",70%,60%)"), transparent: true });
       const head = new THREE.Mesh(new THREE.PlaneGeometry(34, 34), headMat); head.position.y = 58;
-      group.add(body); group.add(head); avatarGroup.add(group);
-      a = { group, head, headMat, videoTex: null }; avatars.set(id, a); return a;
+      const shadow = new THREE.Mesh(new THREE.CircleGeometry(14, 24), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28 })); // soft contact shadow
+      shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.6;
+      group.add(shadow); group.add(body); group.add(head); avatarGroup.add(group);
+      a = { group, head, headMat, videoTex: null, picUrl: null }; avatars.set(id, a); return a;
     }
     function frame() {
       if (!ready) return; if (!worldBuilt) buildWorld();
@@ -680,11 +701,14 @@
       const seen = new Set();
       for (const [id, e] of peers) {
         seen.add(id); const a = ensure(id, hueOf(id), e.name); a.group.position.set(e.rx, 0, e.ry); a.head.lookAt(camera.position);
-        const lv = lkVideo.get(id); if (lv && lv.el && lv.el.readyState >= 2 && !a.videoTex) { a.videoTex = new THREE.VideoTexture(lv.el); a.headMat.map = a.videoTex; a.headMat.needsUpdate = true; }
+        const lv = lkVideo.get(id);
+        if (lv && lv.el && lv.el.readyState >= 2 && !a.videoTex) { a.videoTex = new THREE.VideoTexture(lv.el); a.headMat.map = a.videoTex; a.headMat.needsUpdate = true; }
+        else if (!a.videoTex && e.avatar) applyPic(a, e.avatar); // Google profile photo (when no live video)
       }
       if (cameraMode !== "firstPerson") {
         seen.add("__me"); const a = ensure("__me", 212, "You"); a.group.visible = true; a.group.position.set(me.x, 0, me.y); a.head.lookAt(camera.position);
         if (localVideoEl && localVideoEl.readyState >= 2 && !a.videoTex) { a.videoTex = new THREE.VideoTexture(localVideoEl); a.headMat.map = a.videoTex; a.headMat.needsUpdate = true; }
+        else if (!a.videoTex && myAvatar) applyPic(a, myAvatar);
       } else { const a = avatars.get("__me"); if (a) a.group.visible = false; }
       for (const [id, a] of avatars) { if (!seen.has(id)) { avatarGroup.remove(a.group); avatars.delete(id); } }
       renderer.render(scene, camera);
