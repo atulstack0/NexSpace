@@ -179,6 +179,20 @@ try {
   const nRes = await fetch(`http://localhost:${PORT}/api/v1/presence`);
   (nRes.status === 401) ? ok("public API rejects missing X-API-Key (401)") : bad("public API not gated");
 
+  // email+password login (single-service, no DB) — valid owner creds mint an owner JWT; bad creds 401
+  const lRes = await fetch(`http://localhost:${PORT}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: "owner@nexspace.dev", password: "owner1234" }) });
+  const lJson = lRes.ok ? await lRes.json() : {};
+  (lRes.status === 200 && lJson.user?.role === "owner" && typeof lJson.token === "string") ? ok("/auth/login returns owner token for valid creds") : bad("/auth/login owner login failed");
+  // the minted token must be a valid HS256 JWT (same secret the join handler verifies) carrying role=owner
+  if (lJson.token) {
+    const [h, p, sig] = lJson.token.split(".");
+    const expSig = crypto.createHmac("sha256", SECRET).update(`${h}.${p}`).digest("base64url");
+    let payload = {}; try { payload = JSON.parse(Buffer.from(p, "base64url").toString()); } catch {}
+    (sig === expSig && payload.role === "owner") ? ok("login token is a valid owner JWT (signature + role)") : bad("login token invalid or not owner");
+  }
+  const lBad = await fetch(`http://localhost:${PORT}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: "owner@nexspace.dev", password: "wrong" }) });
+  (lBad.status === 401) ? ok("/auth/login rejects wrong password (401)") : bad("/auth/login accepted wrong password");
+
   // webhooks (6.18) — user.joined fired with a valid HMAC signature
   const joined = hooks.find((h) => h.event === "user.joined");
   if (joined) {

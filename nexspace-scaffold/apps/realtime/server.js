@@ -22,7 +22,7 @@ const crypto = require("crypto");
 // environment (whitelisted so a stray PORT/DATABASE_URL in apps/api/.env can't hijack this server).
 // In production (Render etc.) these come from the dashboard and the file reads simply no-op.
 (function loadEnv() {
-  const want = /^(LIVEKIT_|S3_|GOOGLE_|YOUTUBE_|JWT_SECRET)/;
+  const want = /^(LIVEKIT_|S3_|GOOGLE_|YOUTUBE_|JWT_SECRET|OWNER_PASSWORD|ADMIN_PASSWORD|MEMBER_PASSWORD)/;
   for (const f of [path.join(__dirname, ".env"), path.join(__dirname, "..", "api", ".env")]) {
     try {
       for (const line of fs.readFileSync(f, "utf8").split(/\r?\n/)) {
@@ -102,6 +102,13 @@ const emailList = (s) => (s || "").split(",").map((x) => x.trim().toLowerCase())
 const OWNER_EMAILS = emailList(process.env.GOOGLE_OWNER_EMAILS);
 const ADMIN_EMAILS = emailList(process.env.GOOGLE_ADMIN_EMAILS);
 function googleRole(email) { const e = (email || "").toLowerCase(); if (OWNER_EMAILS.includes(e)) return "owner"; if (ADMIN_EMAILS.includes(e)) return "admin"; return "member"; }
+// Email+password login for the single-service deploy (no separate API/DB). Demo defaults below; override
+// passwords with OWNER_PASSWORD / ADMIN_PASSWORD / MEMBER_PASSWORD env vars (recommended for any real use).
+const PASSWORD_USERS = [
+  { email: "owner@nexspace.dev",  password: process.env.OWNER_PASSWORD  || "owner1234",  role: "owner",  name: "Owner"  },
+  { email: "admin@nexspace.dev",  password: process.env.ADMIN_PASSWORD  || "admin1234",  role: "admin",  name: "Admin"  },
+  { email: "member@nexspace.dev", password: process.env.MEMBER_PASSWORD || "member1234", role: "member", name: "Member" },
+];
 function mintAppToken(payload, ttlSec = 7200) {
   const now = Math.floor(Date.now() / 1000);
   const b = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -344,6 +351,16 @@ const server = http.createServer((req, res) => {
       } catch (e) { json(res, { error: "search failed: " + (e && e.message || e) }, 502); }
     })();
     return;
+  }
+  if (urlPath === "/auth/login" && req.method === "POST") { // email+password login (single-service, no DB) → mints the same HS256 JWT the join handler verifies
+    return readJsonBody(req, (b) => {
+      const email = String(b.email || "").trim().toLowerCase(), password = String(b.password || "");
+      const u = PASSWORD_USERS.find((x) => x.email === email && x.password === password);
+      if (!u) return json(res, { error: "invalid email or password" }, 401);
+      const token = mintAppToken({ sub: "pw-" + u.email, name: u.name, role: u.role, email: u.email });
+      json(res, { token, user: { name: u.name, role: u.role, email: u.email } });
+      console.log(`✓ Password login: ${u.email} → ${u.role}`);
+    });
   }
   if (urlPath === "/auth/google/login") { // step 1: bounce to Google's consent screen
     if (!googleConfigured()) { res.writeHead(503, { "Content-Type": "text/plain" }); res.end("Google login not configured (set GOOGLE_CLIENT_ID/SECRET)"); return; }
