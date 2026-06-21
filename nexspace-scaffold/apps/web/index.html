@@ -45,18 +45,21 @@
   #recind{position:fixed;top:72px;left:12px;z-index:19;display:none;background:rgba(255,93,108,.16);border:1px solid var(--danger);color:#ffd2d7;border-radius:20px;padding:6px 12px;font-size:12px;font-weight:700}
   #statusSel,#floorSel{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:6px 9px;font-size:13px;cursor:pointer;max-width:170px}
   #statusSel:hover,#floorSel:hover{border-color:var(--accent)}
-  /* Shared YouTube TV */
-  #tv{position:fixed;inset:0;z-index:62;display:none;align-items:center;justify-content:center;background:rgba(8,12,20,.82);padding:14px}
-  .tvbox{display:flex;flex-direction:column;gap:10px;width:900px;max-width:96vw;height:min(92vh,820px);background:#0f1626;border:1px solid var(--line);border-radius:14px;padding:12px}
+  /* Shared YouTube TV — the player lives ON the wall TV (positioned over the canvas); everyone sees it. */
+  #tvWorld{position:fixed;z-index:6;display:none;background:#000;border-radius:6px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.5);outline:2px solid rgba(91,140,255,.5)}
+  #tvWorld #tvFrameWrap{width:100%;height:100%}
+  #tvWorld iframe,#tvWorld #ytplayer{width:100%;height:100%;border:0;display:block}
+  #tvMute{position:absolute;left:0;right:0;bottom:0;text-align:center;font-size:11px;font-weight:600;color:#fff;background:rgba(0,0,0,.55);padding:3px;cursor:pointer}
+  /* compact controls panel (search + queue); the video stays on the wall, so this doesn't cover it */
+  #tv{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:30;display:none;max-width:94vw}
+  .tvbox{display:flex;flex-direction:column;gap:8px;width:600px;max-width:94vw;max-height:54vh;background:rgba(15,22,38,.97);border:1px solid var(--line);border-radius:14px;padding:12px;box-shadow:0 10px 34px rgba(0,0,0,.45)}
   .tvhead{display:flex;align-items:center;gap:10px;font-size:14px;flex:0 0 auto}
-  #tvNow{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:50%}
+  #tvNow{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%}
   .tvsearch{display:flex;gap:6px;flex:0 0 auto}
   .tvsearch input{flex:1;background:#0d1424;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:9px 11px;font-size:14px}
-  .tvplayer{flex:1 1 auto;min-height:240px;background:#000;border-radius:10px;overflow:hidden}
-  .tvplayer iframe,.tvplayer #ytplayer{width:100%;height:100%;border:0;display:block}
   .tvqhead{font-size:12px;color:var(--muted);font-weight:600;flex:0 0 auto}
   .tvlist{overflow-y:auto;display:flex;flex-direction:column;gap:5px}
-  #tvResults{flex:0 0 auto;max-height:190px} #tvQueue{flex:0 0 auto;max-height:120px}
+  #tvResults{flex:0 0 auto;max-height:190px} #tvQueue{flex:1 1 auto;min-height:60px}
   .tvitem{display:flex;align-items:center;gap:7px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px}
   .tvitem .tt{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .tvitem button{background:#0d1424;border:1px solid var(--line);color:var(--text);border-radius:6px;padding:3px 7px;font-size:12px;cursor:pointer}
@@ -181,12 +184,12 @@
     <div id="widgetBody"></div>
   </div>
 </div>
+<div id="tvWorld"><div id="tvFrameWrap"></div><div id="tvMute">🔇 click for sound</div></div>
 <div id="tv">
   <div class="tvbox">
-    <div class="tvhead"><b>📺 NexSpace TV</b><span id="tvNow"></span><button class="btn" id="tvClose" style="margin-left:auto;padding:3px 10px">✕ Close</button></div>
-    <div class="tvsearch"><input id="tvQ" placeholder="🔍 Search YouTube or paste a link…" /><button class="btn" id="tvSearchBtn">Search</button><button class="btn" id="tvSkip" title="Play next in queue">⏭ Skip</button></div>
+    <div class="tvhead"><b>📺 TV controls</b><span id="tvNow"></span><button class="btn" id="tvClose" style="margin-left:auto;padding:3px 10px">✕</button></div>
+    <div class="tvsearch"><input id="tvQ" placeholder="🔍 Search YouTube or paste a link…" /><button class="btn" id="tvSearchBtn">Search</button><button class="btn" id="tvPlayPause" title="Play/pause for everyone">⏯</button><button class="btn" id="tvSkip" title="Play next in queue">⏭</button></div>
     <div id="tvResults" class="tvlist"></div>
-    <div id="tvFrameWrap" class="tvplayer"></div>
     <div class="tvqhead">Up next</div>
     <div id="tvQueue" class="tvlist"></div>
   </div>
@@ -255,8 +258,8 @@
   function speakLevel(id){const s=(lvlSmooth.get(id)||0)*0.6+rawLevel(id)*0.4;lvlSmooth.set(id,s<0.003?0:s);return s;}
   let myStatus='available',lastActivity=Date.now(),autoAway=false;
   let tvData={videoId:'e5D5h4W7P98',title:'NexSpace TV',queue:[]}; // shared YouTube TV state (client default so the TV always has something to show)
-  let ytPlayer=null,ytReady=false,tvApplyingRemote=false,tvSync={pos:0,at:0,playing:true}; // synced watch-party playback
-  window.onYouTubeIframeAPIReady=function(){ytReady=true;const ov=document.getElementById('tv');if(ov&&ov.style.display==='flex')tvEnsurePlayer();};
+  let ytPlayer=null,ytReady=false,tvApplyingRemote=false,tvUnmuted=false,tvSync={pos:0,at:0,playing:true}; // synced watch-party playback
+  window.onYouTubeIframeAPIReady=function(){ytReady=true;if(myId)tvEnsurePlayer();}; // build the wall player as soon as we've joined
   (function(){const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);})();
   let editMode=false,editSel=null,editDrag=null; // owner/admin floor editor
   const reactions=new Map(),adminMuted=new Set();
@@ -818,7 +821,8 @@
       for (const [id, a] of avatars) { if (!seen.has(id)) { avatarGroup.remove(a.group); avatars.delete(id); } }
       renderer.render(scene, camera);
     }
-    return { available, init, frame, resize, rebuild() { worldBuilt = false; } };
+    function project3D(x, y, z) { if (!camera) return null; const v = new THREE.Vector3(x, y, z).project(camera); if (v.z > 1) return null; return { x: (v.x * 0.5 + 0.5) * VW, y: (-v.y * 0.5 + 0.5) * VH }; }
+    return { available, init, frame, resize, project3D, rebuild() { worldBuilt = false; } };
   })();
 
   // ---------- Banner / knock ----------
@@ -908,12 +912,15 @@
   function tvSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o));}
   function tvExpectedPos(){return tvSync.playing?tvSync.pos+(Date.now()-tvSync.at)/1000:tvSync.pos;}
   function tvNowText(){const n=document.getElementById('tvNow');if(n)n.textContent=tvData.title?('▶ '+tvData.title+(tvSync.playing?'':'  · paused')):'';}
+  function tvUnmute(){tvUnmuted=true;try{if(ytPlayer&&ytPlayer.unMute){ytPlayer.unMute();if(ytPlayer.setVolume)ytPlayer.setVolume(100);}}catch(_){}const mm=document.getElementById('tvMute');if(mm)mm.style.display='none';}
   function onYtState(e){if(tvApplyingRemote||!ytPlayer)return;       // user pressed play/pause/seek → drive the party
     if(e.data===1||e.data===2){try{tvSend({t:'tvCtrl',playing:e.data===1,position:ytPlayer.getCurrentTime()});}catch(_){}}}
+  // ONE player that lives on the wall TV (#tvWorld) — created on join so the video plays for everyone, synced.
   function tvEnsurePlayer(){if(ytPlayer||!ytReady||!window.YT||!YT.Player)return;
     document.getElementById('tvFrameWrap').innerHTML='<div id="ytplayer"></div>';
     ytPlayer=new YT.Player('ytplayer',{width:'100%',height:'100%',videoId:tvData.videoId||'e5D5h4W7P98',
-      playerVars:{autoplay:1,rel:0,modestbranding:1,playsinline:1},events:{onReady:()=>tvApplyRemote(),onStateChange:onYtState}});}
+      playerVars:{autoplay:1,mute:1,rel:0,modestbranding:1,playsinline:1,controls:1}, // muted autoplay (browsers block sound until a gesture); unmuted on first click
+      events:{onReady:()=>{tvApplyRemote();if(tvUnmuted)tvUnmute();},onStateChange:onYtState}});}
   function tvApplyRemote(){if(!ytPlayer||!ytPlayer.seekTo)return;const target=Math.max(0,tvExpectedPos());tvApplyingRemote=true;
     try{const vd=ytPlayer.getVideoData&&ytPlayer.getVideoData();
       if(vd&&vd.video_id&&vd.video_id!==tvData.videoId){ytPlayer.loadVideoById(tvData.videoId,target);}
@@ -921,17 +928,27 @@
       const st=ytPlayer.getPlayerState?ytPlayer.getPlayerState():-1;
       if(tvSync.playing){if(st!==1)ytPlayer.playVideo();}else{if(st!==2)ytPlayer.pauseVideo();}
     }catch(_){}setTimeout(()=>{tvApplyingRemote=false;},1000);}
-  function tvFrameFallback(id){if(!id)return;document.getElementById('tvFrameWrap').innerHTML='<iframe src="https://www.youtube.com/embed/'+encodeURIComponent(id)+'?autoplay=1&rel=0&modestbranding=1&playsinline=1" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>';}
   function applyTv(t){tvData={videoId:t.videoId||'',title:t.title||'',queue:t.queue||[]};
     tvSync={pos:Math.max(0,+t.position||0),at:Date.now(),playing:t.playing!==false};
-    const ov=document.getElementById('tv');if(ov&&ov.style.display==='flex'){
-      if(ytPlayer)tvApplyRemote();else if(ytReady)tvEnsurePlayer();else tvFrameFallback(tvData.videoId);
-      renderTvQueue();tvNowText();}}
-  function openTv(){const ov=document.getElementById('tv');ov.style.display='flex';
-    if(ytReady){if(ytPlayer)tvApplyRemote();else tvEnsurePlayer();}else tvFrameFallback(tvData.videoId);
-    renderTvQueue();tvNowText();document.getElementById('tvResults').innerHTML='';const q=document.getElementById('tvQ');if(q){q.value='';setTimeout(()=>q.focus(),50);}}
-  function closeTv(){document.getElementById('tv').style.display='none';tvApplyingRemote=true;try{if(ytPlayer&&ytPlayer.pauseVideo)ytPlayer.pauseVideo();}catch(_){}setTimeout(()=>{tvApplyingRemote=false;},500);} // pause locally only (don't pause the party for others)
-  setInterval(()=>{const ov=document.getElementById('tv');if(!ov||ov.style.display!=='flex'||!ytPlayer||!ytPlayer.getCurrentTime||tvApplyingRemote||!tvSync.playing)return; // drift-correct
+    if(ytPlayer)tvApplyRemote();else if(ytReady)tvEnsurePlayer();        // player is always on; apply the synced state
+    if(document.getElementById('tv').style.display==='block'){renderTvQueue();tvNowText();}}
+  function openTv(){const ov=document.getElementById('tv');ov.style.display='block';   // controls panel only — the video stays on the wall
+    if(ytReady&&!ytPlayer)tvEnsurePlayer();renderTvQueue();tvNowText();document.getElementById('tvResults').innerHTML='';const q=document.getElementById('tvQ');if(q){q.value='';setTimeout(()=>q.focus(),50);}}
+  function closeTv(){document.getElementById('tv').style.display='none';}            // keep the video playing on the wall
+  // position the wall-TV player over the actual screen each frame (2D camera transform, or projected in 3D)
+  function tvPositionWorld(){const wd=document.getElementById('tvWorld');if(!wd)return;
+    if(!world||!world.mediaWall||!ytPlayer){wd.style.display='none';return;}
+    const m=world.mediaWall;let px,py,pw,ph;
+    if(viewMode==='3d'){const r=tvScreenRect3D(m);if(!r){wd.style.display='none';return;}px=r.x;py=r.y;pw=r.w;ph=r.h;}
+    else{px=(m.x-cam.x)*cam.zoom+VW/2;py=((m.y-m.screenH)-cam.y)*cam.zoom+VH/2;pw=m.w*cam.zoom;ph=m.screenH*cam.zoom;}
+    if(pw<24||ph<16||px+pw<0||py+ph<0||px>VW||py>VH){wd.style.display='none';return;}
+    wd.style.display='block';wd.style.left=Math.round(px)+'px';wd.style.top=Math.round(py)+'px';wd.style.width=Math.round(pw)+'px';wd.style.height=Math.round(ph)+'px';}
+  function tvScreenRect3D(m){const base=m.base||16,sh=m.screenH||150;
+    const pts=[[m.x,base,m.y],[m.x+m.w,base,m.y],[m.x,base+sh,m.y],[m.x+m.w,base+sh,m.y]]; // (x, height, z=floorY)
+    const proj=(threeMode&&Three3D.project3D)?(p)=>Three3D.project3D(p[0],p[1],p[2]):(p)=>{const r=project([p[0],p[2],p[1]]);return r?{x:r.x,y:r.y}:null;};
+    let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;for(const p of pts){const s=proj(p);if(!s)return null;minx=Math.min(minx,s.x);miny=Math.min(miny,s.y);maxx=Math.max(maxx,s.x);maxy=Math.max(maxy,s.y);}
+    return{x:minx,y:miny,w:maxx-minx,h:maxy-miny};}
+  setInterval(()=>{if(!ytPlayer||!ytPlayer.getCurrentTime||tvApplyingRemote||!tvSync.playing)return; // drift-correct (player always running)
     const cur=ytPlayer.getCurrentTime(),target=tvExpectedPos();if(Math.abs(cur-target)>1.8){tvApplyingRemote=true;try{ytPlayer.seekTo(Math.max(0,target),true);}catch(_){}setTimeout(()=>{tvApplyingRemote=false;},600);}},2000);
   function tvItemRow(title,btns){const d=document.createElement('div');d.className='tvitem';const t=document.createElement('span');t.className='tt';t.textContent=title;t.title=title;d.appendChild(t);for(const b of btns){const bt=document.createElement('button');bt.textContent=b.label;bt.onclick=b.fn;d.appendChild(bt);}return d;}
   function renderTvQueue(){const box=document.getElementById('tvQueue');box.innerHTML='';if(!tvData.queue.length){box.innerHTML='<div style="color:var(--muted);font-size:12px;padding:4px">Queue is empty — search and add a song.</div>';return;}
@@ -1076,16 +1093,19 @@
   function loop(now){const dt=Math.min(0.05,(now-last)/1000);last=now;frame++;
     step(dt);checkPortals();sendMove(now);updateAudio();
     if(viewMode==='3d'){ if(threeMode){Three3D.frame();drawMinimap();} else render3D(); } else draw();
+    tvPositionWorld();                                  // keep the wall-TV video pinned over the screen
     acc+=dt;if(acc>0.1){updateUI();acc=0;}requestAnimationFrame(loop);}
   document.getElementById('floorSel').addEventListener('change',function(){travelTo(this.value);this.blur();}); // blur so WASD return to the game, not the dropdown
   document.getElementById('widgetClose').addEventListener('click',closeWidget);
   document.getElementById('widgetOv').addEventListener('click',e=>{if(e.target.id==='widgetOv')closeWidget();});
   document.getElementById('tvClose').addEventListener('click',closeTv);
-  document.getElementById('tv').addEventListener('click',e=>{if(e.target.id==='tv')closeTv();});
   document.getElementById('tvSearchBtn').addEventListener('click',tvSearch);
   document.getElementById('tvQ').addEventListener('keydown',e=>{if(e.key==='Enter')tvSearch();});
   document.getElementById('tvSkip').addEventListener('click',()=>tvSend({t:'tvNext'}));
+  document.getElementById('tvPlayPause').addEventListener('click',()=>{if(!ytPlayer)return;tvSend({t:'tvCtrl',playing:!tvSync.playing,position:ytPlayer.getCurrentTime?ytPlayer.getCurrentTime():tvExpectedPos()});});
   document.getElementById('btnTv').addEventListener('click',openTv);
+  document.getElementById('tvMute').addEventListener('click',tvUnmute);
+  document.addEventListener('click',()=>{if(ytPlayer&&!tvUnmuted)tvUnmute();}); // first real click → enable TV sound (browser autoplay rule)
   document.getElementById('btnEdit').addEventListener('click',()=>editToggle());
   document.getElementById('edDone').addEventListener('click',()=>editToggle(false));
   document.getElementById('edAddFurniture').addEventListener('click',()=>editAdd('furniture'));
