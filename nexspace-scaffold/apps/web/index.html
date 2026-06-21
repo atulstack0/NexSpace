@@ -105,6 +105,10 @@
 <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
 <!-- Three.js (optional). If this fails to load, 3D mode falls back to the self-contained pseudo-3D renderer. -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- glTF model loader + skinned-mesh clone util (optional). Used to render the real Eric character (apps/web/models/eric.glb).
+     If these or the model fail to load, avatars gracefully fall back to the built-in styled businessman avatar. -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
 </head>
 <body>
 <canvas id="game"></canvas>
@@ -709,6 +713,33 @@
   const Three3D = (function () {
     let ready = false, worldBuilt = false, renderer, scene, camera, worldGroup, avatarGroup, tvPanelMat = null, tvPanelMesh = null;
     let _ray = null;   // reused raycaster for TV occlusion (lazy so THREE is loaded)
+    // Real character model (Renderpeople "Eric"). Optional: if models/eric.glb or the loader is missing,
+    // avatars stay on the built-in styled businessman. Convert one FBX → eric.glb (see CHARACTER.md).
+    let ericProto = null, ericState = "none";          // none | loading | ready | failed
+    const ERIC_FOR = "all";                            // "all" → everyone uses the model · "me" → only your avatar
+    const ERIC_FACE = Math.PI;                          // base yaw so the model faces forward (flip by ±Math.PI if it faces away)
+    function loadEric() {
+      if (ericState !== "none") return; if (typeof THREE === "undefined" || !THREE.GLTFLoader) { ericState = "failed"; return; }
+      ericState = "loading";
+      try {
+        new THREE.GLTFLoader().load("models/eric.glb",
+          (g) => { ericProto = (g && (g.scene || (g.scenes && g.scenes[0]))) || null; ericState = ericProto ? "ready" : "failed"; },
+          undefined,
+          () => { ericState = "failed"; });           // no file / network / parse error → keep the styled fallback
+      } catch (_) { ericState = "failed"; }
+    }
+    function tintMat(mm, tint) { const c = mm.clone(); if (c.color) c.color.lerp(tint, 0.16); c.skinning = mm.skinning; return c; }
+    function attachEric(a) {
+      if (!ericProto || a.model) return;
+      let m; try { m = THREE.SkeletonUtils ? THREE.SkeletonUtils.clone(ericProto) : ericProto.clone(true); } catch (_) { try { m = ericProto.clone(true); } catch (e) { return; } }
+      let box = new THREE.Box3().setFromObject(m), h = box.max.y - box.min.y;          // auto-fit to ~64 units tall (source units unknown)
+      const s = (h > 0.0001) ? 64 / h : 1; m.scale.setScalar(s);
+      box = new THREE.Box3().setFromObject(m); m.position.y = -box.min.y;               // feet on the ground
+      m.rotation.y = ERIC_FACE;
+      const tint = new THREE.Color("hsl(" + a.hue + ",60%,55%)");                       // subtle per-person tint
+      m.traverse((n) => { if (n.isMesh && n.material) { n.frustumCulled = false; n.material = Array.isArray(n.material) ? n.material.map((mm) => tintMat(mm, tint)) : tintMat(n.material, tint); } });
+      a.model = m; a.group.add(m); a.bodyGroup.visible = false; if (a.head) a.head.visible = false;
+    }
     const avatars = new Map(), picTexCache = new Map(), tvThumbCache = new Map(); // id->avatar, url->tex, videoId->tex
     function available() { return typeof THREE !== "undefined"; }
     // YouTube thumbnail as a TV texture (CORS-loaded so it's a valid WebGL texture; can't paint the live player on a 3D surface).
@@ -748,7 +779,7 @@
       const dir = new THREE.DirectionalLight(0xffffff, 0.7); dir.position.set(400, 900, 250); scene.add(dir);
       worldGroup = new THREE.Group(); scene.add(worldGroup);
       avatarGroup = new THREE.Group(); scene.add(avatarGroup);
-      ready = true; return true;
+      ready = true; loadEric(); return true;
     }
     function resize() { if (renderer && camera) { renderer.setSize(VW, VH); camera.aspect = VW / VH; camera.updateProjectionMatrix(); } }
     function dispose(g) { g.children.slice().forEach((c) => { c.traverse((n) => { if (n.geometry) n.geometry.dispose(); }); g.remove(c); }); }
@@ -860,35 +891,31 @@
     function ensure(id, hue, name) {
       let a = avatars.get(id); if (a) return a;
       const group = new THREE.Group();
-      const body = new THREE.Color("hsl(" + hue + ",65%,58%)");                       // shirt / torso
-      const limb = new THREE.Color("hsl(" + hue + ",40%,40%)");                        // pants / sleeves (darker)
-      const skin = new THREE.Color(0xf1c9a5);                                          // hands
-      const matBody = new THREE.MeshStandardMaterial({ color: body, roughness: 0.62, metalness: 0.04 });
-      const matLimb = new THREE.MeshStandardMaterial({ color: limb, roughness: 0.7, metalness: 0.04 });
-      const matSkin = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.6 });
-      const mesh = (geo, mat, x, y, z, rz) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); if (rz) m.rotation.z = rz; group.add(m); return m; };
-      // legs + feet (y: 0..24)
-      for (const sx of [-5.2, 5.2]) {
-        mesh(new THREE.CylinderGeometry(4, 3.4, 24, 10), matLimb, sx, 12, 0);          // leg
-        mesh(new THREE.BoxGeometry(7, 4.5, 13), matLimb, sx, 2.2, 3);                  // foot (points +z/forward)
+      const bodyGroup = new THREE.Group(); group.add(bodyGroup);                       // primitive businessman; hidden when the GLB model attaches
+      const matVest = pMat(0x24272f, 0.6), matShirt = pMat(0xeef2f8, 0.5), matSkin = pMat(0xf1c9a5, 0.6), matTrouser = pMat(0x232733, 0.6), matShoe = pMat(0x141619, 0.45);
+      const matTie = new THREE.MeshStandardMaterial({ color: new THREE.Color("hsl(" + hue + ",72%,52%)"), roughness: 0.5 }); // per-person tie colour
+      const mesh = (geo, mat, x, y, z, rz) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); if (rz) m.rotation.z = rz; bodyGroup.add(m); return m; };
+      for (const sx of [-5.2, 5.2]) {                                                  // trouser legs + shoes
+        mesh(new THREE.CylinderGeometry(4.2, 3.6, 24, 10), matTrouser, sx, 12, 0);
+        mesh(new THREE.BoxGeometry(7.5, 4.5, 14), matShoe, sx, 2.2, 3.5);
       }
-      // hips + torso (y: 24..50)
-      mesh(new THREE.CylinderGeometry(9.5, 8, 6, 12), matLimb, 0, 26, 0);              // hips
-      mesh(new THREE.CylinderGeometry(8.5, 9.5, 22, 14), matBody, 0, 38, 0);           // torso
-      mesh(new THREE.SphereGeometry(7, 14, 12), matBody, 0, 50, 0);                    // shoulders cap
-      // arms + hands (hang at the sides, y: ~30..50)
-      for (const sx of [-1, 1]) {
-        mesh(new THREE.CylinderGeometry(2.8, 2.4, 22, 10), matBody, sx * 12.5, 39, 0, sx * 0.14); // upper+fore arm
-        mesh(new THREE.SphereGeometry(3.1, 10, 10), matSkin, sx * 14.6, 28.5, 0);      // hand
+      mesh(new THREE.CylinderGeometry(9.5, 8, 6, 12), matTrouser, 0, 26, 0);           // hips
+      mesh(new THREE.CylinderGeometry(8.6, 9.6, 22, 14), matVest, 0, 38, 0);           // waistcoat / vest torso
+      mesh(new THREE.SphereGeometry(7.2, 14, 12), matVest, 0, 50, 0);                  // shoulders
+      mesh(new THREE.CylinderGeometry(4.2, 4.2, 4, 12), matShirt, 0, 51, 2.5);         // white collar
+      mesh(new THREE.BoxGeometry(3.6, 18, 1.6), matTie, 0, 41, 8.4);                   // tie
+      mesh(new THREE.BoxGeometry(5, 4, 1.8), matTie, 0, 49.5, 8.2);                    // tie knot
+      for (const sx of [-1, 1]) {                                                      // white shirt sleeves + skin hands
+        mesh(new THREE.CylinderGeometry(2.9, 2.5, 22, 10), matShirt, sx * 12.6, 39, 0, sx * 0.14);
+        mesh(new THREE.SphereGeometry(3.1, 10, 10), matSkin, sx * 14.8, 28.5, 0);
       }
-      // neck + head billboard (name initial or profile photo), faces the camera
       mesh(new THREE.CylinderGeometry(2.6, 2.6, 4, 8), matSkin, 0, 56, 0);             // neck
       const headMat = new THREE.MeshBasicMaterial({ map: letterTex((name && name[0]) || "?", "hsl(" + hue + ",70%,60%)"), transparent: true });
-      const head = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), headMat); head.position.y = 70;
-      const shadow = new THREE.Mesh(new THREE.CircleGeometry(15, 24), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28 })); // soft contact shadow
+      const head = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), headMat); head.position.y = 70; bodyGroup.add(head);
+      const shadow = new THREE.Mesh(new THREE.CircleGeometry(15, 24), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28 })); // contact shadow (stays under the GLB too)
       shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.6;
-      group.add(shadow); group.add(head); avatarGroup.add(group);
-      a = { group, head, headMat, videoTex: null, picUrl: null }; avatars.set(id, a); return a;
+      group.add(shadow); avatarGroup.add(group);
+      a = { group, bodyGroup, head, headMat, videoTex: null, picUrl: null, model: null, hue }; avatars.set(id, a); return a;
     }
     function frame() {
       if (!ready) return; if (!worldBuilt) buildWorld();
@@ -907,12 +934,14 @@
       const seen = new Set();
       for (const [id, e] of peers) {
         seen.add(id); const a = ensure(id, hueOf(id), e.name); a.group.position.set(e.rx, 0, e.ry); a.group.rotation.y = Math.PI / 2 - (e.facing || 0); a.head.lookAt(camera.position); setNameSprite(a, e.name || "Guest");
+        if (ericState === "ready" && !a.model && ERIC_FOR === "all") attachEric(a);   // upgrade to the real character when it loads
         const lv = lkVideo.get(id);
         if (lv && lv.el && lv.el.readyState >= 2 && !a.videoTex) { a.videoTex = new THREE.VideoTexture(lv.el); a.headMat.map = a.videoTex; a.headMat.needsUpdate = true; }
         else if (!a.videoTex && e.avatar) applyPic(a, e.avatar); // Google profile photo (when no live video)
       }
       if (cameraMode !== "firstPerson") {
         seen.add("__me"); const a = ensure("__me", 212, "You"); a.group.visible = true; a.group.position.set(me.x, 0, me.y); a.group.rotation.y = Math.PI / 2 - (me.facing || 0); a.head.lookAt(camera.position); setNameSprite(a, myName || "You");
+        if (ericState === "ready" && !a.model) attachEric(a);                          // your avatar uses the real character (ERIC_FOR all or me)
         if (localVideoEl && localVideoEl.readyState >= 2 && !a.videoTex) { a.videoTex = new THREE.VideoTexture(localVideoEl); a.headMat.map = a.videoTex; a.headMat.needsUpdate = true; }
         else if (!a.videoTex && myAvatar) applyPic(a, myAvatar);
       } else { const a = avatars.get("__me"); if (a) a.group.visible = false; }
