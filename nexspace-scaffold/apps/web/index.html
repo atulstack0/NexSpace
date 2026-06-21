@@ -2,25 +2,40 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>NexSpace — Multiplayer Office</title>
 <style>
   :root{--bg:#0e1320;--panel:#161d2e;--panel2:#1e2740;--line:#2b3654;--text:#e8edf7;--muted:#8a96b3;--accent:#5b8cff;--accent2:#39d3a6;--warn:#ffb454;--danger:#ff5d6c}
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);overflow:hidden;user-select:none;
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);overflow:hidden;user-select:none;overscroll-behavior:none;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
-  #game{position:fixed;inset:0;display:block;background:#0b1019;cursor:crosshair}
-  #game3d{position:fixed;top:0;left:0;display:none;background:#0e1320;z-index:0}
+  #game{position:fixed;inset:0;display:block;background:#0b1019;cursor:crosshair;touch-action:none}
+  #game3d{position:fixed;top:0;left:0;display:none;background:#0e1320;z-index:0;touch-action:none}
+  /* virtual movement joystick (mobile) */
+  #stick{position:fixed;left:18px;bottom:84px;width:120px;height:120px;border-radius:50%;z-index:23;display:none;touch-action:none;
+    background:radial-gradient(circle,rgba(91,140,255,.14),rgba(20,27,44,.45));border:1px solid var(--line);box-shadow:0 6px 20px rgba(0,0,0,.35)}
+  #stickNub{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px 0 0 -26px;border-radius:50%;
+    background:rgba(91,140,255,.6);border:1px solid rgba(255,255,255,.35)}
   #bar{position:fixed;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:98vw;
     background:rgba(20,27,44,.94);border:1px solid var(--line);border-radius:14px;padding:7px 11px;z-index:20;backdrop-filter:blur(10px);box-shadow:0 10px 34px rgba(0,0,0,.38)}
   #barItems{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center}
   #barToggle{font-size:15px;line-height:1;padding:6px 10px}     /* hamburger: collapse/expand the toolbar on any screen */
   #bar.collapsed #barItems{display:none}
   @media(max-width:820px){
-    #bar{max-width:96vw;gap:5px;padding:6px 9px}
-    #barItems{order:3;width:100%;margin-top:6px;border-top:1px solid var(--line);padding-top:7px;max-height:62vh;overflow-y:auto}
+    #bar{max-width:96vw;gap:5px;padding:6px 9px;top:8px}
+    #barItems{order:3;width:100%;margin-top:6px;border-top:1px solid var(--line);padding-top:7px;max-height:60vh;overflow-y:auto}
+    #barItems .btn,#barItems select{padding:10px 12px;font-size:14px}      /* bigger touch targets */
     .tvmain{flex-direction:column} .tvside{width:100%;max-width:none} .tvplayer{aspect-ratio:16/9}
-    #chat,#wb{max-width:94vw}
+    #chat,#wb{max-width:96vw}
+    #tv,#rooms{bottom:auto;top:64px}                                       /* keep panels clear of the joystick */
+    .tvbox{width:96vw!important;max-height:62vh}
+    #minimapWrap canvas{width:124px;height:auto}
+    #hint{font-size:11px;left:8px;right:auto;bottom:8px;max-width:64vw;padding:6px 9px}
+    #stick{bottom:74px}
+  }
+  @media(max-width:820px) and (orientation:landscape){
+    #barItems{max-height:74vh} #stick{bottom:18px;left:14px;width:104px;height:104px}
+    #hint{display:none}
   }
   .brand{font-weight:700;display:flex;align-items:center;gap:8px}
   .dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2))}
@@ -222,6 +237,7 @@
 <div id="knock"><span id="knockText"></span><button class="btn" id="knockBtn">Knock</button></div>
 <div id="toasts"></div>
 <div id="hint"><b>Move</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>/click · open a <b>2nd tab</b> to meet yourself · knock on doors · click the <b>screen</b> · 📢 to talk floor-wide.</div>
+<div id="stick"><div id="stickNub"></div></div>
 <div id="minimapWrap"><canvas id="minimap" width="180" height="123"></canvas></div>
 
 <div id="overlay"><div id="card">
@@ -281,7 +297,7 @@
   function speakLevel(id){const s=(lvlSmooth.get(id)||0)*0.6+rawLevel(id)*0.4;lvlSmooth.set(id,s<0.003?0:s);return s;}
   let myStatus='available',lastActivity=Date.now(),autoAway=false;
   let tvData={videoId:'e5D5h4W7P98',title:'NexSpace TV',queue:[]}; // shared YouTube TV state (client default so the TV always has something to show)
-  let ytPlayer=null,ytReady=false,tvApplyingRemote=false,tvUnmuted=false,tvRaw=false,tvKickTimer=null,tvSync={pos:0,at:0,playing:true}; // synced watch-party playback
+  let ytPlayer=null,ytReady=false,tvApplyingRemote=false,tvUnmuted=false,tvRaw=false,tvKickTimer=null,tvWallShown=false,tvSync={pos:0,at:0,playing:true}; // synced watch-party playback
   window.onYouTubeIframeAPIReady=function(){ytReady=true;clearTimeout(tvKickTimer);if(myId)tvEnsurePlayer();}; // build the wall player as soon as we've joined
   (function(){const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);})();
   let editMode=false,editSel=null,editDrag=null; // owner/admin floor editor
@@ -356,7 +372,7 @@
   let lastSend=0;
 
   // ---------- Input ----------
-  const keys=new Set();let target=null;
+  const keys=new Set();let target=null;const joy={x:0,y:0,active:false}; // virtual joystick vector (mobile)
   addEventListener('keydown',e=>{const tg=e.target; if(tg&&(tg.tagName==='INPUT'||tg.tagName==='TEXTAREA'))return; const _wb=document.getElementById('wb'); if(_wb&&_wb.style.display==='flex')return; const k=e.key.toLowerCase();
     if(k==='t'){openTv();e.preventDefault();return;}                 // open the TV from any view
     if(k==='escape'){closeTv();closeWidget();return;}
@@ -365,15 +381,44 @@
     if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','shift'].includes(k)){keys.add(k);if(k!=='shift')target=null;e.preventDefault();}});
   addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
   const toWorld=e=>({x:(e.clientX-VW/2)/cam.zoom+cam.x,y:(e.clientY-VH/2)/cam.zoom+cam.y});
-  canvas.addEventListener('mousedown',e=>{if(e.button!==0)return;
-    if(viewMode==='3d'){if(!pointerLocked&&canvas.requestPointerLock)canvas.requestPointerLock();return;} // click to look around
+  function canvasPrimary(e){                                 // 2D primary action: interact (TV/portal/widget) else move-to
     const w=toWorld(e);
     if(editMode){editDown(w);return;}                       // edit mode: drag/select elements instead of moving
     if(world&&world.mediaWall){const M=world.mediaWall;
       if(w.x>=M.x-12&&w.x<=M.x+M.w+12&&w.y>=M.y-(M.screenH||150)-12&&w.y<=M.y+(M.base||16)+12){openTv();return;}}
     if(world&&world.portals){for(const pt of world.portals){if(w.x>=pt.x&&w.x<=pt.x+pt.w&&w.y>=pt.y&&w.y<=pt.y+pt.h){travelTo(pt.to);return;}}}
     if(world&&world.widgets){for(const wd of world.widgets){if(wd.type!=='timer'&&w.x>=wd.x&&w.x<=wd.x+wd.w&&w.y>=wd.y&&w.y<=wd.y+wd.h){openWidget(wd);return;}}}
-    target=w;});
+    target=w;
+  }
+  canvas.addEventListener('mousedown',e=>{if(e.button!==0)return;
+    if(viewMode==='3d'){if(!pointerLocked&&canvas.requestPointerLock)canvas.requestPointerLock();return;} // click to look around
+    canvasPrimary(e);});
+  // Touch: drag rotates the 3D camera (no pointer-lock on mobile); a tap moves/interacts in 2D. Joystick handles walking.
+  let touchLook=null;
+  function addTouchLook(el){if(!el)return;
+    el.addEventListener('touchstart',e=>{const t=e.changedTouches[0];touchLook={id:t.identifier,x:t.clientX,y:t.clientY,sx:t.clientX,sy:t.clientY,moved:false};e.preventDefault();},{passive:false});
+    el.addEventListener('touchmove',e=>{if(!touchLook)return;let t=null;for(const x of e.touches)if(x.identifier===touchLook.id)t=x;if(!t)return;
+      const dx=t.clientX-touchLook.x,dy=t.clientY-touchLook.y;
+      if(Math.abs(t.clientX-touchLook.sx)+Math.abs(t.clientY-touchLook.sy)>10)touchLook.moved=true;
+      if(viewMode==='3d'){yaw+=dx*0.005;pitch=Math.max(-1.1,Math.min(1.1,pitch-dy*0.005));}
+      touchLook.x=t.clientX;touchLook.y=t.clientY;e.preventDefault();},{passive:false});
+    el.addEventListener('touchend',e=>{if(!touchLook)return;let ended=false;for(const x of e.changedTouches)if(x.identifier===touchLook.id)ended=true;if(!ended)return;
+      if(!touchLook.moved&&viewMode!=='3d')canvasPrimary({clientX:touchLook.sx,clientY:touchLook.sy});touchLook=null;e.preventDefault();},{passive:false});
+  }
+  addTouchLook(canvas);addTouchLook(document.getElementById('game3d'));   // 2D and 3D canvases
+  // Virtual joystick (mobile) → feeds step()/step3D()
+  (function(){const stick=document.getElementById('stick'),nub=document.getElementById('stickNub');if(!stick)return;
+    if(!(matchMedia('(pointer:coarse)').matches||'ontouchstart' in window))return;   // only on touch devices
+    stick.style.display='block';
+    const hint=document.getElementById('hint');if(hint)hint.innerHTML='🕹️ <b>stick</b> to move · drag screen to look · tap to interact · 📅 book rooms';
+    let sid=null,cx=0,cy=0;const MAX=46;
+    const find=(list)=>{for(const t of list)if(t.identifier===sid)return t;return null;};
+    stick.addEventListener('touchstart',e=>{const t=e.changedTouches[0];const r=stick.getBoundingClientRect();cx=r.left+r.width/2;cy=r.top+r.height/2;sid=t.identifier;joy.active=true;set(t);e.preventDefault();e.stopPropagation();},{passive:false});
+    stick.addEventListener('touchmove',e=>{const t=find(e.touches)||find(e.changedTouches);if(t)set(t);e.preventDefault();e.stopPropagation();},{passive:false});
+    function end(e){if(!joy.active)return;if(find(e.changedTouches)){joy.active=false;joy.x=joy.y=0;sid=null;nub.style.transform='';}}
+    addEventListener('touchend',end,{passive:true});addEventListener('touchcancel',end,{passive:true});
+    function set(t){let dx=t.clientX-cx,dy=t.clientY-cy;const d=Math.hypot(dx,dy);if(d>MAX){dx*=MAX/d;dy*=MAX/d;}nub.style.transform='translate('+dx+'px,'+dy+'px)';joy.x=dx/MAX;joy.y=dy/MAX;}
+  })();
   document.addEventListener('pointerlockchange',()=>{pointerLocked=!!document.pointerLockElement;});
   document.addEventListener('mousemove',e=>{if(!pointerLocked||viewMode!=='3d')return;
     yaw+=e.movementX*0.0025;pitch=Math.max(-1.1,Math.min(1.1,pitch-e.movementY*0.0025));});
@@ -512,6 +557,7 @@
     let f=0,s=0;
     if(keys.has('w')||keys.has('arrowup'))f+=1;if(keys.has('s')||keys.has('arrowdown'))f-=1;
     if(keys.has('d')||keys.has('arrowright'))s+=1;if(keys.has('a')||keys.has('arrowleft'))s-=1;
+    if(joy.active){f+=-joy.y;s+=joy.x;}                       // joystick: up = forward, right = strafe
     if(f||s){const sp=SPEED*(keys.has('shift')?1.7:1),fx=Math.cos(yaw),fy=Math.sin(yaw),rx=Math.cos(yaw+Math.PI/2),ry=Math.sin(yaw+Math.PI/2);
       let dx=fx*f+rx*s,dy=fy*f+ry*s;const m=Math.hypot(dx,dy)||1;moveMe(dx/m*sp*dt,dy/m*sp*dt);}
     jumpV-=600*dt;jumpZ=Math.max(0,jumpZ+jumpV*dt);if(jumpZ===0&&jumpV<0)jumpV=0;
@@ -523,6 +569,7 @@
     let dx=0,dy=0;
     if(keys.has('w')||keys.has('arrowup'))dy-=1;if(keys.has('s')||keys.has('arrowdown'))dy+=1;
     if(keys.has('a')||keys.has('arrowleft'))dx-=1;if(keys.has('d')||keys.has('arrowright'))dx+=1;
+    if(joy.active){dx+=joy.x;dy+=joy.y;}                       // joystick movement (mobile)
     if(dx||dy){const m=Math.hypot(dx,dy);dx/=m;dy/=m;me.facing=Math.atan2(dy,dx);moveMe(dx*SPEED*dt,dy*SPEED*dt);}
     else if(target){const tx=target.x-me.x,ty=target.y-me.y,d=Math.hypot(tx,ty);
       if(d<4)target=null;else{me.facing=Math.atan2(ty,tx);const s=Math.min(d,SPEED*dt),bx=me.x,by=me.y;
@@ -976,6 +1023,7 @@
       if (tvPanelMat && tvData.videoId && tvPanelMat._vid !== tvData.videoId) {   // show the current video's poster on the 3D TV
         const t = tvThumbTex(tvData.videoId); if (t) { tvPanelMat.map = t; tvPanelMat.color.set(0xffffff); tvPanelMat.needsUpdate = true; tvPanelMat._vid = tvData.videoId; }
       }
+      if (tvPanelMesh) tvPanelMesh.visible = !tvWallShown;                        // hide the poster while the live video is mounted on the wall (no double)
       const eye = 46;
       if (cameraMode === "firstPerson") {
         camera.position.set(me.x, eye, me.y);
@@ -1033,7 +1081,26 @@
       const pw = mw.w * focal / depth, ph = sh * focal / depth;
       return { x: (v.x * 0.5 + 0.5) * VW - pw / 2, y: (-v.y * 0.5 + 0.5) * VH - ph / 2, w: pw, h: ph };
     }
-    return { available, init, frame, resize, project3D, tvRect, rebuild() { worldBuilt = false; } };
+    // The wall TV's 4 corners projected to screen px (or null if behind the camera / occluded / edge-on), so the
+    // live-video element can be matrix3d-skewed exactly onto the angled screen — true wall-mounted look.
+    function tvQuad() {
+      if (!ready || !camera || !world || !world.mediaWall || !tvPanelMesh) return null;
+      const mw = world.mediaWall, sh = mw.screenH || 150, base = mw.base || 16;
+      const center = new THREE.Vector3(mw.x + mw.w / 2, base + sh / 2, mw.y);
+      const toTv = center.clone().sub(camera.position), dist = toTv.length();
+      const camDir = new THREE.Vector3(); camera.getWorldDirection(camDir);
+      if (toTv.dot(camDir) <= 30) return null;                               // behind / on top of the camera
+      if (!_ray) _ray = new THREE.Raycaster();
+      _ray.set(camera.position, toTv.clone().normalize()); _ray.near = 0; _ray.far = Math.max(1, dist - 40);
+      for (const h of _ray.intersectObjects(worldGroup.children, false)) { if (h.object !== tvPanelMesh && h.object.userData && h.object.userData.occluder) return null; }
+      const pr = (x, y, z) => { const v = new THREE.Vector3(x, y, z).project(camera); if (v.z > 1) return null; return { x: (v.x * 0.5 + 0.5) * VW, y: (-v.y * 0.5 + 0.5) * VH }; };
+      const tl = pr(mw.x, base + sh, mw.y), tr = pr(mw.x + mw.w, base + sh, mw.y), bl = pr(mw.x, base, mw.y), br = pr(mw.x + mw.w, base, mw.y);
+      if (!tl || !tr || !bl || !br) return null;
+      const area = Math.abs((tr.x - tl.x) * (bl.y - tl.y) - (bl.x - tl.x) * (tr.y - tl.y));
+      if (area < 600) return null;                                           // too edge-on / tiny → skip
+      return { tl, tr, bl, br };
+    }
+    return { available, init, frame, resize, project3D, tvRect, tvQuad, rebuild() { worldBuilt = false; } };
   })();
 
   // ---------- Banner / knock ----------
@@ -1186,26 +1253,34 @@
       }
       row.appendChild(f);box.appendChild(row);
     }}
-  // position the wall-TV player over the actual screen each frame (2D camera transform, or projected in 3D)
-  function tvPositionWorld(){const wd=document.getElementById('tvWorld');if(!wd)return;
-    if(!world||!world.mediaWall||!((ytPlayer&&ytPlayer.getCurrentTime)||tvRaw)){wd.style.display='none';return;}
-    const m=world.mediaWall;let px,py,pw,ph;
-    if(viewMode==='3d'){
-      // 3D: a flat HTML video can't be perspective-skewed onto the angled 3D screen (it drifts and the wall
-      // poster peeks out behind it). So dock the live player as a fixed picture-in-picture; the wall itself
-      // keeps showing the video's poster in-scene (perspective-correct + occluded by walls).
-      pw=Math.max(200,Math.min(VW*0.24,340));ph=Math.round(pw*9/16);px=16;py=VH-ph-46; // bottom-left: clear of toolbar, minimap, and hint bar
-      wd.classList.add('pip');wd.style.display='block';wd.style.left=Math.round(px)+'px';wd.style.top=Math.round(py)+'px';wd.style.width=Math.round(pw)+'px';wd.style.height=Math.round(ph)+'px';return;
-    }
+  // ---- CSS perspective homography: skew the live-video element onto the wall TV's 4 projected corners (matrix3d).
+  function _adj(m){return[m[4]*m[8]-m[5]*m[7],m[2]*m[7]-m[1]*m[8],m[1]*m[5]-m[2]*m[4],m[5]*m[6]-m[3]*m[8],m[0]*m[8]-m[2]*m[6],m[2]*m[3]-m[0]*m[5],m[3]*m[7]-m[4]*m[6],m[1]*m[6]-m[0]*m[7],m[0]*m[4]-m[1]*m[3]];}
+  function _mmm(a,b){const c=Array(9);for(let i=0;i<3;i++)for(let j=0;j<3;j++){let s=0;for(let k=0;k<3;k++)s+=a[3*i+k]*b[3*k+j];c[3*i+j]=s;}return c;}
+  function _mmv(m,v){return[m[0]*v[0]+m[1]*v[1]+m[2]*v[2],m[3]*v[0]+m[4]*v[1]+m[5]*v[2],m[6]*v[0]+m[7]*v[1]+m[8]*v[2]];}
+  function _basis(x1,y1,x2,y2,x3,y3,x4,y4){const m=[x1,x2,x3,y1,y2,y3,1,1,1];const v=_mmv(_adj(m),[x4,y4,1]);return _mmm(m,[v[0],0,0,0,v[1],0,0,0,v[2]]);}
+  function _proj2d(w,h,x1,y1,x2,y2,x3,y3,x4,y4){return _mmm(_basis(x1,y1,x2,y2,x3,y3,x4,y4),_adj(_basis(0,0,w,0,0,h,w,h)));}
+  function tvApplyQuad(wd,W,H,q){ // map the WxH element's corners (TL,TR,BL,BR) onto the wall TV's projected corners
+    const t=_proj2d(W,H, q.tl.x,q.tl.y, q.tr.x,q.tr.y, q.bl.x,q.bl.y, q.br.x,q.br.y);
+    for(let i=0;i<9;i++)t[i]=t[i]/t[8];
+    const m=[t[0],t[3],0,t[6], t[1],t[4],0,t[7], 0,0,1,0, t[2],t[5],0,t[8]];
+    wd.style.width=W+'px';wd.style.height=H+'px';wd.style.left='0';wd.style.top='0';wd.style.borderRadius='0';wd.style.transformOrigin='0 0';wd.style.transform='matrix3d('+m.join(',')+')';
+  }
+  // position/skew the wall-TV player each frame (2D camera transform, or matrix3d-mounted on the 3D wall)
+  function tvPositionWorld(){const wd=document.getElementById('tvWorld');if(!wd)return;tvWallShown=false;
+    const hasContent=(ytPlayer&&ytPlayer.getCurrentTime)||tvRaw;
+    if(!world||!world.mediaWall||!hasContent){wd.style.display='none';wd.style.transform='';return;}
+    const m=world.mediaWall;
     wd.classList.remove('pip');
-    px=(m.x-cam.x)*cam.zoom+VW/2;py=((m.y-m.screenH)-cam.y)*cam.zoom+VH/2;pw=m.w*cam.zoom;ph=m.screenH*cam.zoom;
+    if(viewMode==='3d'){
+      const q=(threeMode&&Three3D.tvQuad)?Three3D.tvQuad():null;     // 4 projected corners of the wall TV (or null if hidden/occluded)
+      if(tvSync.playing&&q){const W=512,H=Math.max(160,Math.round(512*(m.screenH||150)/m.w));tvApplyQuad(wd,W,H,q);wd.style.display='block';tvWallShown=true;}
+      else{wd.style.display='none';wd.style.transform='';}            // paused or TV not in view → the wall shows the poster instead
+      return;
+    }
+    wd.style.transform='';wd.style.borderRadius='6px';               // 2D: glue flat to the wall, no skew
+    const px=(m.x-cam.x)*cam.zoom+VW/2,py=((m.y-m.screenH)-cam.y)*cam.zoom+VH/2,pw=m.w*cam.zoom,ph=m.screenH*cam.zoom;
     if(pw<24||ph<16||px+pw<0||py+ph<0||px>VW||py>VH){wd.style.display='none';return;}
     wd.style.display='block';wd.style.left=Math.round(px)+'px';wd.style.top=Math.round(py)+'px';wd.style.width=Math.round(pw)+'px';wd.style.height=Math.round(ph)+'px';}
-  // Pseudo-3D fallback (no WebGL): size the overlay from the projected scale at the TV centre (s = focal/depth),
-  // so it keeps the TV's aspect ratio and never balloons. project() takes [worldX, worldY, height].
-  function tvScreenRect3D(m){const base=m.base||16,sh=m.screenH||150;
-    const sc=project([m.x+m.w/2, m.y, base+sh/2]);if(!sc)return null;
-    const pw=m.w*sc.s,ph=sh*sc.s;return{x:sc.x-pw/2,y:sc.y-ph/2,w:pw,h:ph};}
   setInterval(()=>{if(!ytPlayer||!ytPlayer.getCurrentTime||tvApplyingRemote||!tvSync.playing)return; // drift-correct (player always running)
     const cur=ytPlayer.getCurrentTime(),target=tvExpectedPos();if(Math.abs(cur-target)>1.8){tvApplyingRemote=true;try{ytPlayer.seekTo(Math.max(0,target),true);}catch(_){}setTimeout(()=>{tvApplyingRemote=false;},600);}},2000);
   function tvItemRow(title,btns){const d=document.createElement('div');d.className='tvitem';const t=document.createElement('span');t.className='tt';t.textContent=title;t.title=title;d.appendChild(t);for(const b of btns){const bt=document.createElement('button');bt.textContent=b.label;bt.onclick=b.fn;d.appendChild(bt);}return d;}

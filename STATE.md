@@ -51,7 +51,8 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | 3D office props — desks (monitor + chair), meeting tables, sofas, plants, chairs, rugs by `furniture.kind`; styled businessman avatars (vest/shirt/tie-by-person/trousers/shoes) that turn to face their walk direction with floating name tags; TV overlay perspective-sized + wall-occluded | ✅ | `apps/web/index.html` (Three3D) |
 | Real character model — optional GLB (Renderpeople "Eric" or a Mixamo business character); loads `apps/web/models/eric.glb` via GLTFLoader, auto-fits + tints per person, **falls back to the styled avatar** if absent | ✅ opt-in | `apps/web/index.html`, `CHARACTER.md` |
 | Walk animation — procedural leg/arm swing on the styled avatar when moving; GLB models play embedded **Walk/Idle** clips (AnimationMixer), blended by movement | ✅ | `apps/web/index.html` (Three3D) |
-| 3D TV — live video docked as a fixed picture-in-picture (an HTML iframe can't be perspective-skewed onto the angled 3D screen); the wall shows the video poster in-scene | ✅ | `apps/web/index.html` |
+| 3D TV — live video **matrix3d-skewed onto the wall screen** (perspective-correct, wall-mounted, occluded by walls); the poster shows only while paused/out-of-view, hidden while playing (no double) | ✅ | `apps/web/index.html` |
+| Mobile/touch — on-screen joystick to walk, drag-to-look in 3D (no pointer-lock needed), tap to move/interact in 2D; no-zoom viewport, larger touch targets, compact panels/minimap | ✅ | `apps/web/index.html` |
 | PUBG-style 3D camera — third/first person, mouse-look, sprint, jump, camera collision | ✅ | `apps/web/index.html` |
 | Presence & status (5 states) + idle auto-away | ✅ | realtime + web |
 | Auth (JWT login) + server-enforced RBAC | ✅ | `apps/api/src/auth`, realtime |
