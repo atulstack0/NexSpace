@@ -56,6 +56,9 @@
   .seg button.active{background:var(--accent);color:#fff}
   #banner{position:fixed;top:72px;left:50%;transform:translateX(-50%);z-index:18;display:none;align-items:center;gap:9px;
     background:rgba(255,93,108,.16);border:1px solid var(--danger);color:#ffd2d7;border-radius:12px;padding:8px 15px;font-size:13px;font-weight:600}
+  #presentBanner{position:fixed;top:108px;left:50%;transform:translateX(-50%);z-index:18;display:none;align-items:center;gap:10px;
+    background:rgba(91,140,255,.18);border:1px solid var(--accent);color:#d6e2ff;border-radius:12px;padding:8px 15px;font-size:13px;font-weight:600}
+  #presentBanner button{padding:3px 10px}
   #banner .l{width:9px;height:9px;border-radius:50%;background:var(--danger);animation:pulse 1.2s infinite}
   #recind{position:fixed;top:72px;left:12px;z-index:19;display:none;background:rgba(255,93,108,.16);border:1px solid var(--danger);color:#ffd2d7;border-radius:20px;padding:6px 12px;font-size:12px;font-weight:700}
   #statusSel,#floorSel{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:6px 9px;font-size:13px;cursor:pointer;max-width:170px}
@@ -164,6 +167,7 @@
   <button class="btn" id="btnMicPub" title="Your microphone (LiveKit)" style="display:none">🎤</button>
   <button class="btn" id="btnCam" title="Your camera (LiveKit)" style="display:none">🎥</button>
   <button class="btn" id="btnScreen" title="Share your screen (LiveKit)" style="display:none">🖥️ Share</button>
+  <button class="btn" id="btnPresent" title="Present your screen to the room" style="display:none">📺 Present</button>
   <button class="btn" id="btnScreens" title="View shared screens" style="display:none">🖥️ Screens (0)</button>
   <div class="seg" id="rangeSeg"><button data-m="quiet">Quiet</button><button data-m="normal" class="active">Normal</button><button data-m="megaphone">Mega</button></div>
   <button class="btn live" id="btnBroadcast">📢 Broadcast</button>
@@ -207,6 +211,7 @@
   <div id="chatMsgs"></div>
   <div id="chatRow"><input id="chatText" maxlength="500" placeholder="Message…  (type @ai to ask the assistant)" /><button class="btn" id="chatAi" title="Ask the 🤖 AI assistant">🤖</button><button class="btn" id="chatSend">Send</button></div>
 </div>
+<div id="presentBanner"></div>
 <div id="screenHolder" style="display:none"></div>
 <div id="screenshare">
   <div class="shead"><span id="screenTabs"></span><button class="btn" id="screenClose" style="margin-left:auto">✕ Close</button></div>
@@ -328,6 +333,7 @@
   let editMode=false,editSel=null,editDrag=null; // owner/admin floor editor
   const reactions=new Map(),adminMuted=new Set();
   const lkAudio=new Map(),lkVideo=new Map(),lkScreens=new Map();let screenFocus=null;
+  let presentState=null,autoPresented=false; // synced "present to the room" state
   const hsl=h=>'hsl('+h+' 70% 60%)';
   const STATUS_COLOR={available:'#39d3a6',away:'#8a96b3',busy:'#ffb454',dnd:'#ff5d6c',inMeeting:'#5b8cff'};
   const hueOf=id=>{let h=0;for(let i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))%360;return h;};
@@ -368,6 +374,7 @@
         if(m.whiteboard)wbStrokes=m.whiteboard.slice();
         if(m.tv)applyTv(m.tv);
         tvKick();                                          // start the wall player now (API), or raw-embed fallback if the API is blocked
+        presentState=m.presentation||null;updatePresentation();
         applyBranding(world.branding);populateFloors(world);
         initLiveKit();}
       else if(m.t==='floor'){applyFloorChange(m);}
@@ -382,6 +389,7 @@
         document.getElementById('count').textContent=m.players.length;
       }
       else if(m.t==='world'){world=m.world;WORLD={w:world.w,h:world.h};world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});applyBranding(world.branding);if(threeMode)Three3D.rebuild();toast('🛠️ Office layout updated');}
+      else if(m.t==='present'){if(!m.floor||m.floor===myFloor){presentState=m.presentation||null;updatePresentation();}}
       else if(m.t==='booking'){if(world&&(!m.floor||m.floor===myFloor)){const r=(world.rooms||[]).find(x=>x.id===m.roomId);if(r){const wasActive=r.booking&&r.booking.id;r.booking=m.booking;if(m.bookings)r.bookings=m.bookings;if(roomsOpen())renderRooms();
         if(m.error)toast('⚠️ '+m.error);
         else if(m.booking&&m.booking.id!==wasActive)toast('📅 '+(r.name||'Room')+': '+m.booking.title+' started');}}}
@@ -540,7 +548,7 @@
       await room.connect(url,token);
       lkRoom=room;lkActive=true;
       const mb=document.getElementById('btnMicPub'),cb=document.getElementById('btnCam');
-      mb.style.display='';cb.style.display='';document.getElementById('btnScreen').style.display='';
+      mb.style.display='';cb.style.display='';document.getElementById('btnScreen').style.display='';document.getElementById('btnPresent').style.display='';
       // Mic/cam are isolated: if permission is blocked they must NOT drop the whole room to synth audio.
       let micOn=false;
       try{await room.localParticipant.setMicrophoneEnabled(true);micOn=true;}catch(e){toast('🎤 Allow microphone access, then click the 🎤 button');}
@@ -1174,6 +1182,7 @@
   const knockEl=document.getElementById('knock'),knockText=document.getElementById('knockText'),knockBtn=document.getElementById('knockBtn');
   let activeDoor=null;
   function updateUI(){
+    updatePresentation();   // present-to-room banner + auto-enlarge for room members
     // banner: who's broadcasting
     let bc=[...peers.values()].filter(e=>e.bcast).map(e=>e.name);if(myBcast)bc.unshift('You');
     if(bc.length){banner.style.display='flex';bannerText.textContent=bc.join(', ')+(bc.length>1?' are':' is')+' broadcasting to the floor';}
@@ -1219,6 +1228,7 @@
     doors={};world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});
     peers.forEach((e,id)=>removeVoice(id));peers.clear();
     portalArmed=false; // disarm: you must step off the arrival portal before it can re-trigger
+    presentState=m.presentation||null;updatePresentation();
     applyBranding(world.branding);populateFloors(world);
     if(threeMode)Three3D.rebuild();
     toast('🪜 Entered '+(world.name||myFloor));}
@@ -1498,7 +1508,8 @@
   document.getElementById('btnScreen').addEventListener('click',async function(){
     if(!lkActive||!lkRoom){toast('Screen share needs LiveKit (set creds in apps/api/.env)');return;}
     const on=!lkRoom.localParticipant.isScreenShareEnabled;
-    try{await lkRoom.localParticipant.setScreenShareEnabled(on);this.classList.toggle('active',on);toast(on?'🖥️ Sharing your screen':'Stopped sharing');}
+    try{await lkRoom.localParticipant.setScreenShareEnabled(on);this.classList.toggle('active',on);toast(on?'🖥️ Sharing your screen':'Stopped sharing');
+      if(!on&&presentState&&presentState.byId===myId)stopPresenting();}                 // stopped sharing → stop presenting
     catch(e){toast('Screen share canceled');}});
   function updateScreens(){const ids=[...lkScreens.keys()];const sb=document.getElementById('btnScreens'),ov=document.getElementById('screenshare'),tabs=document.getElementById('screenTabs');
     sb.style.display=ids.length?'':'none';sb.textContent='🖥️ Screens ('+ids.length+')';
@@ -1511,7 +1522,35 @@
   document.getElementById('btnScreens').addEventListener('click',()=>{const ov=document.getElementById('screenshare');
     if(ov.style.display==='flex')ov.style.display='none';else{const ids=[...lkScreens.keys()];if(ids.length)focusScreen(lkScreens.has(screenFocus)?screenFocus:ids[0]);}});
   document.getElementById('screenClose').addEventListener('click',()=>{const ov=document.getElementById('screenshare');ov.style.display='none';
-    if(screenFocus&&lkScreens.get(screenFocus)){const c=lkScreens.get(screenFocus).el;c.style.display='none';document.getElementById('screenHolder').appendChild(c);}screenFocus=null;updateScreens();});
+    if(screenFocus&&lkScreens.get(screenFocus)){const c=lkScreens.get(screenFocus).el;c.style.display='none';document.getElementById('screenHolder').appendChild(c);}screenFocus=null;autoPresented=false;updateScreens();});
+  // ---- Present to the room: one presenter's screen auto-enlarges for everyone in their room, with a banner ----
+  function closeScreenView(){const ov=document.getElementById('screenshare');ov.style.display='none';
+    if(screenFocus&&lkScreens.get(screenFocus)){const c=lkScreens.get(screenFocus).el;c.style.display='none';document.getElementById('screenHolder').appendChild(c);}screenFocus=null;}
+  function stopPresenting(){if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'unpresent'}));}
+  let presentLastKey='';
+  function updatePresentation(){
+    const mine=presentState&&presentState.byId===myId;
+    const myRoom=presentState?roomAtPt(me.x,me.y):null;
+    const inScope=presentState?(presentState.roomId?(myRoom&&myRoom.id===presentState.roomId):true):false;
+    const key=presentState?(presentState.byId+'|'+(mine?'m':'')+'|'+(inScope?'s':'')+'|'+(lkScreens.has(presentState.byId)?'v':'w')):'none';
+    if(key===presentLastKey)return; presentLastKey=key;
+    const banner=document.getElementById('presentBanner'),bp=document.getElementById('btnPresent');
+    if(!presentState){banner.style.display='none';if(bp)bp.classList.remove('active');if(autoPresented){closeScreenView();autoPresented=false;}return;}
+    if(bp)bp.classList.toggle('active',!!mine);
+    banner.style.display='flex';banner.innerHTML='';
+    const txt=document.createElement('span');txt.textContent='📺 '+(mine?'You are presenting to the room':(presentState.byName+' is presenting'+(inScope?'':' (go to their room to view)')));banner.appendChild(txt);
+    if(mine){const b=document.createElement('button');b.className='btn';b.textContent='Stop';b.onclick=stopPresenting;banner.appendChild(b);}
+    if(!mine&&inScope){autoPresented=true;
+      if(lkScreens.has(presentState.byId))focusScreen(presentState.byId);
+      else{const view=document.getElementById('screenView');document.getElementById('screenshare').style.display='flex';view.innerHTML='<div style="color:var(--muted);padding:34px;text-align:center;font-size:13px">⏳ Waiting for '+escapeHtml(presentState.byName)+"'s screen…</div>";}
+    }else if(autoPresented){closeScreenView();autoPresented=false;}
+  }
+  document.getElementById('btnPresent').addEventListener('click',async function(){
+    if(!lkActive||!lkRoom){toast('Presenting needs LiveKit (set creds in apps/api/.env)');return;}
+    if(presentState&&presentState.byId===myId){stopPresenting();toast('Stopped presenting');return;}
+    try{if(!lkRoom.localParticipant.isScreenShareEnabled){await lkRoom.localParticipant.setScreenShareEnabled(true);document.getElementById('btnScreen').classList.add('active');}}
+    catch(e){toast('Screen share canceled');return;}
+    if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'present'}));toast('📺 Presenting to the room');});
   btnRec.addEventListener('click',async function(){
     const turningOn=!myEgressId;  // track my own capture (works for guests too; the shared 🔴 indicator stays admin-gated)
     if(turningOn){

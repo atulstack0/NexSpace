@@ -61,6 +61,7 @@ function join(name, token) {
       if (m.t === "tv") st.tv = m;
       if (m.t === "snapshot") st.last = m;
       if (m.t === "booking") { st.bookings[m.roomId] = m.booking; if (m.bookings) st.sched[m.roomId] = m.bookings; }
+      if (m.t === "present") st.presentation = m.presentation;
       if (m.t === "denied") st.denied.push(m.action);
       if (m.t === "rateLimited") st.rateLimited = true;
       if (m.t === "chat") st.chats.push(m);
@@ -310,6 +311,17 @@ try {
   admin.ws.send(JSON.stringify({ t: "chat", scope: "floor", body: "just a normal message" }));
   await wait(250);
   (admin.chats.filter((c) => c.from === "assistant").length === aiBefore) ? ok("a normal chat does not trigger the assistant") : bad("assistant triggered on a non-@ai chat");
+
+  // present-to-room — present broadcasts the presenter; guest can't present; unpresent clears it
+  admin.ws.send(JSON.stringify({ t: "present" }));
+  await wait(250);
+  (guest.presentation && guest.presentation.byId === admin.id) ? ok("present broadcasts the presenter to the floor") : bad("present did not broadcast");
+  guest.ws.send(JSON.stringify({ t: "present" }));
+  await wait(200);
+  (guest.denied.includes("present")) ? ok("guest denied presenting (RBAC member+)") : bad("guest present was NOT blocked");
+  admin.ws.send(JSON.stringify({ t: "unpresent" }));
+  await wait(220);
+  (guest.presentation === null) ? ok("unpresent clears the presentation for everyone") : bad("unpresent did not clear");
 
   // reactions (6.6)
   admin.ws.send(JSON.stringify({ t: "react", emoji: "🎉" }));

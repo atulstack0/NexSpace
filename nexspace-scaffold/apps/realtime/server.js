@@ -460,7 +460,7 @@ wss.on("connection", (ws) => {
       A.sessions++; if (clients.size > A.peak) A.peak = clients.size;
       fireWebhook("user.joined", { id, name, role });
       notifySlack("👋 " + name + " entered the office");
-      send(ws, { t: "welcome", id, world: worldForClient(player.floor), you: { ...player }, whiteboard: whiteboard.strokes, tv: tvState() });
+      send(ws, { t: "welcome", id, world: worldForClient(player.floor), you: { ...player }, whiteboard: whiteboard.strokes, tv: tvState(), presentation: f0.presentation || null });
       console.log(`+ ${player.name} (${id}) [${role}] — ${clients.size} online`);
       return;
     }
@@ -532,6 +532,14 @@ wss.on("connection", (ws) => {
       if (bk.byId !== p.id && rank(p.role) < RANK.admin) return deny(ws, "cancel this booking", "admin"); // only the booker or an admin
       room.bookings = room.bookings.filter((b) => b.id !== m.bookingId);
       refreshRoomActive(f, room, Date.now()); broadcastBooking(f, room);
+    } else if (m.t === "present") {                            // start presenting your screen to the room/floor
+      if (rank(p.role) < RANK.member) return deny(ws, "present", "member");
+      const f = floorOf(p); const r = f.rooms.find((rm) => inRoom(p, rm));
+      f.presentation = { byId: p.id, byName: p.name, roomId: r ? r.id : null };
+      broadcastPresentation(f);
+    } else if (m.t === "unpresent") {                          // stop presenting (presenter or admin)
+      const f = floorOf(p);
+      if (f.presentation && (f.presentation.byId === p.id || rank(p.role) >= RANK.admin)) { f.presentation = null; broadcastPresentation(f); }
     } else if (m.t === "recording") {
       if (rank(p.role) < RANK.admin) return deny(ws, "record", "admin");
       recording = m.on ? { on: true, by: p.name, egressId: m.egressId || null } : { on: false, by: null, egressId: null };
@@ -570,6 +578,7 @@ wss.on("connection", (ws) => {
       // teleport to another floor (physical portal step-through or floor-switcher); any joined client may travel
       const dest = floors.get(String(m.to || ""));
       if (!dest || dest.slug === p.floor) return;
+      const old = floors.get(p.floor); if (old && old.presentation && old.presentation.byId === p.id) { old.presentation = null; broadcastPresentation(old); } // stop presenting on the floor you left
       p.floor = dest.slug;
       // arrive at the floor's known-safe interior spawn (NOT beside the return portal — small floors clamp
       // that into a wall, leaving the player stuck inside the collision radius). Small jitter avoids stacking.
@@ -577,7 +586,7 @@ wss.on("connection", (ws) => {
       p.x = clamp(sp.x + (Math.random() - 0.5) * 80, 60, dest.w - 60);
       p.y = clamp(sp.y + (Math.random() - 0.5) * 80, 60, dest.h - 60);
       p.lastMoveAt = Date.now();
-      send(ws, { t: "floor", world: worldForClient(dest.slug), you: { id: p.id, x: Math.round(p.x), y: Math.round(p.y), floor: p.floor } });
+      send(ws, { t: "floor", world: worldForClient(dest.slug), you: { id: p.id, x: Math.round(p.x), y: Math.round(p.y), floor: p.floor }, presentation: dest.presentation || null });
       console.log(`~ ${p.name} (${p.id}) → floor '${dest.slug}'`);
     } else if (m.t === "tvPlay") {            // shared TV: play a video now (everyone's screen switches)
       if (!validVideoId(m.videoId)) return;
@@ -629,7 +638,10 @@ wss.on("connection", (ws) => {
     const p = clients.get(ws);
     if (p && p.joinedAt) { A.totalMs += Date.now() - p.joinedAt; A.closed++; }
     clients.delete(ws);
-    if (p) { fireWebhook("user.left", { id: p.id, name: p.name }); notifySlack("👋 " + p.name + " left the office"); console.log(`- ${p.name} (${p.id}) — ${clients.size} online`); }
+    if (p) {
+      const f = floors.get(p.floor); if (f && f.presentation && f.presentation.byId === p.id) { f.presentation = null; broadcastPresentation(f); } // presenter left → stop
+      fireWebhook("user.left", { id: p.id, name: p.name }); notifySlack("👋 " + p.name + " left the office"); console.log(`- ${p.name} (${p.id}) — ${clients.size} online`);
+    }
   });
 });
 
@@ -713,6 +725,7 @@ function refreshRoomActive(f, room, now) {
   room._activeId = id; room._activeBy = active ? active.byId : null; room.booking = active; return true;
 }
 function broadcastBooking(f, room) { const msg = JSON.stringify({ t: "booking", floor: f.slug, roomId: room.id, bookings: room.bookings || [], booking: activeBooking(room) }); for (const [ws, q] of clients) if (q.floor === f.slug && ws.readyState === 1) ws.send(msg); }
+function broadcastPresentation(f) { const msg = JSON.stringify({ t: "present", floor: f.slug, presentation: f.presentation || null }); for (const [ws, q] of clients) if (q.floor === f.slug && ws.readyState === 1) ws.send(msg); }
 // chat routing (§6.9): channels are org-wide (cross-floor); floor + nearby are local to the sender's floor
 function deliverChat(d) {
   const dfloor = d.floor || DEFAULT_FLOOR;
