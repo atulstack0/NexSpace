@@ -317,7 +317,7 @@
   function speakLevel(id){const s=(lvlSmooth.get(id)||0)*0.6+rawLevel(id)*0.4;lvlSmooth.set(id,s<0.003?0:s);return s;}
   let myStatus='available',lastActivity=Date.now(),autoAway=false;
   let tvData={videoId:'e5D5h4W7P98',title:'NexSpace TV',queue:[]}; // shared YouTube TV state (client default so the TV always has something to show)
-  let ytPlayer=null,ytReady=false,tvApplyingRemote=false,tvUnmuted=false,tvRaw=false,tvRawVid='',tvKickTimer=null,tvWallShown=false,tvSync={pos:0,at:0,playing:true}; // synced watch-party playback
+  let ytPlayer=null,ytReady=false,tvApplyingRemote=false,tvUnmuted=false,tvRaw=false,tvRawVid='',tvKickTimer=null,tvWallShown=false,tvSync={pos:0,at:0,playing:false}; // synced watch-party playback (off by default)
   window.onYouTubeIframeAPIReady=function(){ytReady=true;clearTimeout(tvKickTimer);if(myId)tvEnsurePlayer();}; // build the wall player as soon as we've joined
   (function(){const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);})();
   let editMode=false,editSel=null,editDrag=null; // owner/admin floor editor

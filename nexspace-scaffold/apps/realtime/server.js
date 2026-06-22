@@ -124,7 +124,7 @@ function verifyState(s) { if (!s || s.indexOf(".") < 0) return false; const n = 
 // ---------- Shared YouTube TV (§6.22) — one screen everyone watches; a queue anyone can add to. ----------
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || process.env.GOOGLE_API_KEY || "";
 const validVideoId = (v) => typeof v === "string" && /^[A-Za-z0-9_-]{6,20}$/.test(v);
-let tv = { videoId: "e5D5h4W7P98", title: "NexSpace TV", by: "", queue: [], playing: true, position: 0, updatedAt: Date.now() };
+let tv = { videoId: "e5D5h4W7P98", title: "NexSpace TV", by: "", queue: [], playing: false, position: 0, updatedAt: Date.now() }; // off by default — press ⏯ to start for everyone
 const tvLivePos = () => tv.playing ? tv.position + (Date.now() - tv.updatedAt) / 1000 : tv.position; // current second, server-authoritative
 function tvState() { return { t: "tv", videoId: tv.videoId, title: tv.title, by: tv.by, queue: tv.queue, playing: tv.playing, position: tvLivePos() }; }
 function tvSetVideo(videoId, title, by) { tv.videoId = videoId; tv.title = title; tv.by = by; tv.position = 0; tv.playing = true; tv.updatedAt = Date.now(); }
