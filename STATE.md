@@ -48,6 +48,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Screen sharing (LiveKit) — publish + multi-share focus viewer; **present-to-room** mode: one presenter's screen auto-enlarges for everyone in their room with a "X is presenting" banner (synced, RBAC member+, auto-stops on leave) | ✅ opt-in | realtime `present`/`unpresent`, `apps/web` |
 | Collaborative whiteboard — synced strokes + clear, late-joiner state, cross-node | ✅ | realtime + web |
 | Reactions (floating emoji), nudge, moderation (admin mute / kick) | ✅ | realtime + web |
+| Notifications — browser notification + tab-title flash + 💬 unread badge for DMs, @-mentions, and nudges when the tab is unfocused; permission requested on opening chat | ✅ | `apps/web/index.html` |
 | 2D ⇄ 3D toggle — pseudo-3D **and** real Three.js WebGL | ✅ | `apps/web/index.html` |
 | 3D office props — desks (monitor + chair), meeting tables, sofas, plants, chairs, rugs by `furniture.kind`; styled businessman avatars (vest/shirt/tie-by-person/trousers/shoes) that turn to face their walk direction with floating name tags; TV overlay perspective-sized + wall-occluded | ✅ | `apps/web/index.html` (Three3D) |
 | Real character model — optional GLB (Renderpeople "Eric" or a Mixamo business character); loads `apps/web/models/eric.glb` via GLTFLoader, auto-fits + tints per person, **falls back to the styled avatar** if absent | ✅ opt-in | `apps/web/index.html`, `CHARACTER.md` |

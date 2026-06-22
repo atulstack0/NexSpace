@@ -398,7 +398,8 @@
       else if(m.t==='draw'){wbStrokes.push(m.stroke);if(document.getElementById('wb').style.display==='flex')wbDrawStroke(m.stroke);}
       else if(m.t==='wbclear'){wbStrokes=[];if(document.getElementById('wb').style.display==='flex')wbRender();}
       else if(m.t==='react'){reactions.set(m.from,{emoji:m.emoji,t:performance.now()});}
-      else if(m.t==='nudge'){toast('👋 '+m.name+' nudged you');document.body.classList.add('shake');setTimeout(()=>document.body.classList.remove('shake'),450);}
+      else if(m.t==='nudge'){toast('👋 '+m.name+' nudged you');document.body.classList.add('shake');setTimeout(()=>document.body.classList.remove('shake'),450);
+        if(document.hidden||!document.hasFocus()){document.title='🔔 '+(m.name||'Someone')+' nudged you — '+baseTitle;if('Notification' in window&&Notification.permission==='granted'){try{new Notification('👋 '+(m.name||'Someone')+' nudged you',{tag:'nexspace-nudge'});}catch(_){}}}}
       else if(m.t==='kicked'){try{ws.close();}catch(_){}const ov=document.getElementById('overlay'),c=document.getElementById('card');ov.style.display='flex';if(c)c.innerHTML='<div class="orb"></div><h1>Removed</h1><p>You were removed from the office by an admin.</p>';}
     };
   }
@@ -1422,14 +1423,32 @@
     if(b.color)document.documentElement.style.setProperty('--accent',b.color);
     const brand=document.querySelector('#bar .brand');
     if(brand&&brand.lastChild&&brand.lastChild.nodeType===3)brand.lastChild.textContent=b.name||'NexSpace';
-    if(b.name)document.title=(b.whiteLabel?b.name:b.name+' · NexSpace');
+    if(b.name){document.title=(b.whiteLabel?b.name:b.name+' · NexSpace');baseTitle=document.title;}
     if(b.logo){const dot=document.querySelector('#bar .brand .dot');if(dot){dot.style.background='center/cover no-repeat url("'+b.logo+'")';}}}
   function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
   function addChat(m){const box=document.getElementById('chatMsgs');const d=document.createElement('div');d.className='cm'+(m.ai?' cm-ai':'');const mine=(m.from===myId);
     const tag=m.scope==='channel'?('#'+(m.channel||'')):m.scope==='dm'?'DM':m.scope;
     const who=m.ai?'#8ab4ff':(mine?'#fff':hsl(hueOf(m.from)));
     d.innerHTML='<span class="who" style="color:'+who+'">'+escapeHtml(m.name)+'</span><span class="sc">'+escapeHtml(tag)+'</span><br>'+escapeHtml(m.body);
-    box.appendChild(d);while(box.children.length>100)box.removeChild(box.firstChild);box.scrollTop=box.scrollHeight;}
+    box.appendChild(d);while(box.children.length>100)box.removeChild(box.firstChild);box.scrollTop=box.scrollHeight;
+    maybeNotify(m);}
+  // ---------- Notifications: DMs + @-mentions (browser notification + title flash + unread badge) ----------
+  let baseTitle=document.title,unread=0;
+  function updateChatBadge(){const b=document.getElementById('btnChat');if(b)b.textContent=unread>0?('💬 '+unread):'💬';}
+  function clearUnread(){unread=0;updateChatBadge();document.title=baseTitle;}
+  function maybeNotify(m){
+    if(m.from===myId||m.ai)return;
+    const isDM=m.scope==='dm';
+    const mention=myName&&new RegExp('@'+myName.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i').test(m.body||'');
+    if(!isDM&&!mention)return;
+    const chatOpen=document.getElementById('chat').style.display==='flex';
+    if(!chatOpen){unread++;updateChatBadge();}
+    if(document.hidden||!document.hasFocus()){
+      document.title='🔔 '+(m.name||'New message')+' — '+baseTitle;
+      if('Notification' in window&&Notification.permission==='granted'){try{const n=new Notification((isDM?'💬 DM · ':'💬 @ · ')+(m.name||'Someone'),{body:(m.body||'').slice(0,140),tag:'nexspace-chat'});n.onclick=()=>{window.focus();n.close();};}catch(_){}}
+    }}
+  addEventListener('focus',()=>{document.title=baseTitle;});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)document.title=baseTitle;});
 
   // ---------- Toolbar ----------
   document.getElementById('btnMic').addEventListener('click',function(){muted=!muted;this.textContent=muted?'🔇':'🔊';this.classList.toggle('danger',muted);this.classList.toggle('active',muted);});
@@ -1439,7 +1458,9 @@
     let html='<option value="nearby">Nearby</option><option value="floor">Floor</option><option value="channel:general">#general</option><option value="channel:random">#random</option>';
     for(const [id,e] of peers)html+='<option value="dm:'+id+'">DM → '+escapeHtml(e.name||'Guest')+'</option>';
     sel.innerHTML=html;if([...sel.options].some(o=>o.value===cur))sel.value=cur;document.getElementById('chatMod').style.display=(myRole==='admin'||myRole==='owner')?'':'none';}
-  document.getElementById('btnChat').addEventListener('click',()=>{const c=document.getElementById('chat');c.style.display=(c.style.display==='flex')?'none':'flex';if(c.style.display==='flex'){rebuildChatScopes();document.getElementById('chatText').focus();}});
+  document.getElementById('btnChat').addEventListener('click',()=>{const c=document.getElementById('chat');c.style.display=(c.style.display==='flex')?'none':'flex';
+    if(c.style.display==='flex'){rebuildChatScopes();document.getElementById('chatText').focus();clearUnread();
+      try{if('Notification' in window&&Notification.permission==='default')Notification.requestPermission();}catch(_){}}});
   document.getElementById('chatClose').addEventListener('click',()=>document.getElementById('chat').style.display='none');
   function sendChat(){const t=document.getElementById('chatText');const body=t.value.trim();if(!body||!ws||ws.readyState!==1)return;
     const v=document.getElementById('chatScope').value;let msg;
