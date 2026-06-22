@@ -22,7 +22,7 @@ const crypto = require("crypto");
 // environment (whitelisted so a stray PORT/DATABASE_URL in apps/api/.env can't hijack this server).
 // In production (Render etc.) these come from the dashboard and the file reads simply no-op.
 (function loadEnv() {
-  const want = /^(LIVEKIT_|S3_|GOOGLE_|YOUTUBE_|JWT_SECRET|OWNER_PASSWORD|ADMIN_PASSWORD|MEMBER_PASSWORD|ANTHROPIC_API_KEY|OPENAI_API_KEY|AI_MODEL)/;
+  const want = /^(LIVEKIT_|S3_|GOOGLE_|YOUTUBE_|JWT_SECRET|OWNER_PASSWORD|ADMIN_PASSWORD|MEMBER_PASSWORD|ANTHROPIC_API_KEY|OPENAI_API_KEY|OPENAI_BASE_URL|GEMINI_API_KEY|AI_MODEL)/;
   for (const f of [path.join(__dirname, ".env"), path.join(__dirname, "..", "api", ".env")]) {
     try {
       for (const line of fs.readFileSync(f, "utf8").split(/\r?\n/)) {
@@ -731,23 +731,35 @@ function deliverChat(d) {
   }
 }
 // ---------- In-office AI assistant (optional). Set ANTHROPIC_API_KEY or OPENAI_API_KEY (see AI_ASSISTANT.md). ----------
-const AI_MODEL = process.env.AI_MODEL || (process.env.ANTHROPIC_API_KEY ? "claude-3-5-haiku-latest" : "gpt-4o-mini");
-function aiConfigured() { return !!(process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY); }
+function aiProvider() { return process.env.ANTHROPIC_API_KEY ? "anthropic" : process.env.OPENAI_API_KEY ? "openai" : process.env.GEMINI_API_KEY ? "gemini" : null; }
+function aiConfigured() { return !!aiProvider(); }
+function aiModel() { if (process.env.AI_MODEL) return process.env.AI_MODEL; const p = aiProvider(); return p === "anthropic" ? "claude-3-5-haiku-latest" : p === "openai" ? "gpt-4o-mini" : "gemini-2.5-flash"; }
 const recentByFloor = new Map();   // floor -> recent chat messages (for "summarize" context)
 function rememberChat(d) { if (d.from === "assistant") return; const k = d.floor || DEFAULT_FLOOR; let a = recentByFloor.get(k); if (!a) { a = []; recentByFloor.set(k, a); } a.push({ name: d.name, body: d.body }); if (a.length > 40) a.shift(); }
 async function callLLM(system, userText) {
-  if (process.env.ANTHROPIC_API_KEY) {
+  const provider = aiProvider(), model = aiModel();
+  if (provider === "anthropic") {
     const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST",
       headers: { "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: AI_MODEL, max_tokens: 600, system, messages: [{ role: "user", content: userText }] }) });
+      body: JSON.stringify({ model, max_tokens: 600, system, messages: [{ role: "user", content: userText }] }) });
     const j = await r.json(); if (j.error) throw new Error(j.error.message || "anthropic error");
     return (j.content && j.content[0] && j.content[0].text) || "(no response)";
   }
-  const r = await fetch("https://api.openai.com/v1/chat/completions", { method: "POST",
-    headers: { "Authorization": "Bearer " + process.env.OPENAI_API_KEY, "content-type": "application/json" },
-    body: JSON.stringify({ model: AI_MODEL, max_tokens: 600, messages: [{ role: "system", content: system }, { role: "user", content: userText }] }) });
-  const j = await r.json(); if (j.error) throw new Error(j.error.message || "openai error");
-  return (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || "(no response)";
+  if (provider === "openai") {
+    const base = (process.env.OPENAI_BASE_URL || "https://api.openai.com").replace(/\/$/, ""); // OpenAI-compatible (Groq, OpenRouter, Together…)
+    const r = await fetch(base + "/v1/chat/completions", { method: "POST",
+      headers: { "Authorization": "Bearer " + process.env.OPENAI_API_KEY, "content-type": "application/json" },
+      body: JSON.stringify({ model, max_tokens: 600, messages: [{ role: "system", content: system }, { role: "user", content: userText }] }) });
+    const j = await r.json(); if (j.error) throw new Error(j.error.message || "openai error");
+    return (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || "(no response)";
+  }
+  // Google Gemini (free tier — generous, no card). https://aistudio.google.com → "Get API key"
+  const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", { method: "POST",
+    headers: { "content-type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
+    body: JSON.stringify({ system_instruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: userText }] }], generationConfig: { maxOutputTokens: 600 } }) });
+  const j = await r.json(); if (j.error) throw new Error((j.error && j.error.message) || "gemini error");
+  const c = j.candidates && j.candidates[0];
+  return (c && c.content && c.content.parts && c.content.parts.map((x) => x.text || "").join("")) || "(no response)";
 }
 function postAssistant(text, ctx) {
   const payload = { from: "assistant", name: "🤖 Assistant", scope: ctx.scope, channel: ctx.channel,
@@ -756,7 +768,7 @@ function postAssistant(text, ctx) {
   deliverChat(payload); publishEvent("chat", payload);
 }
 async function askAssistant(p, prompt, ctx) {
-  if (!aiConfigured()) { postAssistant("I'm not enabled yet — an admin needs to set ANTHROPIC_API_KEY or OPENAI_API_KEY (see AI_ASSISTANT.md).", ctx); return; }
+  if (!aiConfigured()) { postAssistant("I'm not enabled yet — an admin can turn me on with a free Google Gemini key (set GEMINI_API_KEY). See AI_ASSISTANT.md.", ctx); return; }
   const sys = "You are NexSpace's friendly in-office assistant inside a virtual office. Keep replies concise (a few sentences) and useful. You can answer questions, summarize the recent room chat, and draft short meeting notes. Reply in plain text.";
   const recent = recentByFloor.get(ctx.floor || DEFAULT_FLOOR) || [];
   const ctxText = recent.length ? ("Recent room chat:\n" + recent.slice(-25).map((c) => c.name + ": " + c.body).join("\n") + "\n\n") : "";
