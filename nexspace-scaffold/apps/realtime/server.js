@@ -210,7 +210,7 @@ function worldForClient(slug) {
   return {
     slug: f.slug, name: f.name, w: f.w, h: f.h, obstacles,
     furniture: (f.furniture || []).map(o => ({ ...o })),
-    rooms: f.rooms.map(r => ({ id: r.id, name: r.name, color: r.color, bounds: r.bounds, door: { x: r.door.x, y: r.door.y, w: r.door.w, h: r.door.h, state: r.door.state }, booking: r.booking || null })),
+    rooms: f.rooms.map(r => ({ id: r.id, name: r.name, color: r.color, bounds: r.bounds, door: { x: r.door.x, y: r.door.y, w: r.door.w, h: r.door.h, state: r.door.state }, booking: activeBooking(r), bookings: r.bookings || [] })),
     mediaWall: f.mediaWall ? { x: f.mediaWall.x, y: f.mediaWall.y, w: f.mediaWall.w, base: f.mediaWall.base, screenH: f.mediaWall.screenH, title: f.mediaWall.title, dur: f.mediaWall.dur } : null,
     portals: f.portals.map(pt => ({ id: pt.id, x: pt.x, y: pt.y, w: pt.w, h: pt.h, to: pt.to, label: pt.label, color: pt.color })),
     widgets: (f.widgets || []).map(wd => ({ ...wd })),
@@ -514,15 +514,24 @@ wss.on("connection", (ws) => {
     } else if (m.t === "bookRoom") {
       if (rank(p.role) < RANK.member) return deny(ws, "book a room", "member");
       const f = floorOf(p); const room = f.rooms.find((r) => r.id === m.roomId); if (!room) return;
+      const now = Date.now();
       const mins = Math.max(5, Math.min(240, Math.round(Number(m.minutes) || 30)));
-      room.booking = { title: String(m.title || "Meeting").slice(0, 60), by: p.name, byId: p.id, endsAt: Date.now() + mins * 60000 };
-      p.status = "inMeeting";                                  // presence auto-flips to "In a meeting"
+      let startsAt = Number(m.startsAt) || now;                 // absolute ms; clamp to a sane window (now-1min .. +14 days)
+      startsAt = Math.max(now - 60000, Math.min(now + 14 * 864e5, startsAt));
+      const endsAt = startsAt + mins * 60000;
+      if (!room.bookings) room.bookings = [];
+      if (room.bookings.some((b) => startsAt < b.endsAt && endsAt > b.startsAt))      // overlap → reject (tell the booker)
+        return send(ws, { t: "booking", roomId: room.id, bookings: room.bookings, booking: activeBooking(room), error: "That time overlaps an existing booking." });
+      room.bookings.push({ id: "bk-" + crypto.randomBytes(3).toString("hex"), title: String(m.title || "Meeting").slice(0, 60), by: p.name, byId: p.id, startsAt, endsAt });
+      room.bookings.sort((a, b) => a.startsAt - b.startsAt);
+      refreshRoomActive(f, room, now);                          // activates immediately if it starts now (flips presence + broadcasts)
       broadcastBooking(f, room);
     } else if (m.t === "cancelBooking") {
-      const f = floorOf(p); const room = f.rooms.find((r) => r.id === m.roomId); if (!room || !room.booking) return;
-      if (room.booking.byId !== p.id && rank(p.role) < RANK.admin) return deny(ws, "cancel this booking", "admin"); // only the booker or an admin
-      if (p.status === "inMeeting" && room.booking.byId === p.id) p.status = "available";
-      room.booking = null; broadcastBooking(f, room);
+      const f = floorOf(p); const room = f.rooms.find((r) => r.id === m.roomId); if (!room || !room.bookings) return;
+      const bk = room.bookings.find((b) => b.id === m.bookingId); if (!bk) return;
+      if (bk.byId !== p.id && rank(p.role) < RANK.admin) return deny(ws, "cancel this booking", "admin"); // only the booker or an admin
+      room.bookings = room.bookings.filter((b) => b.id !== m.bookingId);
+      refreshRoomActive(f, room, Date.now()); broadcastBooking(f, room);
     } else if (m.t === "recording") {
       if (rank(p.role) < RANK.admin) return deny(ws, "record", "admin");
       recording = m.on ? { on: true, by: p.name, egressId: m.egressId || null } : { on: false, by: null, egressId: null };
@@ -626,9 +635,12 @@ let lastTick = Date.now();
 setInterval(() => {
   const now = Date.now(), dt = (now - lastTick) / 1000; lastTick = now;
   for (const f of floors.values()) if (f.mediaWall && f.mediaWall.playing) { f.mediaWall.pos += dt; if (f.mediaWall.pos > f.mediaWall.dur) f.mediaWall.pos = 0; }
-  for (const f of floors.values()) for (const r of f.rooms) if (r.booking && r.booking.endsAt <= now) {  // expire finished meetings
-    const owner = [...clients.values()].find((q) => q.id === r.booking.byId); if (owner && owner.status === "inMeeting") owner.status = "available";
-    r.booking = null; broadcastBooking(f, r);
+  for (const f of floors.values()) for (const r of f.rooms) {   // schedule: drop finished bookings, activate ones whose start arrived
+    if (!r.bookings || !r.bookings.length) { if (r._activeId) { refreshRoomActive(f, r, now); broadcastBooking(f, r); } continue; }
+    const before = r.bookings.length;
+    r.bookings = r.bookings.filter((b) => b.endsAt > now);
+    const changed = refreshRoomActive(f, r, now);
+    if (changed || r.bookings.length !== before) broadcastBooking(f, r);
   }
   if (clients.size === 0) return;
   // group all presence (local + cross-node) by floor, then send each client only its own floor's snapshot
@@ -687,7 +699,17 @@ async function startEgress(room) {
 }
 async function stopEgress(egressId) { const info = await egressClient().stopEgress(egressId); return { egressId, status: info.status }; }
 function broadcastLocal(msg) { const s = JSON.stringify(msg); for (const ws of clients.keys()) if (ws.readyState === 1) ws.send(s); }
-function broadcastBooking(f, room) { const msg = JSON.stringify({ t: "booking", floor: f.slug, roomId: room.id, booking: room.booking || null }); for (const [ws, q] of clients) if (q.floor === f.slug && ws.readyState === 1) ws.send(msg); }
+function activeBooking(room) { if (!room.bookings) return null; const now = Date.now(); return room.bookings.find((b) => b.startsAt <= now && b.endsAt > now) || null; }
+// Recompute the active booking; on a transition flip the booker's presence (→inMeeting on start, →available on end). Returns true if it changed.
+function refreshRoomActive(f, room, now) {
+  const active = (room.bookings || []).find((b) => b.startsAt <= now && b.endsAt > now) || null;
+  const id = active ? active.id : null;
+  if (id === (room._activeId || null)) { room.booking = active; return false; }
+  if (active) { const o = [...clients.values()].find((q) => q.id === active.byId); if (o && o.status === "available") o.status = "inMeeting"; }
+  else { const o = room._activeBy && [...clients.values()].find((q) => q.id === room._activeBy); if (o && o.status === "inMeeting") o.status = "available"; }
+  room._activeId = id; room._activeBy = active ? active.byId : null; room.booking = active; return true;
+}
+function broadcastBooking(f, room) { const msg = JSON.stringify({ t: "booking", floor: f.slug, roomId: room.id, bookings: room.bookings || [], booking: activeBooking(room) }); for (const [ws, q] of clients) if (q.floor === f.slug && ws.readyState === 1) ws.send(msg); }
 // chat routing (§6.9): channels are org-wide (cross-floor); floor + nearby are local to the sender's floor
 function deliverChat(d) {
   const dfloor = d.floor || DEFAULT_FLOOR;

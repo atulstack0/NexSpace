@@ -40,7 +40,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Proximity + room + broadcast spatial audio (Web Audio PannerNode) | ✅ | `apps/web/index.html` |
 | Real voice/video (LiveKit) — video-in-bubble, proximity track culling, mic/cam toggles | ✅ opt-in | `apps/api` (token/egress) + `apps/web` |
 | Rooms, doors (open/closed/locked) + knock-to-enter — closed (unlocked) doors open from outside so empty rooms are enterable; **3D walls have a real door opening** + a state-coloured door panel (hidden when open) | ✅ | realtime + web |
-| Meeting rooms & schedule — book a room (title + duration), nameplate in 2D/3D, today's-schedule panel, presence auto-flips to **In a meeting**, auto-expires; booker/admin can cancel | ✅ | realtime `bookRoom`/`cancelBooking`, web `📅 Rooms` |
+| Meeting rooms & schedule — book a **start time + duration** (per-room schedule, overlap-rejected), today's agenda list per room, nameplate in 2D/3D, meetings **auto-activate at start** + presence flips to **In a meeting**, auto-expire; booker/admin cancel by id | ✅ | realtime `bookRoom`/`cancelBooking`, web `📅 Rooms` |
 | Broadcast mode | ✅ | realtime + web |
 | Shared YouTube TV (watch-party) — one screen, search/paste, shared queue, **playback synced to the same second** + shared play/pause (YouTube IFrame API), thumbnail on the wall in 2D/3D | ✅ | realtime `/youtube/search` + `tv*`/`tvCtrl`, web |
 | Text chat — nearby / floor / #channels / private DMs, room-aware, cross-node, XSS-safe | ✅ | realtime + web |

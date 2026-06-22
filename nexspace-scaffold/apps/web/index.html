@@ -82,6 +82,10 @@
   .roomrow input{flex:1;min-width:120px}
   .rdot{width:10px;height:10px;border-radius:50%;flex:0 0 auto}
   .rbusy{color:#ffb454}
+  .rsched{display:flex;flex-direction:column;gap:3px;margin:1px 0 2px}
+  .rsi{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted);background:#0d1424;border:1px solid var(--line);border-radius:7px;padding:4px 8px}
+  .rsi.rsa{color:#ffd27a;border-color:rgba(255,180,84,.45)}
+  .rsi button{padding:2px 7px;font-size:11px}
   .tvbox{display:flex;flex-direction:column;gap:8px;width:600px;max-width:94vw;max-height:54vh;background:rgba(15,22,38,.97);border:1px solid var(--line);border-radius:14px;padding:12px;box-shadow:0 10px 34px rgba(0,0,0,.45)}
   .tvhead{display:flex;align-items:center;gap:10px;font-size:14px;flex:0 0 auto}
   #tvNow{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%}
@@ -377,7 +381,9 @@
         document.getElementById('count').textContent=m.players.length;
       }
       else if(m.t==='world'){world=m.world;WORLD={w:world.w,h:world.h};world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});applyBranding(world.branding);if(threeMode)Three3D.rebuild();toast('🛠️ Office layout updated');}
-      else if(m.t==='booking'){if(world&&(!m.floor||m.floor===myFloor)){const r=(world.rooms||[]).find(x=>x.id===m.roomId);if(r){r.booking=m.booking;if(roomsOpen())renderRooms();const who=m.booking?('📅 '+(m.booking.by||'Someone')+' booked '+(r.name||'a room')):('🟢 '+(r.name||'A room')+' is free');toast(who);}}}
+      else if(m.t==='booking'){if(world&&(!m.floor||m.floor===myFloor)){const r=(world.rooms||[]).find(x=>x.id===m.roomId);if(r){const wasActive=r.booking&&r.booking.id;r.booking=m.booking;if(m.bookings)r.bookings=m.bookings;if(roomsOpen())renderRooms();
+        if(m.error)toast('⚠️ '+m.error);
+        else if(m.booking&&m.booking.id!==wasActive)toast('📅 '+(r.name||'Room')+': '+m.booking.title+' started');}}}
       else if(m.t==='denied')toast('🔒 You need '+m.need+' role to '+m.action+'.');
       else if(m.t==='chat')addChat(m);
       else if(m.t==='draw'){wbStrokes.push(m.stroke);if(document.getElementById('wb').style.display==='flex')wbDrawStroke(m.stroke);}
@@ -1318,31 +1324,32 @@
     const def={suit:'#24272f',tie:hslHex(212,72,52),skin:'#f1c9a5',model:''};
     if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'appearance',appear:def}));   // others fall back to the default look
     toast('🎨 Avatar reset');openCustomize();}
+  function startMsFrom(val){if(!val)return Date.now();const p=String(val).split(':');const d=new Date();d.setHours(+p[0]||0,+p[1]||0,0,0);let t=d.getTime();if(t<Date.now()-60000)t=Date.now();return t;} // today @ HH:MM (past → now)
   function renderRooms(){const box=document.getElementById('roomsList');if(!box||!world)return;
-    const rms=world.rooms||[],sub=document.getElementById('roomsSub');
-    const booked=rms.filter(r=>r.booking).length;if(sub)sub.textContent=rms.length?(booked?booked+' in use':'all free'):'';
+    const rms=world.rooms||[],sub=document.getElementById('roomsSub'),now=Date.now();
+    const inUse=rms.filter(r=>r.booking).length;if(sub)sub.textContent=rms.length?(inUse?inUse+' in use now':'all free'):'';
     box.innerHTML='';
     if(!rms.length){box.innerHTML='<div style="color:var(--muted);font-size:12px;padding:6px">No rooms on this floor.</div>';return;}
     for(const r of rms){
       const row=document.createElement('div');row.className='roomrow';
       const head=document.createElement('div');head.className='rt';
-      head.innerHTML='<span class="rdot" style="background:'+escapeHtml(r.color||'#5b8cff')+'"></span>'+escapeHtml(r.name);
+      head.innerHTML='<span class="rdot" style="background:'+escapeHtml(r.color||'#5b8cff')+'"></span>'+escapeHtml(r.name)+(r.booking?' <span class="rbusy">· in use</span>':' <span style="color:#39d3a6;font-weight:600">· free</span>');
       row.appendChild(head);
+      const list=(r.bookings||[]).filter(b=>b.endsAt>now).sort((a,b)=>a.startsAt-b.startsAt);  // today's agenda (active + upcoming)
+      if(list.length){const sl=document.createElement('div');sl.className='rsched';
+        for(const b of list){const item=document.createElement('div');item.className='rsi'+((b.startsAt<=now&&b.endsAt>now)?' rsa':'');
+          const t=document.createElement('span');t.innerHTML='<b>'+fmtUntil(b.startsAt)+'–'+fmtUntil(b.endsAt)+'</b> '+escapeHtml(b.title)+' · '+escapeHtml(b.by);
+          const x=document.createElement('button');x.className='btn';x.textContent='✕';x.title='Cancel';x.onclick=()=>roomSend({t:'cancelBooking',roomId:r.id,bookingId:b.id});
+          item.appendChild(t);item.appendChild(x);sl.appendChild(item);}
+        row.appendChild(sl);}
       const f=document.createElement('div');f.className='rf';
-      if(r.booking){
-        const b=document.createElement('div');b.className='rb';
-        b.innerHTML='<span class="rbusy">📅 '+escapeHtml(r.booking.title)+'</span> · '+escapeHtml(r.booking.by)+' · until <b>'+fmtUntil(r.booking.endsAt)+'</b>';
-        row.appendChild(b);
-        const cancel=document.createElement('button');cancel.className='btn';cancel.textContent='✕ Cancel';cancel.onclick=()=>roomSend({t:'cancelBooking',roomId:r.id});
-        f.appendChild(cancel);
-      }else{
-        const inp=document.createElement('input');inp.placeholder='Meeting title';inp.maxLength=60;
-        const sel=document.createElement('select');[['15','15 min'],['30','30 min'],['45','45 min'],['60','1 hour']].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;if(v==='30')o.selected=true;sel.appendChild(o);});
-        const book=document.createElement('button');book.className='btn';book.textContent='Book';
-        book.onclick=()=>roomSend({t:'bookRoom',roomId:r.id,title:inp.value||'Meeting',minutes:+sel.value});
-        inp.addEventListener('keydown',e=>{if(e.key==='Enter')book.click();});
-        f.appendChild(inp);f.appendChild(sel);f.appendChild(book);
-      }
+      const inp=document.createElement('input');inp.placeholder='Meeting title';inp.maxLength=60;
+      const ti=document.createElement('input');ti.type='time';const dd=new Date(now+5*60000);ti.value=String(dd.getHours()).padStart(2,'0')+':'+String(dd.getMinutes()).padStart(2,'0');ti.title='Start time (today)';ti.style.maxWidth='104px';ti.style.flex='0 0 auto';
+      const sel=document.createElement('select');[['15','15m'],['30','30m'],['45','45m'],['60','1h'],['90','1.5h']].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;if(v==='30')o.selected=true;sel.appendChild(o);});
+      const book=document.createElement('button');book.className='btn';book.textContent='Book';
+      const doBook=()=>{roomSend({t:'bookRoom',roomId:r.id,title:inp.value||'Meeting',startsAt:startMsFrom(ti.value),minutes:+sel.value});inp.value='';};
+      book.onclick=doBook;inp.addEventListener('keydown',e=>{if(e.key==='Enter')doBook();});
+      f.appendChild(inp);f.appendChild(ti);f.appendChild(sel);f.appendChild(book);
       row.appendChild(f);box.appendChild(row);
     }}
   // ---- CSS perspective homography: skew the live-video element onto the wall TV's 4 projected corners (matrix3d).

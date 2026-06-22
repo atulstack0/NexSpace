@@ -51,7 +51,7 @@ await new Promise((res, rej) => {
 function join(name, token) {
   return new Promise((resolve) => {
     const ws = new WebSocket(`ws://localhost:${PORT}`);
-    const st = { ws, name, id: null, role: null, world: null, floorMsg: null, tv: null, last: null, denied: [], rateLimited: false, chats: [], draws: [], cleared: false, reacts: [], nudged: false, kicked: false, bookings: {} };
+    const st = { ws, name, id: null, role: null, world: null, floorMsg: null, tv: null, last: null, denied: [], rateLimited: false, chats: [], draws: [], cleared: false, reacts: [], nudged: false, kicked: false, bookings: {}, sched: {} };
     ws.on("open", () => ws.send(JSON.stringify({ t: "join", name, token })));
     ws.on("message", (d) => {
       const m = JSON.parse(d.toString());
@@ -60,7 +60,7 @@ function join(name, token) {
       if (m.t === "world") st.world = m.world; // live layout reload / owner edit
       if (m.t === "tv") st.tv = m;
       if (m.t === "snapshot") st.last = m;
-      if (m.t === "booking") st.bookings[m.roomId] = m.booking;
+      if (m.t === "booking") { st.bookings[m.roomId] = m.booking; if (m.bookings) st.sched[m.roomId] = m.bookings; }
       if (m.t === "denied") st.denied.push(m.action);
       if (m.t === "rateLimited") st.rateLimited = true;
       if (m.t === "chat") st.chats.push(m);
@@ -273,17 +273,24 @@ try {
   await wait(200);
   (guest.denied.includes("edit the floor")) ? ok("guest denied floor editing (RBAC)") : bad("guest floor edit was NOT blocked");
 
-  // meeting rooms — book → broadcast + presence flips to inMeeting; guest denied; booker/admin cancels
+  // meeting rooms (scheduled) — book now (active + presence flip), schedule a future slot, reject overlap, guest denied, cancel by id
   admin.ws.send(JSON.stringify({ t: "bookRoom", roomId: "focus", title: "Standup", minutes: 30 }));
   await wait(320);
-  (guest.bookings.focus && guest.bookings.focus.title === "Standup") ? ok("room booking broadcasts to others (title + endsAt)") : bad("room booking not broadcast");
+  (guest.bookings.focus && guest.bookings.focus.title === "Standup") ? ok("booking that starts now broadcasts + is active") : bad("now-booking not broadcast/active");
   (admin.last?.players?.find((p) => p.id === admin.id)?.status === "inMeeting") ? ok("booker presence auto-flips to inMeeting") : bad("booker status did not flip");
+  admin.ws.send(JSON.stringify({ t: "bookRoom", roomId: "focus", title: "Later", startsAt: Date.now() + 3600000, minutes: 15 }));
+  await wait(250);
+  ((guest.sched.focus || []).some((b) => b.title === "Later") && guest.bookings.focus?.title === "Standup") ? ok("future booking is scheduled but not yet active") : bad("future booking activated early or missing");
+  admin.ws.send(JSON.stringify({ t: "bookRoom", roomId: "focus", title: "Clash", minutes: 30 }));   // overlaps the active now-slot
+  await wait(220);
+  (!(guest.sched.focus || []).some((b) => b.title === "Clash")) ? ok("overlapping booking is rejected") : bad("overlap was not rejected");
   guest.ws.send(JSON.stringify({ t: "bookRoom", roomId: "board", title: "x", minutes: 15 }));
   await wait(200);
   (guest.denied.includes("book a room")) ? ok("guest denied booking a room (RBAC member+)") : bad("guest booking was NOT blocked");
-  admin.ws.send(JSON.stringify({ t: "cancelBooking", roomId: "focus" }));
+  const activeId = guest.bookings.focus?.id;
+  admin.ws.send(JSON.stringify({ t: "cancelBooking", roomId: "focus", bookingId: activeId }));
   await wait(220);
-  (guest.bookings.focus === null) ? ok("cancelling a booking clears it for everyone") : bad("cancel did not clear the booking");
+  (guest.bookings.focus === null) ? ok("cancelling the active booking by id clears it for everyone") : bad("cancel did not clear the active booking");
 
   // avatar customization — appearance (colours + name) syncs to others via presence; invalid colours sanitized
   admin.ws.send(JSON.stringify({ t: "appearance", name: "Ada A", appear: { suit: "#112233", tie: "#aabbcc", skin: "#ddccbb" } }));
