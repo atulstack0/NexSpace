@@ -22,7 +22,7 @@ const crypto = require("crypto");
 // environment (whitelisted so a stray PORT/DATABASE_URL in apps/api/.env can't hijack this server).
 // In production (Render etc.) these come from the dashboard and the file reads simply no-op.
 (function loadEnv() {
-  const want = /^(LIVEKIT_|S3_|GOOGLE_|YOUTUBE_|JWT_SECRET|OWNER_PASSWORD|ADMIN_PASSWORD|MEMBER_PASSWORD)/;
+  const want = /^(LIVEKIT_|S3_|GOOGLE_|YOUTUBE_|JWT_SECRET|OWNER_PASSWORD|ADMIN_PASSWORD|MEMBER_PASSWORD|ANTHROPIC_API_KEY|OPENAI_API_KEY|AI_MODEL)/;
   for (const f of [path.join(__dirname, ".env"), path.join(__dirname, "..", "api", ".env")]) {
     try {
       for (const line of fs.readFileSync(f, "utf8").split(/\r?\n/)) {
@@ -546,6 +546,9 @@ wss.on("connection", (ws) => {
       const r = floorOf(p).rooms.find((rm) => inRoom(p, rm));
       const payload = { from: p.id, name: p.name, scope, channel, to, body, floor: p.floor, x: p.x, y: p.y, roomId: r ? r.id : null, ts: Date.now() };
       deliverChat(payload); publishEvent("chat", payload); // local + cross-node
+      rememberChat(payload);
+      const aiM = body.trim().match(/^(?:@ai|\/ai)\b\s*([\s\S]*)$/i);   // ask the in-office assistant
+      if (aiM && Date.now() - (p.lastAiAt || 0) > 3000) { p.lastAiAt = Date.now(); askAssistant(p, aiM[1] || "", { scope, channel, to, floor: p.floor, askerId: p.id, x: p.x, y: p.y, roomId: payload.roomId }); }
     } else if (m.t === "draw") {
       const stroke = m.stroke; if (!stroke || !Array.isArray(stroke.pts) || stroke.pts.length > 2000) return;
       whiteboard.strokes.push(stroke); if (whiteboard.strokes.length > 3000) whiteboard.strokes.shift();
@@ -724,8 +727,42 @@ function deliverChat(d) {
       const pr = floorOf(p).rooms.find((r) => inRoom(p, r)), prId = pr ? pr.id : null;
       target = d.roomId ? (prId === d.roomId) : (!prId && Math.hypot(p.x - d.x, p.y - d.y) < CHAT_NEARBY);
     }
-    if (target) send(ws, { t: "chat", from: d.from, name: d.name, scope: d.scope, channel: d.channel, to: d.to, body: d.body, ts: d.ts });
+    if (target) send(ws, { t: "chat", from: d.from, name: d.name, scope: d.scope, channel: d.channel, to: d.to, body: d.body, ts: d.ts, ai: d.ai || false });
   }
+}
+// ---------- In-office AI assistant (optional). Set ANTHROPIC_API_KEY or OPENAI_API_KEY (see AI_ASSISTANT.md). ----------
+const AI_MODEL = process.env.AI_MODEL || (process.env.ANTHROPIC_API_KEY ? "claude-3-5-haiku-latest" : "gpt-4o-mini");
+function aiConfigured() { return !!(process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY); }
+const recentByFloor = new Map();   // floor -> recent chat messages (for "summarize" context)
+function rememberChat(d) { if (d.from === "assistant") return; const k = d.floor || DEFAULT_FLOOR; let a = recentByFloor.get(k); if (!a) { a = []; recentByFloor.set(k, a); } a.push({ name: d.name, body: d.body }); if (a.length > 40) a.shift(); }
+async function callLLM(system, userText) {
+  if (process.env.ANTHROPIC_API_KEY) {
+    const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST",
+      headers: { "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify({ model: AI_MODEL, max_tokens: 600, system, messages: [{ role: "user", content: userText }] }) });
+    const j = await r.json(); if (j.error) throw new Error(j.error.message || "anthropic error");
+    return (j.content && j.content[0] && j.content[0].text) || "(no response)";
+  }
+  const r = await fetch("https://api.openai.com/v1/chat/completions", { method: "POST",
+    headers: { "Authorization": "Bearer " + process.env.OPENAI_API_KEY, "content-type": "application/json" },
+    body: JSON.stringify({ model: AI_MODEL, max_tokens: 600, messages: [{ role: "system", content: system }, { role: "user", content: userText }] }) });
+  const j = await r.json(); if (j.error) throw new Error(j.error.message || "openai error");
+  return (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || "(no response)";
+}
+function postAssistant(text, ctx) {
+  const payload = { from: "assistant", name: "🤖 Assistant", scope: ctx.scope, channel: ctx.channel,
+    to: ctx.scope === "dm" ? ctx.askerId : ctx.to, body: String(text || "").slice(0, 1500),
+    floor: ctx.floor, x: ctx.x, y: ctx.y, roomId: ctx.roomId, ts: Date.now(), ai: true };
+  deliverChat(payload); publishEvent("chat", payload);
+}
+async function askAssistant(p, prompt, ctx) {
+  if (!aiConfigured()) { postAssistant("I'm not enabled yet — an admin needs to set ANTHROPIC_API_KEY or OPENAI_API_KEY (see AI_ASSISTANT.md).", ctx); return; }
+  const sys = "You are NexSpace's friendly in-office assistant inside a virtual office. Keep replies concise (a few sentences) and useful. You can answer questions, summarize the recent room chat, and draft short meeting notes. Reply in plain text.";
+  const recent = recentByFloor.get(ctx.floor || DEFAULT_FLOOR) || [];
+  const ctxText = recent.length ? ("Recent room chat:\n" + recent.slice(-25).map((c) => c.name + ": " + c.body).join("\n") + "\n\n") : "";
+  const ask = (prompt || "").trim() || "Summarize the recent room chat.";
+  try { const text = await callLLM(sys, ctxText + "Request from " + p.name + ": " + ask); postAssistant(text, ctx); }
+  catch (e) { postAssistant("⚠️ I couldn't reach the AI service (" + (e && e.message || e) + ").", ctx); }
 }
 function deny(ws, action, need) { send(ws, { t: "denied", action, need }); } // RBAC refusal feedback
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }

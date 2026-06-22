@@ -302,6 +302,15 @@ try {
   const ap2 = guest.last?.players?.find((p) => p.id === admin.id);
   (ap2 && ap2.appear && ap2.appear.suit === "#24272f" && ap2.appear.tie === "#00ff00") ? ok("invalid appearance colours are sanitized to defaults") : bad("appearance not sanitized");
 
+  // AI assistant — @ai triggers an assistant reply (graceful "not enabled" when no API key is set, as in this test env)
+  admin.ws.send(JSON.stringify({ t: "chat", scope: "floor", body: "@ai hello" }));
+  await wait(350);
+  (admin.chats.some((c) => c.from === "assistant" && c.ai)) ? ok("@ai triggers an assistant reply") : bad("assistant did not reply to @ai");
+  const aiBefore = admin.chats.filter((c) => c.from === "assistant").length;
+  admin.ws.send(JSON.stringify({ t: "chat", scope: "floor", body: "just a normal message" }));
+  await wait(250);
+  (admin.chats.filter((c) => c.from === "assistant").length === aiBefore) ? ok("a normal chat does not trigger the assistant") : bad("assistant triggered on a non-@ai chat");
+
   // reactions (6.6)
   admin.ws.send(JSON.stringify({ t: "react", emoji: "🎉" }));
   await wait(300);

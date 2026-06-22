@@ -44,6 +44,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Broadcast mode | ✅ | realtime + web |
 | Shared YouTube TV (watch-party) — one screen, search/paste, shared queue, **playback synced to the same second** + shared play/pause (YouTube IFrame API), thumbnail on the wall in 2D/3D | ✅ | realtime `/youtube/search` + `tv*`/`tvCtrl`, web |
 | Text chat — nearby / floor / #channels / private DMs, room-aware, cross-node, XSS-safe | ✅ | realtime + web |
+| In-office AI assistant — `@ai <q>` in chat (or 🤖 button): answers, summarizes recent room chat, drafts notes; Anthropic/OpenAI via env key, graceful when unset, per-user cooldown | ✅ opt-in | realtime `askAssistant`, web; `AI_ASSISTANT.md` |
 | Screen sharing (LiveKit) — publish + multi-share focus viewer | ✅ opt-in | `apps/web` |
 | Collaborative whiteboard — synced strokes + clear, late-joiner state, cross-node | ✅ | realtime + web |
 | Reactions (floating emoji), nudge, moderation (admin mute / kick) | ✅ | realtime + web |

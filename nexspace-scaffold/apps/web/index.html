@@ -103,6 +103,7 @@
   #chat .chead select{margin-left:auto;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:3px 6px;font-size:12px}
   #chatMsgs{height:190px;overflow-y:auto;padding:8px 10px;display:flex;flex-direction:column;gap:6px;font-size:13px}
   #chatMsgs .cm .who{font-weight:700} #chatMsgs .cm .sc{font-size:10px;color:var(--muted);margin-left:5px}
+  #chatMsgs .cm-ai{background:rgba(91,140,255,.10);border-left:2px solid #5b8cff;padding:4px 6px;border-radius:5px;white-space:pre-wrap}
   #chatRow{display:flex;gap:6px;padding:8px;border-top:1px solid var(--line)}
   #chatText{flex:1;background:#0d1424;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:7px 9px;font-size:13px}
   #screenshare{position:fixed;inset:5% 5% 8% 5%;z-index:30;display:none;flex-direction:column;background:rgba(10,15,28,.97);border:1px solid var(--line);border-radius:14px;overflow:hidden}
@@ -204,7 +205,7 @@
     <button class="btn" id="chatClose" style="padding:2px 8px">✕</button>
   </div>
   <div id="chatMsgs"></div>
-  <div id="chatRow"><input id="chatText" maxlength="500" placeholder="Message…" /><button class="btn" id="chatSend">Send</button></div>
+  <div id="chatRow"><input id="chatText" maxlength="500" placeholder="Message…  (type @ai to ask the assistant)" /><button class="btn" id="chatAi" title="Ask the 🤖 AI assistant">🤖</button><button class="btn" id="chatSend">Send</button></div>
 </div>
 <div id="screenHolder" style="display:none"></div>
 <div id="screenshare">
@@ -1414,9 +1415,10 @@
     if(b.name)document.title=(b.whiteLabel?b.name:b.name+' · NexSpace');
     if(b.logo){const dot=document.querySelector('#bar .brand .dot');if(dot){dot.style.background='center/cover no-repeat url("'+b.logo+'")';}}}
   function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-  function addChat(m){const box=document.getElementById('chatMsgs');const d=document.createElement('div');d.className='cm';const mine=(m.from===myId);
+  function addChat(m){const box=document.getElementById('chatMsgs');const d=document.createElement('div');d.className='cm'+(m.ai?' cm-ai':'');const mine=(m.from===myId);
     const tag=m.scope==='channel'?('#'+(m.channel||'')):m.scope==='dm'?'DM':m.scope;
-    d.innerHTML='<span class="who" style="color:'+(mine?'#fff':hsl(hueOf(m.from)))+'">'+escapeHtml(m.name)+'</span><span class="sc">'+escapeHtml(tag)+'</span><br>'+escapeHtml(m.body);
+    const who=m.ai?'#8ab4ff':(mine?'#fff':hsl(hueOf(m.from)));
+    d.innerHTML='<span class="who" style="color:'+who+'">'+escapeHtml(m.name)+'</span><span class="sc">'+escapeHtml(tag)+'</span><br>'+escapeHtml(m.body);
     box.appendChild(d);while(box.children.length>100)box.removeChild(box.firstChild);box.scrollTop=box.scrollHeight;}
 
   // ---------- Toolbar ----------
@@ -1436,6 +1438,7 @@
     else msg={t:'chat',scope:v,body};
     ws.send(JSON.stringify(msg));t.value='';}
   document.getElementById('chatSend').addEventListener('click',sendChat);
+  document.getElementById('chatAi').addEventListener('click',()=>{const t=document.getElementById('chatText');if(!/^@ai\b/i.test(t.value))t.value='@ai '+t.value;t.focus();});
   document.getElementById('chatText').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
   // ---------- Whiteboard (§6.8) ----------
   let wbStrokes=[],wbColor='#5b8cff',wbDrawing=false,wbCur=null;
