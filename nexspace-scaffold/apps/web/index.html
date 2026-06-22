@@ -554,8 +554,8 @@
       try{await room.localParticipant.setMicrophoneEnabled(true);micOn=true;}catch(e){toast('🎤 Allow microphone access, then click the 🎤 button');}
       mb.classList.toggle('active',micOn);
       setupMicMeter();                                          // measure my own mic loudness for accurate self-waves
-      try{await room.localParticipant.setCameraEnabled(true);cb.classList.add('active');}catch(e){}
-      toast('🎙️ LiveKit connected — real voice & video');
+      cb.classList.remove('active');                            // camera OFF by default — click 🎥 to turn it on
+      toast('🎙️ LiveKit connected — voice on, camera off (click 🎥 to share video)');
       try{await room.startAudio();}catch(_){}                   // unblock playback (autoplay policy)
       if(actx&&actx.state==='suspended')toast('🔊 Move or click anywhere to enable sound');
     }catch(e){lkActive=false;toast('LiveKit connect failed — using synth audio');}
