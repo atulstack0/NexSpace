@@ -720,8 +720,8 @@ function refreshRoomActive(f, room, now) {
   const active = (room.bookings || []).find((b) => b.startsAt <= now && b.endsAt > now) || null;
   const id = active ? active.id : null;
   if (id === (room._activeId || null)) { room.booking = active; return false; }
-  if (active) { const o = [...clients.values()].find((q) => q.id === active.byId); if (o && o.status === "available") o.status = "inMeeting"; }
-  else { const o = room._activeBy && [...clients.values()].find((q) => q.id === room._activeBy); if (o && o.status === "inMeeting") o.status = "available"; }
+  if (active) { const o = [...clients.values()].find((q) => q.id === active.byId); if (o && o.status !== "inMeeting") o.status = "inMeeting"; }            // meeting started → in a meeting
+  else { const o = room._activeBy && [...clients.values()].find((q) => q.id === room._activeBy); if (o && o.status === "inMeeting") o.status = "available"; } // meeting ended → free again
   room._activeId = id; room._activeBy = active ? active.byId : null; room.booking = active; return true;
 }
 function broadcastBooking(f, room) { const msg = JSON.stringify({ t: "booking", floor: f.slug, roomId: room.id, bookings: room.bookings || [], booking: activeBooking(room) }); for (const [ws, q] of clients) if (q.floor === f.slug && ws.readyState === 1) ws.send(msg); }
