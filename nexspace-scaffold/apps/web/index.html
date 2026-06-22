@@ -1358,6 +1358,13 @@
     wd.style.width=W+'px';wd.style.height=H+'px';wd.style.left='0';wd.style.top='0';wd.style.borderRadius='0';wd.style.transformOrigin='0 0';wd.style.transform='matrix3d('+m.join(',')+')';
   }
   // position/skew the wall-TV player each frame (2D camera transform, or matrix3d-mounted on the 3D wall)
+  // Is an avatar standing within the TV's screen footprint (in front of it)? The HTML video can't be depth-sorted with
+  // WebGL avatars, so when someone is in front we hide the live overlay and let the in-scene poster show (correct depth).
+  function tvAvatarInFront(m){if(!m)return false;
+    const zone=(x,y)=>x>m.x-55&&x<m.x+m.w+55&&Math.abs(y-m.y)<185;
+    if(zone(me.x,me.y))return true;
+    for(const e of peers.values())if(zone(e.rx,e.ry))return true;
+    return false;}
   function tvPositionWorld(){const wd=document.getElementById('tvWorld');if(!wd)return;tvWallShown=false;
     const hasContent=(ytPlayer&&ytPlayer.getCurrentTime)||tvRaw;
     if(!world||!world.mediaWall||!hasContent){wd.style.display='none';wd.style.transform='';return;}
@@ -1365,8 +1372,8 @@
     wd.classList.remove('pip');
     if(viewMode==='3d'){
       const q=(threeMode&&Three3D.tvQuad)?Three3D.tvQuad():null;     // 4 projected corners of the wall TV (or null if hidden/occluded)
-      if(tvSync.playing&&q){const W=512,H=Math.max(160,Math.round(512*(m.screenH||150)/m.w));tvApplyQuad(wd,W,H,q);wd.style.display='block';tvWallShown=true;}
-      else{wd.style.display='none';wd.style.transform='';}            // paused or TV not in view → the wall shows the poster instead
+      if(tvSync.playing&&q&&!tvAvatarInFront(m)){const W=512,H=Math.max(160,Math.round(512*(m.screenH||150)/m.w));tvApplyQuad(wd,W,H,q);wd.style.display='block';tvWallShown=true;}
+      else{wd.style.display='none';wd.style.transform='';}            // paused / out of view / someone standing in front → show the in-scene poster
       return;
     }
     wd.style.transform='';wd.style.borderRadius='6px';               // 2D: glue flat to the wall, no skew
