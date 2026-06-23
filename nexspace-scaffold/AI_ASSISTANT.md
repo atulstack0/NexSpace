@@ -13,6 +13,16 @@ NexSpace has a built-in **🤖 Assistant** you talk to from chat. In any chat sc
 the same scope, so the room sees the answer. It has the **recent room chat** as context, so "summarize"
 and "take notes" work.
 
+### Built-in commands (work with **no API key**)
+- **`@ai who's here`** — lists everyone currently on your floor.
+- **`@ai schedule`** — today's room bookings on your floor (time · title · who).
+- **`@ai help`** — what the assistant can do.
+
+These are answered instantly from server state (no LLM call). Free-form questions and summaries need a key (below).
+
+### Auto meeting-notes
+When a booked meeting **ends**, if a key is set and there was chat, the assistant posts brief **📝 notes** to the floor.
+
 ## Enable it for FREE (recommended: Google Gemini)
 
 The most generous free option is **Google Gemini** — ~**1,500 requests/day, no credit card, no expiry**.

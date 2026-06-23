@@ -673,7 +673,9 @@ setInterval(() => {
   for (const f of floors.values()) for (const r of f.rooms) {   // schedule: drop finished bookings, activate ones whose start arrived
     if (!r.bookings || !r.bookings.length) { if (r._activeId) { refreshRoomActive(f, r, now); broadcastBooking(f, r); } continue; }
     const before = r.bookings.length;
+    const justEnded = r.bookings.filter((b) => b.endsAt <= now);
     r.bookings = r.bookings.filter((b) => b.endsAt > now);
+    for (const b of justEnded) postMeetingNotes(f, r, b);     // auto meeting-notes (no-op without a key/chat)
     const changed = refreshRoomActive(f, r, now);
     if (changed || r.bookings.length !== before) broadcastBooking(f, r);
   }
@@ -805,14 +807,42 @@ function postAssistant(text, ctx) {
     floor: ctx.floor, x: ctx.x, y: ctx.y, roomId: ctx.roomId, ts: Date.now(), ai: true };
   deliverChat(payload); publishEvent("chat", payload);
 }
+function hhmm(ts) { const d = new Date(ts); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
+// Built-in commands answered from server state — no LLM, so they work even without an API key. Returns text or null.
+function localAnswer(p, q) {
+  const f = floorOf(p);
+  if (/^(help|commands|\?|what can you do)/i.test(q)) return "Try: “@ai who's here”, “@ai schedule”, or “@ai summarize”. Ask me anything else too" + (aiConfigured() ? "." : " — though free-form answers need an API key (see AI_ASSISTANT.md).");
+  if (/who('?s| is)?\s*(here|around|online|in)|^who\b/i.test(q)) {
+    const here = [...clients.values()].filter((c) => c.floor === f.slug).map((c) => c.name);
+    return "👥 On " + f.name + " right now (" + here.length + "): " + (here.join(", ") || "just you");
+  }
+  if (/schedule|what'?s\s*booked|bookings?|agenda|today'?s?\s*meetings?|what'?s\s*on/i.test(q)) {
+    const lines = [];
+    for (const r of f.rooms) for (const b of (r.bookings || []).slice().sort((a, c) => a.startsAt - c.startsAt)) lines.push("• " + r.name + ": " + b.title + " (" + hhmm(b.startsAt) + "–" + hhmm(b.endsAt) + ") · " + b.by);
+    return lines.length ? "📅 Today on " + f.name + ":\n" + lines.join("\n") : "📅 Nothing booked yet on " + f.name + ".";
+  }
+  return null;
+}
 async function askAssistant(p, prompt, ctx) {
-  if (!aiConfigured()) { postAssistant("I'm not enabled yet — an admin can turn me on with a free Google Gemini key (set GEMINI_API_KEY). See AI_ASSISTANT.md.", ctx); return; }
+  const q = (prompt || "").trim();
+  const local = localAnswer(p, q); if (local !== null) { postAssistant(local, ctx); return; }   // who / schedule / help — no LLM
+  if (!aiConfigured()) { postAssistant("I'm not enabled for free-form questions yet — an admin can turn me on with a free Google Gemini key (set GEMINI_API_KEY). I can still do “@ai who's here” and “@ai schedule”. See AI_ASSISTANT.md.", ctx); return; }
   const sys = "You are NexSpace's friendly in-office assistant inside a virtual office. Keep replies concise (a few sentences) and useful. You can answer questions, summarize the recent room chat, and draft short meeting notes. Reply in plain text.";
   const recent = recentByFloor.get(ctx.floor || DEFAULT_FLOOR) || [];
   const ctxText = recent.length ? ("Recent room chat:\n" + recent.slice(-25).map((c) => c.name + ": " + c.body).join("\n") + "\n\n") : "";
   const ask = (prompt || "").trim() || "Summarize the recent room chat.";
   try { const text = await callLLM(sys, ctxText + "Request from " + p.name + ": " + ask); postAssistant(text, ctx); }
   catch (e) { postAssistant("⚠️ I couldn't reach the AI service (" + (e && e.message || e) + ").", ctx); }
+}
+// When a booked meeting ends, post brief AI meeting-notes to the floor (only if a key is set + there was chat).
+async function postMeetingNotes(f, r, b) {
+  if (!aiConfigured()) return;
+  const recent = recentByFloor.get(f.slug) || []; if (recent.length < 3) return;
+  try {
+    const sys = "You are NexSpace's assistant. Write 2-4 short bullet meeting notes from the room chat. Be concise; if nothing substantive was discussed, just say the meeting wrapped up.";
+    const text = await callLLM(sys, "The meeting \"" + b.title + "\" in " + r.name + " just ended.\nRecent room chat:\n" + recent.slice(-25).map((c) => c.name + ": " + c.body).join("\n"));
+    postAssistant("📝 Notes — " + b.title + " (" + r.name + "):\n" + text, { scope: "floor", channel: null, to: null, floor: f.slug, x: 0, y: 0, roomId: null });
+  } catch (_) {}
 }
 function deny(ws, action, need) { send(ws, { t: "denied", action, need }); } // RBAC refusal feedback
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }

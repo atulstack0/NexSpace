@@ -44,7 +44,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Broadcast mode | ✅ | realtime + web |
 | Shared YouTube TV (watch-party) — one screen, search/paste, shared queue, **playback synced to the same second** + shared play/pause (YouTube IFrame API), thumbnail on the wall in 2D/3D | ✅ | realtime `/youtube/search` + `tv*`/`tvCtrl`, web |
 | Text chat — nearby / floor / #channels / private DMs, room-aware, cross-node, XSS-safe | ✅ | realtime + web |
-| In-office AI assistant — `@ai <q>` in chat (or 🤖 button): answers, summarizes recent room chat, drafts notes; **free Google Gemini** / Anthropic / OpenAI (or OpenAI-compatible Groq/OpenRouter) via env key, graceful when unset, per-user cooldown | ✅ opt-in | realtime `askAssistant`, web; `AI_ASSISTANT.md` |
+| In-office AI assistant — `@ai <q>` in chat (or 🤖 button): answers, summarizes recent room chat, drafts notes; **free Google Gemini** / Anthropic / OpenAI (or OpenAI-compatible Groq/OpenRouter) via env key, graceful when unset, per-user cooldown. **Built-in no-key commands**: `@ai who's here`, `@ai schedule`, `@ai help`. **Auto meeting-notes** posted when a booking ends (if a key is set). | ✅ opt-in | realtime `askAssistant`, web; `AI_ASSISTANT.md` |
 | Screen sharing (LiveKit) — publish + multi-share focus viewer; **present-to-room** mode: one presenter's screen auto-enlarges for everyone in their room with a "X is presenting" banner (synced, RBAC member+, auto-stops on leave) | ✅ opt-in | realtime `present`/`unpresent`, `apps/web` |
 | Collaborative whiteboard — synced strokes + clear, late-joiner state, cross-node | ✅ | realtime + web |
 | Reactions (floating emoji), nudge, moderation (admin mute / kick) | ✅ | realtime + web |
