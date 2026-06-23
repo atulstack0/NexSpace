@@ -27,7 +27,7 @@
     #barItems .btn,#barItems select{padding:10px 12px;font-size:14px}      /* bigger touch targets */
     .tvmain{flex-direction:column} .tvside{width:100%;max-width:none} .tvplayer{aspect-ratio:16/9}
     #chat,#wb{max-width:96vw}
-    #tv,#rooms,#customize,#activity,#game{bottom:auto;top:64px}             /* keep panels clear of the joystick */
+    #tv,#rooms,#customize,#activity,#minigame{bottom:auto;top:64px}         /* keep panels clear of the joystick */
     .tvbox{width:96vw!important;max-height:62vh}
     #minimapWrap canvas{width:124px;height:auto}
     #hint{font-size:11px;left:8px;right:auto;bottom:8px;max-width:64vw;padding:6px 9px}
@@ -75,7 +75,7 @@
   #rooms{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:30;display:none;max-width:94vw}
   #customize{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:31;display:none;max-width:94vw}
   #activity{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:30;display:none;max-width:94vw}
-  #game{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:30;display:none;max-width:94vw}
+  #minigame{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:30;display:none;max-width:94vw}
   #gameBoard{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
   .gcell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:38px;font-weight:800;background:#0d1424;border:1px solid var(--line);border-radius:10px;cursor:pointer;user-select:none;color:#eaf0ff}
   .gcell.x{color:#5b8cff} .gcell.o{color:#ff9f4a} .gcell:hover{border-color:var(--accent)}
@@ -263,7 +263,7 @@
     <div id="activityList" class="tvlist" style="max-height:50vh"></div>
   </div>
 </div>
-<div id="game">
+<div id="minigame">
   <div class="tvbox" style="width:300px">
     <div class="tvhead"><b>🎮 Tic-tac-toe</b><span id="gameStatus" style="color:var(--muted);font-size:12px"></span><button class="btn" id="gameClose" style="margin-left:auto;padding:3px 10px">✕</button></div>
     <div id="gameBoard"></div>
@@ -1334,7 +1334,7 @@
     tvSync={pos:Math.max(0,+t.position||0),at:Date.now(),playing:t.playing!==false};
     if(ytPlayer&&ytPlayer.getCurrentTime)tvApplyRemote();else if(ytReady&&!ytPlayer)tvEnsurePlayer();else if(tvRaw)tvRawSync(); // apply the shared play/pause + position
     if(document.getElementById('tv').style.display==='block'){renderTvQueue();tvNowText();}}
-  function hidePanels(except){['tv','rooms','customize','activity','game'].forEach(id=>{if(id!==except){const el=document.getElementById(id);if(el)el.style.display='none';}});} // one bottom panel at a time
+  function hidePanels(except){['tv','rooms','customize','activity','minigame'].forEach(id=>{if(id!==except){const el=document.getElementById(id);if(el)el.style.display='none';}});} // one bottom panel at a time
   function openTv(){hidePanels('tv');const ov=document.getElementById('tv');ov.style.display='block';   // controls panel only — the video stays on the wall
     if(ytReady&&!ytPlayer)tvEnsurePlayer();renderTvQueue();tvNowText();document.getElementById('tvResults').innerHTML='';const q=document.getElementById('tvQ');if(q){q.value='';setTimeout(()=>q.focus(),50);}}
   function closeTv(){document.getElementById('tv').style.display='none';}            // keep the video playing on the wall
@@ -1355,9 +1355,9 @@
   function closeActivity(){document.getElementById('activity').style.display='none';}
   // ---------- Mini-game: shared tic-tac-toe ----------
   function gameSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o));}
-  function gameOpen(){const g=document.getElementById('game');return g&&g.style.display==='block';}
-  function openGame(){hidePanels('game');document.getElementById('game').style.display='block';renderGame();}
-  function closeGame(){document.getElementById('game').style.display='none';}
+  function gameOpen(){const g=document.getElementById('minigame');return g&&g.style.display==='block';}
+  function openGame(){hidePanels('minigame');document.getElementById('minigame').style.display='block';renderGame();}
+  function closeGame(){document.getElementById('minigame').style.display='none';}
   function renderGame(){const board=document.getElementById('gameBoard'),status=document.getElementById('gameStatus'),joinBtn=document.getElementById('gameJoin');if(!board)return;
     const g=gameState||{board:Array(9).fill(null),turn:'X',seats:{X:null,O:null},names:{X:'',O:''},winner:null,draw:false};
     const mySeat=g.seats.X===myId?'X':g.seats.O===myId?'O':null;
