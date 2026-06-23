@@ -76,7 +76,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Multi-floor + portals — independent floors, floor-scoped presence/chat/snapshots, portal travel + floor switcher | ✅ | `apps/api` (Floor/portal objects), realtime, web |
 | Interactive objects — sticky notes, embeds (YouTube/Spotify/web → iframe), shared countdown timers; placed in the editor, synced live | ✅ | `apps/api` (widget objects), realtime, web, editor |
 | Responsive UI — collapsible toolbar (hamburger), mobile-friendly overlays | ✅ | `apps/web/index.html` |
-| In-office floor editor — owner/admin drag-move, add, delete furniture + notes/timers/portals live; RBAC-gated; **persists** across restarts (Redis or JSON file) | ✅ | realtime `editFloor` + persist, web |
+| In-office floor editor — owner/admin drag-move, add, delete furniture + notes/timers/portals live; **multi-select** (Shift-click → group drag/delete), **undo/redo** (Ctrl+Z / Ctrl+Y + ↶↷ buttons, exact via client-id adds + server `restore` op), grid-snapped; RBAC-gated; **persists** across restarts (Redis or JSON file) | ✅ | realtime `editFloor` (+`restore`) + persist, web |
 | Branding / white-label — per-space name, accent color, logo; served in world + applied live | ✅ | `apps/api` (Floor.branding), realtime, web |
 | CI — GitHub Actions (`check` + `redis-multinode` + `api-smoke`) | ✅ | `.github/workflows/ci.yml` |
 
@@ -87,7 +87,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 - **Outdoor "chai stall"** environment + in-world mini-games. (Multi-floor + portals, and interactive objects — notes, YouTube/Spotify/web embeds, shared timers — are now built.)
 - **Calendar / Teams** (need OAuth + accounts) and **SCIM** auto-provisioning.
 - **AI** recording transcription (Whisper/Deepgram) + NPC greeter — the in-office **assistant + auto meeting-notes are built**; deep transcription/NPCs are not. **Native mobile/desktop apps** (web is responsive), **SOC2/GDPR/HIPAA** compliance.
-- Editor **undo/redo + multi-select + room-drawing + templates**, **guest time-cap** — still open code-only items (next batches).
+- Editor **room-drawing tool + floor templates** (P4-03/05), **guest time-cap** (P5-04) — still open code-only items (next batches).
 - **Scale follow-ups**: spatial-hash interest management, Redis-persisted boot state.
 
 ---

@@ -275,6 +275,16 @@ try {
   await wait(220);
   ((guest.world?.furniture?.length || 0) === fBefore + 1) ? ok("owner editFloor add furniture broadcasts") : bad("furniture add did not broadcast");
   (guest.world?.furniture?.some((o) => o.kind === "plant")) ? ok("furniture carries its kind (plant) through the world state") : bad("furniture kind not round-tripped");
+  // client-supplied id on add + restore op (powers editor undo/redo)
+  admin.ws.send(JSON.stringify({ t: "editFloor", op: "add", wtype: "note", x: 320, y: 320, id: "w-undo01" }));
+  await wait(220);
+  (guest.world?.widgets?.some((o) => o.id === "w-undo01")) ? ok("editFloor add honours a valid client-supplied id") : bad("client id on add was not used");
+  admin.ws.send(JSON.stringify({ t: "editFloor", op: "remove", kind: "widget", id: "w-undo01" }));
+  await wait(200);
+  (!guest.world?.widgets?.some((o) => o.id === "w-undo01")) ? ok("editFloor remove deletes the element") : bad("editFloor remove did not delete");
+  admin.ws.send(JSON.stringify({ t: "editFloor", op: "restore", kind: "widget", obj: { id: "w-undo01", type: "note", x: 320, y: 320, w: 180, h: 120, text: "Restored", color: "#ffd166" } }));
+  await wait(220);
+  (guest.world?.widgets?.some((o) => o.id === "w-undo01" && o.text === "Restored")) ? ok("editFloor restore re-inserts a deleted element verbatim (undo)") : bad("editFloor restore did not re-insert");
   guest.ws.send(JSON.stringify({ t: "editFloor", op: "add", wtype: "note", x: 100, y: 100 }));
   await wait(200);
   (guest.denied.includes("edit the floor")) ? ok("guest denied floor editing (RBAC)") : bad("guest floor edit was NOT blocked");

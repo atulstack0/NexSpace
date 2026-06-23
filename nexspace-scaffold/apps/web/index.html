@@ -237,6 +237,8 @@
   <button class="btn" id="edAddNote">＋ Note</button>
   <button class="btn" id="edAddTimer">＋ Timer</button>
   <button class="btn warn" id="edDel">🗑 Delete</button>
+  <button class="btn" id="edUndo" title="Undo (Ctrl+Z)">↶ Undo</button>
+  <button class="btn" id="edRedo" title="Redo (Ctrl+Y / Ctrl+Shift+Z)">↷ Redo</button>
   <span id="edHint" class="elabel">drag elements to move · click to select</span>
   <button class="btn active" id="edDone">✓ Done</button>
 </div>
@@ -401,7 +403,7 @@
   let ytPlayer=null,ytReady=false,tvApplyingRemote=false,tvUnmuted=false,tvRaw=false,tvRawVid='',tvKickTimer=null,tvWallShown=false,tvSync={pos:0,at:0,playing:false}; // synced watch-party playback (off by default)
   window.onYouTubeIframeAPIReady=function(){ytReady=true;clearTimeout(tvKickTimer);if(myId)tvEnsurePlayer();}; // build the wall player as soon as we've joined
   (function(){const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);})();
-  let editMode=false,editSel=null,editDrag=null; // owner/admin floor editor
+  let editMode=false,editSelSet=[],editDrag=null,undoStack=[],redoStack=[]; // owner/admin floor editor (multi-select + undo/redo)
   const reactions=new Map(),adminMuted=new Set();
   const emotes=new Map();   // id -> {type, t0} avatar emote (wave/clap/sit/dance)
   const EMOTE_EMOJI={wave:'👋',clap:'👏',sit:'🪑',dance:'🕺'};
@@ -525,7 +527,7 @@
   const toWorld=e=>({x:(e.clientX-VW/2)/cam.zoom+cam.x,y:(e.clientY-VH/2)/cam.zoom+cam.y});
   function canvasPrimary(e){                                 // 2D primary action: interact (TV/portal/widget) else move-to
     const w=toWorld(e);
-    if(editMode){editDown(w);return;}                       // edit mode: drag/select elements instead of moving
+    if(editMode){editDown(w,e.shiftKey);return;}            // edit mode: drag/select elements instead of moving
     if(world&&world.mediaWall){const M=world.mediaWall;
       if(w.x>=M.x-12&&w.x<=M.x+M.w+12&&w.y>=M.y-(M.screenH||150)-12&&w.y<=M.y+(M.base||16)+12){openTv();return;}}
     if(world&&world.portals){for(const pt of world.portals){if(w.x>=pt.x&&w.x<=pt.x+pt.w&&w.y>=pt.y&&w.y<=pt.y+pt.h){travelTo(pt.to);return;}}}
@@ -569,24 +571,53 @@
 
   // ---------- Owner/admin floor editor (move/add/remove elements; live to everyone) ----------
   function editHit(arr,kind,w){if(!arr)return null;for(let i=arr.length-1;i>=0;i--){const o=arr[i];if(w.x>=o.x&&w.x<=o.x+o.w&&w.y>=o.y&&w.y<=o.y+o.h)return{kind,obj:o};}return null;}
-  function editDown(w){if(!world)return;
+  function edSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o));}
+  function edMove(kind,id,x,y){edSend({t:'editFloor',op:'move',kind,id,x,y});}
+  function edRemove(kind,id){edSend({t:'editFloor',op:'remove',kind,id});}
+  function selHas(obj){return editSelSet.some(s=>s.obj===obj);}
+  function pushUndo(rec){undoStack.push(rec);if(undoStack.length>60)undoStack.shift();redoStack.length=0;updateEditBar();}
+  function doUndo(){const r=undoStack.pop();if(!r){toast('Nothing to undo');return;}r.undo();redoStack.push(r);editSelSet=[];updateEditBar();toast('↶ Undo');}
+  function doRedo(){const r=redoStack.pop();if(!r){toast('Nothing to redo');return;}r.redo();undoStack.push(r);editSelSet=[];updateEditBar();toast('↷ Redo');}
+  function editDown(w,shift){if(!world)return;
     const hit=editHit(world.widgets,'widget',w)||editHit(world.portals,'portal',w)||editHit(world.furniture,'furniture',w);
-    editSel=hit;updateEditBar();if(hit)editDrag={kind:hit.kind,obj:hit.obj,ox:w.x-hit.obj.x,oy:w.y-hit.obj.y};}
-  document.addEventListener('mousemove',e=>{if(!editDrag||viewMode==='3d')return;const w=toWorld(e);editDrag.obj.x=Math.round((w.x-editDrag.ox)/10)*10;editDrag.obj.y=Math.round((w.y-editDrag.oy)/10)*10;});
-  document.addEventListener('mouseup',()=>{if(!editDrag)return;const o=editDrag.obj;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'editFloor',op:'move',kind:editDrag.kind,id:o.id,x:o.x,y:o.y}));editDrag=null;});
+    if(shift){if(hit){const i=editSelSet.findIndex(s=>s.obj===hit.obj);if(i>=0)editSelSet.splice(i,1);else editSelSet.push(hit);}}
+    else{if(hit){if(!selHas(hit.obj))editSelSet=[hit];}else editSelSet=[];}
+    updateEditBar();
+    if(hit&&selHas(hit.obj))editDrag={downX:w.x,downY:w.y,items:editSelSet.map(s=>({kind:s.kind,obj:s.obj,sx:s.obj.x,sy:s.obj.y}))};
+    else editDrag=null;}
+  document.addEventListener('mousemove',e=>{if(!editDrag||viewMode==='3d')return;const w=toWorld(e);
+    const dx=Math.round((w.x-editDrag.downX)/10)*10,dy=Math.round((w.y-editDrag.downY)/10)*10;
+    for(const it of editDrag.items){it.obj.x=it.sx+dx;it.obj.y=it.sy+dy;}});
+  document.addEventListener('mouseup',()=>{if(!editDrag)return;const items=editDrag.items;editDrag=null;
+    const moved=items.filter(it=>it.obj.x!==it.sx||it.obj.y!==it.sy).map(it=>({kind:it.kind,id:it.obj.id,fromX:it.sx,fromY:it.sy,toX:it.obj.x,toY:it.obj.y}));
+    if(!moved.length)return;
+    for(const it of moved)edMove(it.kind,it.id,it.toX,it.toY);
+    pushUndo({undo:()=>{for(const it of moved)edMove(it.kind,it.id,it.fromX,it.fromY);},redo:()=>{for(const it of moved)edMove(it.kind,it.id,it.toX,it.toY);}});});
   function editAdd(what){const x=Math.round(me.x-90),y=Math.round(me.y-60);
     const fk=(document.getElementById('edFurnKind')||{}).value||'desk';
-    const msg=(what==='furniture')?{t:'editFloor',op:'add',kind:'furniture',furnitureKind:fk,x,y}:{t:'editFloor',op:'add',wtype:what,x,y};
-    if(ws&&ws.readyState===1)ws.send(JSON.stringify(msg));toast('Added '+(what==='furniture'?fk:what)+' near you');}
-  function editDelete(){if(!editSel){toast('Select an element first');return;}const o=editSel.obj;if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'editFloor',op:'remove',kind:editSel.kind,id:o.id}));editSel=null;updateEditBar();}
-  function editToggle(on){editMode=(on!==undefined)?on:!editMode;editSel=null;editDrag=null;
+    const id=(what==='furniture'?'f-':'w-')+Math.random().toString(36).slice(2,8);
+    const msg=(what==='furniture')?{t:'editFloor',op:'add',kind:'furniture',furnitureKind:fk,x,y,id}:{t:'editFloor',op:'add',wtype:what,x,y,id};
+    const kind=(what==='furniture')?'furniture':'widget';
+    edSend(msg);toast('Added '+(what==='furniture'?fk:what)+' near you');
+    pushUndo({undo:()=>edRemove(kind,id),redo:()=>edSend(msg)});}
+  function editDelete(){if(!editSelSet.length){toast('Select an element first');return;}
+    const snaps=editSelSet.map(s=>({kind:s.kind,obj:JSON.parse(JSON.stringify(s.obj))}));
+    for(const s of snaps)edRemove(s.kind,s.obj.id);
+    editSelSet=[];updateEditBar();
+    pushUndo({undo:()=>{for(const s of snaps)edSend({t:'editFloor',op:'restore',kind:s.kind,obj:s.obj});},redo:()=>{for(const s of snaps)edRemove(s.kind,s.obj.id);}});}
+  function editToggle(on){editMode=(on!==undefined)?on:!editMode;editSelSet=[];editDrag=null;
     document.getElementById('editBar').style.display=editMode?'flex':'none';
     const be=document.getElementById('btnEdit');if(be)be.classList.toggle('active',editMode);
-    canvas.style.cursor=editMode?'move':'crosshair';if(editMode)toast('✏️ Edit mode — drag to move, ＋ to add, 🗑 to delete');updateEditBar();}
-  function updateEditBar(){const h=document.getElementById('edHint');if(h)h.textContent=editSel?('selected: '+editSel.kind+' — drag, or click 🗑 Delete'):'drag elements to move · click to select';
-    const d=document.getElementById('edDel');if(d)d.style.opacity=editSel?'1':'.55';}
-  function drawEditSel(){if(!editSel)return;const o=editSel.obj;ctx.strokeStyle='#5b8cff';ctx.lineWidth=3;ctx.setLineDash([9,6]);ctx.strokeRect(o.x-3,o.y-3,(o.w||40)+6,(o.h||40)+6);ctx.setLineDash([]);}
-  addEventListener('keydown',e=>{if(editMode&&(e.key==='Delete'||e.key==='Backspace')&&editSel&&!(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'))){editDelete();e.preventDefault();}});
+    canvas.style.cursor=editMode?'move':'crosshair';if(editMode)toast('✏️ Edit mode — click to select, Shift-click for multi, drag to move, Ctrl+Z to undo');updateEditBar();}
+  function updateEditBar(){const h=document.getElementById('edHint');if(h)h.textContent=editSelSet.length?(editSelSet.length+' selected — drag to move · 🗑 delete · Shift-click to add/remove'):'click to select · Shift-click for multi · drag to move';
+    const d=document.getElementById('edDel');if(d)d.style.opacity=editSelSet.length?'1':'.55';
+    const u=document.getElementById('edUndo'),r=document.getElementById('edRedo');if(u)u.style.opacity=undoStack.length?'1':'.45';if(r)r.style.opacity=redoStack.length?'1':'.45';}
+  function drawEditSel(){if(!editSelSet.length)return;ctx.strokeStyle='#5b8cff';ctx.lineWidth=3;ctx.setLineDash([9,6]);for(const s of editSelSet){const o=s.obj;ctx.strokeRect(o.x-3,o.y-3,(o.w||40)+6,(o.h||40)+6);}ctx.setLineDash([]);}
+  addEventListener('keydown',e=>{if(!editMode)return;const tg=e.target;if(tg&&(tg.tagName==='INPUT'||tg.tagName==='TEXTAREA'))return;
+    const k=e.key.toLowerCase();
+    if((e.ctrlKey||e.metaKey)&&k==='z'){e.preventDefault();if(e.shiftKey)doRedo();else doUndo();return;}
+    if((e.ctrlKey||e.metaKey)&&k==='y'){e.preventDefault();doRedo();return;}
+    if((e.key==='Delete'||e.key==='Backspace')&&editSelSet.length){editDelete();e.preventDefault();}});
 
   // ---------- Audio (proximity + room override + broadcast) ----------
   let actx=null,master=null,started=false;const voices=new Map(),SCALE=46;let mediaNode=null;
@@ -1829,6 +1860,8 @@
   document.getElementById('edAddNote').addEventListener('click',()=>editAdd('note'));
   document.getElementById('edAddTimer').addEventListener('click',()=>editAdd('timer'));
   document.getElementById('edDel').addEventListener('click',editDelete);
+  document.getElementById('edUndo').addEventListener('click',doUndo);
+  document.getElementById('edRedo').addEventListener('click',doRedo);
   // responsive toolbar: hamburger collapses/expands the controls; collapsed by default on small screens
   (function(){const bar=document.getElementById('bar');if(innerWidth<=820)bar.classList.add('collapsed');
     document.getElementById('barToggle').addEventListener('click',()=>bar.classList.toggle('collapsed'));})();

@@ -643,10 +643,11 @@ wss.on("connection", (ws) => {
       } else if (op === "add" && m.kind === "furniture") {
         const fk = ["desk", "table", "couch", "plant", "chair", "rug"].includes(m.furnitureKind) ? m.furnitureKind : "desk";
         const dim = fk === "plant" ? { w: 80, h: 80, r: 40 } : fk === "chair" ? { w: 70, h: 70, r: 30 } : fk === "couch" ? { w: 150, h: 90, r: 12 } : fk === "table" ? { w: 200, h: 120, r: 16 } : fk === "rug" ? { w: 260, h: 180, r: 0 } : { w: 150, h: 80, r: 12 };
-        f.furniture.push({ id: "f-" + crypto.randomBytes(3).toString("hex"), x: grid(cx(m.x, f.w - dim.w)), y: grid(cx(m.y, f.h - dim.h)), ...dim, kind: fk });
+        const fid = (typeof m.id === "string" && /^f-[a-z0-9]{4,32}$/.test(m.id) && !f.furniture.some((x) => x.id === m.id)) ? m.id : "f-" + crypto.randomBytes(3).toString("hex");
+        f.furniture.push({ id: fid, x: grid(cx(m.x, f.w - dim.w)), y: grid(cx(m.y, f.h - dim.h)), ...dim, kind: fk });
         changed = true;
       } else if (op === "add") {
-        const id = "w-" + crypto.randomBytes(3).toString("hex");
+        const id = (typeof m.id === "string" && /^w-[a-z0-9]{4,32}$/.test(m.id) && !f.widgets.some((x) => x.id === m.id)) ? m.id : "w-" + crypto.randomBytes(3).toString("hex");
         const type = ["note", "timer", "embed"].includes(m.wtype) ? m.wtype : "note";
         const wd = { id, type, x: grid(cx(m.x, f.w - 180)), y: grid(cx(m.y, f.h - 120)), w: type === "embed" ? 280 : 180, h: type === "embed" ? 160 : 120 };
         if (type === "note") { wd.text = String(m.text || "New note").slice(0, 300); wd.color = "#ffd166"; }
@@ -656,6 +657,25 @@ wss.on("connection", (ws) => {
       } else if (op === "remove") {
         const arr = arrFor(m.kind);
         const i = arr.findIndex((x) => x.id === m.id); if (i >= 0) { arr.splice(i, 1); changed = true; }
+      } else if (op === "restore" && m.obj && typeof m.obj === "object") {  // re-insert a deleted element verbatim (undo) — sanitized
+        const arr = arrFor(m.kind), src = m.obj;
+        const id = (typeof src.id === "string" && /^[fwp]-[a-z0-9]{2,40}$/i.test(src.id) && !arr.some((x) => x.id === src.id)) ? src.id : ((m.kind === "furniture" ? "f-" : "w-") + crypto.randomBytes(3).toString("hex"));
+        const W = Math.max(10, Math.min(600, Number(src.w) || 80)), H = Math.max(10, Math.min(600, Number(src.h) || 80));
+        const o = { id, x: grid(cx(src.x, f.w - W)), y: grid(cx(src.y, f.h - H)), w: W, h: H };
+        if (m.kind === "furniture") {
+          o.kind = ["desk", "table", "couch", "plant", "chair", "rug"].includes(src.kind) ? src.kind : "desk";
+          o.r = Math.max(0, Math.min(60, Number(src.r) || 12)); f.furniture.push(o); changed = true;
+        } else if (m.kind === "portal") {
+          o.to = String(src.to || "").slice(0, 40); o.label = String(src.label || "Portal").slice(0, 40);
+          if (src.spawn && typeof src.spawn === "object") o.spawn = { x: Number(src.spawn.x) || 0, y: Number(src.spawn.y) || 0 };
+          f.portals.push(o); changed = true;
+        } else {
+          const type = ["note", "timer", "embed"].includes(src.type) ? src.type : "note"; o.type = type;
+          if (type === "note") { o.text = String(src.text || "Note").slice(0, 300); o.color = /^#[0-9a-f]{3,8}$/i.test(src.color || "") ? src.color : "#ffd166"; }
+          else if (type === "timer") { o.label = String(src.label || "Timer").slice(0, 40); o.endsAt = Number(src.endsAt) || (Date.now() + 10 * 60000); }
+          else { o.kind = "web"; o.url = String(src.url || "").slice(0, 400); o.title = String(src.title || "Embed").slice(0, 80); }
+          f.widgets.push(o); changed = true;
+        }
       }
       if (changed) { const wmsg = JSON.stringify({ t: "world", world: worldForClient(f.slug) }); for (const [ws2, q] of clients) if (q.floor === f.slug && ws2.readyState === 1) ws2.send(wmsg); persistFloors(); }
     }
