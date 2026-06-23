@@ -1682,10 +1682,13 @@
   // ---------- Start ----------
   let last=performance.now(),acc=0;
   function loop(now){const dt=Math.min(0.05,(now-last)/1000);last=now;frame++;
-    step(dt);checkPortals();sendMove(now);updateAudio();
-    if(viewMode==='3d'){ if(threeMode){Three3D.frame();drawMinimap();} else render3D(); } else draw();
-    tvPositionWorld();                                  // keep the wall-TV video pinned over the screen
-    acc+=dt;if(acc>0.1){updateUI();acc=0;}requestAnimationFrame(loop);}
+    try{                                                // guard: one frame error must never permanently freeze the canvas
+      step(dt);checkPortals();sendMove(now);updateAudio();
+      if(viewMode==='3d'){ if(threeMode){Three3D.frame();drawMinimap();} else render3D(); } else draw();
+      tvPositionWorld();                                // keep the wall-TV video pinned over the screen
+      acc+=dt;if(acc>0.1){updateUI();acc=0;}
+    }catch(e){if(!loop._warned){loop._warned=true;console.error('NexSpace render loop error (will keep running):',e);}}
+    requestAnimationFrame(loop);}                       // always reschedule, even after an error
   document.getElementById('floorSel').addEventListener('change',function(){travelTo(this.value);this.blur();}); // blur so WASD return to the game, not the dropdown
   document.getElementById('widgetClose').addEventListener('click',closeWidget);
   document.getElementById('widgetOv').addEventListener('click',e=>{if(e.target.id==='widgetOv')closeWidget();});

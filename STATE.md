@@ -70,7 +70,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Analytics — admin dashboard + CSV | ✅ | realtime `/analytics`, `apps/web/analytics.html` |
 | Public API (`/api/v1`) + HMAC webhooks + Slack notifications | ✅ | realtime; `docs/PUBLIC_API.md`, `docs/INTEGRATIONS.md` |
 | Persistence — NestJS API + Prisma (SQLite default, Postgres-ready) | ✅ | `apps/api` |
-| Hardening — anti-teleport, rate limit, connection cap, heartbeat, graceful shutdown | ✅ | realtime |
+| Hardening — anti-teleport, rate limit, connection cap, heartbeat, graceful shutdown; client render-loop error guard (a single frame exception logs once and keeps running instead of freezing the canvas) | ✅ | realtime + web |
 | Multi-node fan-out (Redis pub/sub) | ✅ opt-in | realtime; `docs/SCALING.md` |
 | Multi-floor + portals — independent floors, floor-scoped presence/chat/snapshots, portal travel + floor switcher | ✅ | `apps/api` (Floor/portal objects), realtime, web |
 | Interactive objects — sticky notes, embeds (YouTube/Spotify/web → iframe), shared countdown timers; placed in the editor, synced live | ✅ | `apps/api` (widget objects), realtime, web, editor |
