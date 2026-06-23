@@ -51,7 +51,7 @@ await new Promise((res, rej) => {
 function join(name, token) {
   return new Promise((resolve) => {
     const ws = new WebSocket(`ws://localhost:${PORT}`);
-    const st = { ws, name, id: null, role: null, world: null, floorMsg: null, tv: null, last: null, denied: [], rateLimited: false, chats: [], draws: [], cleared: false, reacts: [], nudged: false, kicked: false, bookings: {}, sched: {}, activity: [], game: null };
+    const st = { ws, name, id: null, role: null, world: null, floorMsg: null, tv: null, last: null, denied: [], rateLimited: false, chats: [], draws: [], cleared: false, reacts: [], nudged: false, kicked: false, bookings: {}, sched: {}, activity: [], game: null, emotes: [] };
     ws.on("open", () => ws.send(JSON.stringify({ t: "join", name, token })));
     ws.on("message", (d) => {
       const m = JSON.parse(d.toString());
@@ -64,6 +64,7 @@ function join(name, token) {
       if (m.t === "present") st.presentation = m.presentation;
       if (m.t === "activity") st.activity.push(m);
       if (m.t === "game") st.game = m.game;
+      if (m.t === "emote") st.emotes.push(m);
       if (m.t === "denied") st.denied.push(m.action);
       if (m.t === "rateLimited") st.rateLimited = true;
       if (m.t === "chat") st.chats.push(m);
@@ -349,6 +350,13 @@ try {
   admin.ws.send(JSON.stringify({ t: "react", emoji: "🎉" }));
   await wait(300);
   (guest.reacts.some((r) => r.emoji === "🎉" && r.from === admin.id)) ? ok("reaction broadcasts to peers") : bad("reaction not broadcast");
+  // emotes — wave/clap/sit/dance relay to peers; invalid emote ignored
+  admin.ws.send(JSON.stringify({ t: "emote", emote: "wave" }));
+  await wait(250);
+  (guest.emotes.some((e) => e.emote === "wave" && e.from === admin.id)) ? ok("emote broadcasts to peers") : bad("emote not broadcast");
+  admin.ws.send(JSON.stringify({ t: "emote", emote: "bogus" }));
+  await wait(180);
+  (!guest.emotes.some((e) => e.emote === "bogus")) ? ok("invalid emote is ignored") : bad("invalid emote was relayed");
   // nudge (6.9)
   admin.ws.send(JSON.stringify({ t: "nudge", to: guest.id }));
   await wait(300);

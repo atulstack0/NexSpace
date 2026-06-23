@@ -48,6 +48,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Screen sharing (LiveKit) — publish + multi-share focus viewer; **present-to-room** mode: one presenter's screen auto-enlarges for everyone in their room with a "X is presenting" banner (synced, RBAC member+, auto-stops on leave) | ✅ opt-in | realtime `present`/`unpresent`, `apps/web` |
 | Collaborative whiteboard — synced strokes + clear, late-joiner state, cross-node | ✅ | realtime + web |
 | Reactions (floating emoji), nudge, moderation (admin mute / kick) | ✅ | realtime + web |
+| Emotes — wave/clap/sit/dance from the 😀 bar: synced to the floor, animate the 3D avatar's pose (+ floating emoji in 2D); a furnished **lounge zone** (rug, sofas, table, plant) near spawn | ✅ | realtime `emote`, web |
 | Notifications — browser notification + tab-title flash + 💬 unread badge for DMs, @-mentions, and nudges when the tab is unfocused; permission requested on opening chat | ✅ | `apps/web/index.html` |
 | Activity feed (📋) — joins/leaves, new bookings, presentations logged with timestamps; **meeting reminders** nudge you ~5 min before a booking you made starts (toast + notification) | ✅ | realtime `activity` event, web |
 | Mini-game (🎮) — shared tic-tac-toe: two players take X/O seats, turn-enforced moves, win/draw detection, reset; synced live so others spectate; seats freed on leave | ✅ | realtime `gameJoin`/`gameMove`/`gameReset`, web |

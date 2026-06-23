@@ -149,6 +149,10 @@ function makeDefaultFloor() {
     { id: "f-d1", x: 980, y: 560, w: 240, h: 120, r: 14, kind: "table" }, { id: "f-d2", x: 300, y: 300, w: 150, h: 80, r: 12, kind: "desk" },
     { id: "f-d3", x: 1600, y: 330, w: 170, h: 90, r: 12, kind: "desk" }, { id: "f-d4", x: 900, y: 1150, w: 120, h: 120, r: 60, kind: "plant" },
     { id: "f-d5", x: 1750, y: 1150, w: 150, h: 90, r: 12, kind: "couch" }, { id: "f-d6", x: 250, y: 1150, w: 90, h: 90, r: 10, kind: "plant" },
+    // ☕ lounge zone near the spawn — a rug with sofas, a coffee table and a plant for casual hangouts
+    { id: "f-lg-rug", x: 560, y: 1180, w: 320, h: 220, r: 0, kind: "rug" },
+    { id: "f-lg-c1", x: 580, y: 1190, w: 150, h: 70, r: 12, kind: "couch" }, { id: "f-lg-c2", x: 740, y: 1190, w: 150, h: 70, r: 12, kind: "couch" },
+    { id: "f-lg-tbl", x: 650, y: 1300, w: 120, h: 70, r: 14, kind: "table" }, { id: "f-lg-plant", x: 840, y: 1300, w: 80, h: 80, r: 40, kind: "plant" },
   ];
   const rooms = [
     { id: "focus", name: "Focus Room", color: "#7c6bff",
@@ -281,6 +285,7 @@ function applyEvent(event, data) {
   else if (event === "draw") { whiteboard.strokes.push(data); if (whiteboard.strokes.length > 3000) whiteboard.strokes.shift(); broadcastLocal({ t: "draw", stroke: data }); }
   else if (event === "wbclear") { whiteboard.strokes = []; broadcastLocal({ t: "wbclear" }); }
   else if (event === "react") { broadcastLocal({ t: "react", from: data.from, emoji: data.emoji }); }
+  else if (event === "emote") { broadcastLocal({ t: "emote", from: data.from, emote: data.emote }); }
   else if (event === "nudge") { for (const [ws2, q] of clients) if (q.id === data.to) send(ws2, { t: "nudge", from: data.from, name: data.name }); }
   else if (event === "moderate") { applyModerate(data.action, data.target); }
   else if (event === "tv") { tv = data; broadcastLocal(tvState()); }
@@ -585,6 +590,10 @@ wss.on("connection", (ws) => {
       if (mutedIds.has(p.id)) return deny(ws, "react", "unmuted");
       const emoji = String(m.emoji || "").slice(0, 8); if (!emoji) return;
       broadcastLocal({ t: "react", from: p.id, emoji }); publishEvent("react", { from: p.id, emoji });
+    } else if (m.t === "emote") {                              // avatar emotes (wave/clap/sit/dance)
+      if (mutedIds.has(p.id)) return;
+      const e = ["wave", "clap", "sit", "dance"].includes(m.emote) ? m.emote : null; if (!e) return;
+      broadcastLocal({ t: "emote", from: p.id, emote: e }); publishEvent("emote", { from: p.id, emote: e });
     } else if (m.t === "nudge") {
       const to = String(m.to || ""); for (const [ws2, q] of clients) if (q.id === to) send(ws2, { t: "nudge", from: p.id, name: p.name });
       publishEvent("nudge", { from: p.id, name: p.name, to });
