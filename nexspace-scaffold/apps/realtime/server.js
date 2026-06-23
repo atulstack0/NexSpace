@@ -461,6 +461,7 @@ wss.on("connection", (ws) => {
       fireWebhook("user.joined", { id, name, role });
       notifySlack("👋 " + name + " entered the office");
       send(ws, { t: "welcome", id, world: worldForClient(player.floor), you: { ...player }, whiteboard: whiteboard.strokes, tv: tvState(), presentation: f0.presentation || null });
+      broadcastActivity(player.floor, "join", player.name, ws);   // tell the floor someone arrived
       console.log(`+ ${player.name} (${id}) [${role}] — ${clients.size} online`);
       return;
     }
@@ -640,6 +641,7 @@ wss.on("connection", (ws) => {
     clients.delete(ws);
     if (p) {
       const f = floors.get(p.floor); if (f && f.presentation && f.presentation.byId === p.id) { f.presentation = null; broadcastPresentation(f); } // presenter left → stop
+      broadcastActivity(p.floor, "leave", p.name, ws);
       fireWebhook("user.left", { id: p.id, name: p.name }); notifySlack("👋 " + p.name + " left the office"); console.log(`- ${p.name} (${p.id}) — ${clients.size} online`);
     }
   });
@@ -726,6 +728,7 @@ function refreshRoomActive(f, room, now) {
 }
 function broadcastBooking(f, room) { const msg = JSON.stringify({ t: "booking", floor: f.slug, roomId: room.id, bookings: room.bookings || [], booking: activeBooking(room) }); for (const [ws, q] of clients) if (q.floor === f.slug && ws.readyState === 1) ws.send(msg); }
 function broadcastPresentation(f) { const msg = JSON.stringify({ t: "present", floor: f.slug, presentation: f.presentation || null }); for (const [ws, q] of clients) if (q.floor === f.slug && ws.readyState === 1) ws.send(msg); }
+function broadcastActivity(floorSlug, kind, name, exceptWs) { const msg = JSON.stringify({ t: "activity", kind, name, ts: Date.now() }); for (const [ws, q] of clients) if (q.floor === floorSlug && ws !== exceptWs && ws.readyState === 1) ws.send(msg); }
 // chat routing (§6.9): channels are org-wide (cross-floor); floor + nearby are local to the sender's floor
 function deliverChat(d) {
   const dfloor = d.floor || DEFAULT_FLOOR;

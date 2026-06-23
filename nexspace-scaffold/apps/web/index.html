@@ -27,7 +27,7 @@
     #barItems .btn,#barItems select{padding:10px 12px;font-size:14px}      /* bigger touch targets */
     .tvmain{flex-direction:column} .tvside{width:100%;max-width:none} .tvplayer{aspect-ratio:16/9}
     #chat,#wb{max-width:96vw}
-    #tv,#rooms,#customize{bottom:auto;top:64px}                            /* keep panels clear of the joystick */
+    #tv,#rooms,#customize,#activity{bottom:auto;top:64px}                   /* keep panels clear of the joystick */
     .tvbox{width:96vw!important;max-height:62vh}
     #minimapWrap canvas{width:124px;height:auto}
     #hint{font-size:11px;left:8px;right:auto;bottom:8px;max-width:64vw;padding:6px 9px}
@@ -74,6 +74,9 @@
   #tv{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:30;display:none;max-width:94vw}
   #rooms{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:30;display:none;max-width:94vw}
   #customize{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:31;display:none;max-width:94vw}
+  #activity{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:30;display:none;max-width:94vw}
+  .ai-item{font-size:12px;color:var(--text);padding:5px 8px;border-bottom:1px solid rgba(255,255,255,.05)}
+  .ai-item .ai-t{color:var(--muted);font-size:11px;margin-right:7px}
   .custrow{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;color:var(--text)}
   .custrow input[type=color]{width:48px;height:30px;padding:0;border:1px solid var(--line);border-radius:8px;background:none;cursor:pointer}
   .custrow input:not([type=color]){flex:1;max-width:210px;background:#0d1424;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:12px}
@@ -187,6 +190,7 @@
   <button class="btn" id="btnTv" title="Open the TV (or press T)">📺 TV</button>
   <button class="btn" id="btnRooms" title="Book a room / today's schedule">📅 Rooms</button>
   <button class="btn" id="btnCustomize" title="Customize your avatar">🎨 Avatar</button>
+  <button class="btn" id="btnActivity" title="Activity feed">📋</button>
   <button class="btn" id="btnEdit" title="Edit the floor — move/add/remove elements (owner/admin)" style="display:none">✏️ Edit</button>
   </div>
 </div>
@@ -245,6 +249,12 @@
   <div class="tvbox" style="width:520px">
     <div class="tvhead"><b>📅 Rooms &amp; schedule</b><span id="roomsSub" style="color:var(--muted);font-size:12px"></span><button class="btn" id="roomsClose" style="margin-left:auto;padding:3px 10px">✕</button></div>
     <div id="roomsList" class="tvlist" style="max-height:48vh"></div>
+  </div>
+</div>
+<div id="activity">
+  <div class="tvbox" style="width:420px">
+    <div class="tvhead"><b>📋 Activity</b><button class="btn" id="activityClose" style="margin-left:auto;padding:3px 10px">✕</button></div>
+    <div id="activityList" class="tvlist" style="max-height:50vh"></div>
   </div>
 </div>
 <div id="customize">
@@ -389,10 +399,13 @@
         document.getElementById('count').textContent=m.players.length;
       }
       else if(m.t==='world'){world=m.world;WORLD={w:world.w,h:world.h};world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});applyBranding(world.branding);if(threeMode)Three3D.rebuild();toast('🛠️ Office layout updated');}
-      else if(m.t==='present'){if(!m.floor||m.floor===myFloor){presentState=m.presentation||null;updatePresentation();}}
-      else if(m.t==='booking'){if(world&&(!m.floor||m.floor===myFloor)){const r=(world.rooms||[]).find(x=>x.id===m.roomId);if(r){const wasActive=r.booking&&r.booking.id;r.booking=m.booking;if(m.bookings)r.bookings=m.bookings;if(roomsOpen())renderRooms();
+      else if(m.t==='activity'){logActivity((m.kind==='join'?'🟢 ':'⚪ ')+(m.name||'Someone')+(m.kind==='join'?' joined':' left'));}
+      else if(m.t==='present'){if(!m.floor||m.floor===myFloor){const wasPres=presentState&&presentState.byName;presentState=m.presentation||null;updatePresentation();
+        if(m.presentation)logActivity('📺 '+m.presentation.byName+' started presenting');else if(wasPres)logActivity('📺 '+wasPres+' stopped presenting');}}
+      else if(m.t==='booking'){if(world&&(!m.floor||m.floor===myFloor)){const r=(world.rooms||[]).find(x=>x.id===m.roomId);if(r){const wasActive=r.booking&&r.booking.id;const oldIds=new Set((r.bookings||[]).map(b=>b.id));r.booking=m.booking;if(m.bookings)r.bookings=m.bookings;if(roomsOpen())renderRooms();
         if(m.error)toast('⚠️ '+m.error);
-        else if(m.booking&&m.booking.id!==wasActive)toast('📅 '+(r.name||'Room')+': '+m.booking.title+' started');}}}
+        else{for(const b of (m.bookings||[]))if(!oldIds.has(b.id))logActivity('📅 '+b.by+' booked '+(r.name||'a room')+' · '+b.title+' '+fmtUntil(b.startsAt));
+          if(m.booking&&m.booking.id!==wasActive){toast('📅 '+(r.name||'Room')+': '+m.booking.title+' started');logActivity('📅 '+m.booking.title+' started in '+(r.name||'a room'));}}}}}
       else if(m.t==='denied')toast('🔒 You need '+m.need+' role to '+m.action+'.');
       else if(m.t==='chat')addChat(m);
       else if(m.t==='draw'){wbStrokes.push(m.stroke);if(document.getElementById('wb').style.display==='flex')wbDrawStroke(m.stroke);}
@@ -411,7 +424,7 @@
   const keys=new Set();let target=null;const joy={x:0,y:0,active:false}; // virtual joystick vector (mobile)
   addEventListener('keydown',e=>{const tg=e.target; if(tg&&(tg.tagName==='INPUT'||tg.tagName==='TEXTAREA'))return; const _wb=document.getElementById('wb'); if(_wb&&_wb.style.display==='flex')return; const k=e.key.toLowerCase();
     if(k==='t'){openTv();e.preventDefault();return;}                 // open the TV from any view
-    if(k==='escape'){closeTv();closeWidget();closeRooms();closeCustomize();return;}
+    if(k==='escape'){closeTv();closeWidget();closeRooms();closeCustomize();closeActivity();return;}
     if(viewMode==='3d'&&k==='v'){cameraMode=cameraMode==='thirdPerson'?'firstPerson':'thirdPerson';toast(cameraMode==='firstPerson'?'👁️ First-person':'🎥 Third-person');return;}
     if(viewMode==='3d'&&k===' '){if(jumpZ<=0.5)jumpV=220;e.preventDefault();return;} // cosmetic jump
     if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','shift'].includes(k)){keys.add(k);if(k!=='shift')target=null;e.preventDefault();}});
@@ -1304,7 +1317,7 @@
     tvSync={pos:Math.max(0,+t.position||0),at:Date.now(),playing:t.playing!==false};
     if(ytPlayer&&ytPlayer.getCurrentTime)tvApplyRemote();else if(ytReady&&!ytPlayer)tvEnsurePlayer();else if(tvRaw)tvRawSync(); // apply the shared play/pause + position
     if(document.getElementById('tv').style.display==='block'){renderTvQueue();tvNowText();}}
-  function hidePanels(except){['tv','rooms','customize'].forEach(id=>{if(id!==except){const el=document.getElementById(id);if(el)el.style.display='none';}});} // one bottom panel at a time
+  function hidePanels(except){['tv','rooms','customize','activity'].forEach(id=>{if(id!==except){const el=document.getElementById(id);if(el)el.style.display='none';}});} // one bottom panel at a time
   function openTv(){hidePanels('tv');const ov=document.getElementById('tv');ov.style.display='block';   // controls panel only — the video stays on the wall
     if(ytReady&&!ytPlayer)tvEnsurePlayer();renderTvQueue();tvNowText();document.getElementById('tvResults').innerHTML='';const q=document.getElementById('tvQ');if(q){q.value='';setTimeout(()=>q.focus(),50);}}
   function closeTv(){document.getElementById('tv').style.display='none';}            // keep the video playing on the wall
@@ -1314,6 +1327,27 @@
   function roomsOpen(){const r=document.getElementById('rooms');return r&&r.style.display==='block';}
   function openRooms(){hidePanels('rooms');document.getElementById('rooms').style.display='block';renderRooms();}
   function closeRooms(){document.getElementById('rooms').style.display='none';}
+  // ---------- Activity feed (joins/leaves, bookings, presentations) ----------
+  const activityLog=[];
+  function logActivity(text){activityLog.push({ts:Date.now(),text});if(activityLog.length>50)activityLog.shift();if(activityOpen())renderActivity();}
+  function renderActivity(){const box=document.getElementById('activityList');if(!box)return;box.innerHTML='';
+    if(!activityLog.length){box.innerHTML='<div style="color:var(--muted);font-size:12px;padding:6px">No activity yet — joins, bookings & presentations show here.</div>';return;}
+    for(let i=activityLog.length-1;i>=0;i--){const e=activityLog[i];const d=document.createElement('div');d.className='ai-item';d.innerHTML='<span class="ai-t">'+fmtUntil(e.ts)+'</span>'+escapeHtml(e.text);box.appendChild(d);}}
+  function activityOpen(){const a=document.getElementById('activity');return a&&a.style.display==='block';}
+  function openActivity(){hidePanels('activity');document.getElementById('activity').style.display='block';renderActivity();}
+  function closeActivity(){document.getElementById('activity').style.display='none';}
+  // Meeting reminders: ~5 min before a booking YOU made starts, nudge once (toast + notification when backgrounded).
+  const remindedBookings=new Set();
+  setInterval(()=>{if(!world||!world.rooms||!myId)return;const now=Date.now();
+    for(const r of world.rooms)for(const b of (r.bookings||[])){
+      if(b.byId!==myId||remindedBookings.has(b.id))continue;
+      const mins=(b.startsAt-now)/60000;
+      if(mins>0&&mins<=5){remindedBookings.add(b.id);
+        const msg='⏰ "'+b.title+'" starts in '+Math.max(1,Math.round(mins))+' min in '+(r.name||'a room');
+        toast(msg);logActivity(msg);
+        if((document.hidden||!document.hasFocus())&&'Notification' in window&&Notification.permission==='granted'){try{new Notification('⏰ Meeting soon',{body:b.title+' — '+(r.name||'a room'),tag:'nexspace-reminder'});}catch(_){}}
+      }}
+  },30000);
   // ---------- Avatar customization (colours + name + optional GLB model; synced to everyone, saved on this device) ----------
   function hslHex(h,s,l){s/=100;l/=100;const a=s*Math.min(l,1-l),k=n=>(n+h/30)%12,f=n=>l-a*Math.max(-1,Math.min(k(n)-3,9-k(n),1)),c=n=>Math.round(255*f(n)).toString(16).padStart(2,'0');return '#'+c(0)+c(8)+c(4);}
   function openCustomize(){const a=myAppear||{};
@@ -1610,6 +1644,8 @@
   document.getElementById('roomsClose').addEventListener('click',closeRooms);
   document.getElementById('btnCustomize').addEventListener('click',()=>{customizeOpen()?closeCustomize():openCustomize();});
   document.getElementById('custClose').addEventListener('click',closeCustomize);
+  document.getElementById('btnActivity').addEventListener('click',()=>{activityOpen()?closeActivity():openActivity();});
+  document.getElementById('activityClose').addEventListener('click',closeActivity);
   document.getElementById('custSave').addEventListener('click',applyCustomize);
   document.getElementById('custReset').addEventListener('click',resetCustomize);
   document.getElementById('tvMute').addEventListener('click',tvUnmute);
