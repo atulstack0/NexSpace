@@ -460,7 +460,7 @@ wss.on("connection", (ws) => {
       A.sessions++; if (clients.size > A.peak) A.peak = clients.size;
       fireWebhook("user.joined", { id, name, role });
       notifySlack("👋 " + name + " entered the office");
-      send(ws, { t: "welcome", id, world: worldForClient(player.floor), you: { ...player }, whiteboard: whiteboard.strokes, tv: tvState(), presentation: f0.presentation || null });
+      send(ws, { t: "welcome", id, world: worldForClient(player.floor), you: { ...player }, whiteboard: whiteboard.strokes, tv: tvState(), presentation: f0.presentation || null, game: f0.game || null });
       broadcastActivity(player.floor, "join", player.name, ws);   // tell the floor someone arrived
       console.log(`+ ${player.name} (${id}) [${role}] — ${clients.size} online`);
       return;
@@ -533,6 +533,23 @@ wss.on("connection", (ws) => {
       if (bk.byId !== p.id && rank(p.role) < RANK.admin) return deny(ws, "cancel this booking", "admin"); // only the booker or an admin
       room.bookings = room.bookings.filter((b) => b.id !== m.bookingId);
       refreshRoomActive(f, room, Date.now()); broadcastBooking(f, room);
+    } else if (m.t === "gameJoin") {                           // tic-tac-toe: claim an open seat (else spectate)
+      const f = floorOf(p); if (!f.game) f.game = newGame();
+      const g = f.game;
+      if (g.seats.X !== p.id && g.seats.O !== p.id) { if (!g.seats.X) { g.seats.X = p.id; g.names.X = p.name; } else if (!g.seats.O) { g.seats.O = p.id; g.names.O = p.name; } }
+      broadcastGame(f);
+    } else if (m.t === "gameMove") {
+      const f = floorOf(p), g = f.game; if (!g || g.winner || g.draw) return;
+      const mark = g.seats.X === p.id ? "X" : g.seats.O === p.id ? "O" : null;
+      if (!mark || mark !== g.turn) return;                     // not your seat, or not your turn
+      const c = Number(m.cell); if (!Number.isInteger(c) || c < 0 || c > 8 || g.board[c]) return;
+      g.board[c] = mark;
+      if (winLine(g.board)) g.winner = mark; else if (g.board.every(Boolean)) g.draw = true; else g.turn = mark === "X" ? "O" : "X";
+      broadcastGame(f);
+    } else if (m.t === "gameReset") {
+      const f = floorOf(p); const old = f.game || newGame();
+      f.game = { board: Array(9).fill(null), turn: "X", seats: old.seats, names: old.names, winner: null, draw: false }; // keep seats, fresh board
+      broadcastGame(f);
     } else if (m.t === "present") {                            // start presenting your screen to the room/floor
       if (rank(p.role) < RANK.member) return deny(ws, "present", "member");
       const f = floorOf(p); const r = f.rooms.find((rm) => inRoom(p, rm));
@@ -587,7 +604,7 @@ wss.on("connection", (ws) => {
       p.x = clamp(sp.x + (Math.random() - 0.5) * 80, 60, dest.w - 60);
       p.y = clamp(sp.y + (Math.random() - 0.5) * 80, 60, dest.h - 60);
       p.lastMoveAt = Date.now();
-      send(ws, { t: "floor", world: worldForClient(dest.slug), you: { id: p.id, x: Math.round(p.x), y: Math.round(p.y), floor: p.floor }, presentation: dest.presentation || null });
+      send(ws, { t: "floor", world: worldForClient(dest.slug), you: { id: p.id, x: Math.round(p.x), y: Math.round(p.y), floor: p.floor }, presentation: dest.presentation || null, game: dest.game || null });
       console.log(`~ ${p.name} (${p.id}) → floor '${dest.slug}'`);
     } else if (m.t === "tvPlay") {            // shared TV: play a video now (everyone's screen switches)
       if (!validVideoId(m.videoId)) return;
@@ -641,6 +658,7 @@ wss.on("connection", (ws) => {
     clients.delete(ws);
     if (p) {
       const f = floors.get(p.floor); if (f && f.presentation && f.presentation.byId === p.id) { f.presentation = null; broadcastPresentation(f); } // presenter left → stop
+      if (f && f.game) { const g = f.game; let ch = false; if (g.seats.X === p.id) { g.seats.X = null; g.names.X = ""; ch = true; } if (g.seats.O === p.id) { g.seats.O = null; g.names.O = ""; ch = true; } if (ch) broadcastGame(f); } // free their game seat
       broadcastActivity(p.floor, "leave", p.name, ws);
       fireWebhook("user.left", { id: p.id, name: p.name }); notifySlack("👋 " + p.name + " left the office"); console.log(`- ${p.name} (${p.id}) — ${clients.size} online`);
     }
@@ -729,6 +747,10 @@ function refreshRoomActive(f, room, now) {
 function broadcastBooking(f, room) { const msg = JSON.stringify({ t: "booking", floor: f.slug, roomId: room.id, bookings: room.bookings || [], booking: activeBooking(room) }); for (const [ws, q] of clients) if (q.floor === f.slug && ws.readyState === 1) ws.send(msg); }
 function broadcastPresentation(f) { const msg = JSON.stringify({ t: "present", floor: f.slug, presentation: f.presentation || null }); for (const [ws, q] of clients) if (q.floor === f.slug && ws.readyState === 1) ws.send(msg); }
 function broadcastActivity(floorSlug, kind, name, exceptWs) { const msg = JSON.stringify({ t: "activity", kind, name, ts: Date.now() }); for (const [ws, q] of clients) if (q.floor === floorSlug && ws !== exceptWs && ws.readyState === 1) ws.send(msg); }
+function newGame() { return { board: Array(9).fill(null), turn: "X", seats: { X: null, O: null }, names: { X: "", O: "" }, winner: null, draw: false }; }
+const WIN_LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+function winLine(b) { return WIN_LINES.some(([a, c, d]) => b[a] && b[a] === b[c] && b[a] === b[d]); }
+function broadcastGame(f) { const msg = JSON.stringify({ t: "game", floor: f.slug, game: f.game || null }); for (const [ws, q] of clients) if (q.floor === f.slug && ws.readyState === 1) ws.send(msg); }
 // chat routing (§6.9): channels are org-wide (cross-floor); floor + nearby are local to the sender's floor
 function deliverChat(d) {
   const dfloor = d.floor || DEFAULT_FLOOR;

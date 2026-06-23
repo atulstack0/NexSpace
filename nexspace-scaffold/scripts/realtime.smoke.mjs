@@ -51,7 +51,7 @@ await new Promise((res, rej) => {
 function join(name, token) {
   return new Promise((resolve) => {
     const ws = new WebSocket(`ws://localhost:${PORT}`);
-    const st = { ws, name, id: null, role: null, world: null, floorMsg: null, tv: null, last: null, denied: [], rateLimited: false, chats: [], draws: [], cleared: false, reacts: [], nudged: false, kicked: false, bookings: {}, sched: {}, activity: [] };
+    const st = { ws, name, id: null, role: null, world: null, floorMsg: null, tv: null, last: null, denied: [], rateLimited: false, chats: [], draws: [], cleared: false, reacts: [], nudged: false, kicked: false, bookings: {}, sched: {}, activity: [], game: null };
     ws.on("open", () => ws.send(JSON.stringify({ t: "join", name, token })));
     ws.on("message", (d) => {
       const m = JSON.parse(d.toString());
@@ -63,6 +63,7 @@ function join(name, token) {
       if (m.t === "booking") { st.bookings[m.roomId] = m.booking; if (m.bookings) st.sched[m.roomId] = m.bookings; }
       if (m.t === "present") st.presentation = m.presentation;
       if (m.t === "activity") st.activity.push(m);
+      if (m.t === "game") st.game = m.game;
       if (m.t === "denied") st.denied.push(m.action);
       if (m.t === "rateLimited") st.rateLimited = true;
       if (m.t === "chat") st.chats.push(m);
@@ -325,6 +326,21 @@ try {
   admin.ws.send(JSON.stringify({ t: "unpresent" }));
   await wait(220);
   (guest.presentation === null) ? ok("unpresent clears the presentation for everyone") : bad("unpresent did not clear");
+
+  // mini-game (tic-tac-toe) — seats, turn enforcement, win detection, reset, synced to spectators
+  admin.ws.send(JSON.stringify({ t: "gameJoin" })); await wait(120);
+  guest.ws.send(JSON.stringify({ t: "gameJoin" })); await wait(150);
+  (guest.game && guest.game.seats.X === admin.id && guest.game.seats.O === guest.id) ? ok("two players take the X and O seats") : bad("game seats not assigned");
+  admin.ws.send(JSON.stringify({ t: "gameMove", cell: 0 })); await wait(90);   // X
+  admin.ws.send(JSON.stringify({ t: "gameMove", cell: 1 })); await wait(90);   // X again — out of turn, ignored
+  (guest.game && guest.game.board[1] === null) ? ok("out-of-turn move is rejected") : bad("out-of-turn move accepted");
+  guest.ws.send(JSON.stringify({ t: "gameMove", cell: 3 })); await wait(90);   // O
+  admin.ws.send(JSON.stringify({ t: "gameMove", cell: 1 })); await wait(90);   // X
+  guest.ws.send(JSON.stringify({ t: "gameMove", cell: 4 })); await wait(90);   // O
+  admin.ws.send(JSON.stringify({ t: "gameMove", cell: 2 })); await wait(120);  // X wins 0,1,2
+  (guest.game && guest.game.winner === "X") ? ok("a win is detected and synced to spectators") : bad("win not detected/synced");
+  admin.ws.send(JSON.stringify({ t: "gameReset" })); await wait(120);
+  (guest.game && guest.game.winner === null && guest.game.board.every((c) => c === null)) ? ok("game reset clears the board (keeps seats)") : bad("reset failed");
 
   // reactions (6.6)
   admin.ws.send(JSON.stringify({ t: "react", emoji: "🎉" }));

@@ -27,7 +27,7 @@
     #barItems .btn,#barItems select{padding:10px 12px;font-size:14px}      /* bigger touch targets */
     .tvmain{flex-direction:column} .tvside{width:100%;max-width:none} .tvplayer{aspect-ratio:16/9}
     #chat,#wb{max-width:96vw}
-    #tv,#rooms,#customize,#activity{bottom:auto;top:64px}                   /* keep panels clear of the joystick */
+    #tv,#rooms,#customize,#activity,#game{bottom:auto;top:64px}             /* keep panels clear of the joystick */
     .tvbox{width:96vw!important;max-height:62vh}
     #minimapWrap canvas{width:124px;height:auto}
     #hint{font-size:11px;left:8px;right:auto;bottom:8px;max-width:64vw;padding:6px 9px}
@@ -75,6 +75,11 @@
   #rooms{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:30;display:none;max-width:94vw}
   #customize{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:31;display:none;max-width:94vw}
   #activity{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:30;display:none;max-width:94vw}
+  #game{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:30;display:none;max-width:94vw}
+  #gameBoard{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .gcell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:38px;font-weight:800;background:#0d1424;border:1px solid var(--line);border-radius:10px;cursor:pointer;user-select:none;color:#eaf0ff}
+  .gcell.x{color:#5b8cff} .gcell.o{color:#ff9f4a} .gcell:hover{border-color:var(--accent)}
+  .gcell.dis{cursor:default} .gcell.dis:hover{border-color:var(--line)}
   .ai-item{font-size:12px;color:var(--text);padding:5px 8px;border-bottom:1px solid rgba(255,255,255,.05)}
   .ai-item .ai-t{color:var(--muted);font-size:11px;margin-right:7px}
   .custrow{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;color:var(--text)}
@@ -191,6 +196,7 @@
   <button class="btn" id="btnRooms" title="Book a room / today's schedule">📅 Rooms</button>
   <button class="btn" id="btnCustomize" title="Customize your avatar">🎨 Avatar</button>
   <button class="btn" id="btnActivity" title="Activity feed">📋</button>
+  <button class="btn" id="btnGame" title="Play tic-tac-toe">🎮</button>
   <button class="btn" id="btnEdit" title="Edit the floor — move/add/remove elements (owner/admin)" style="display:none">✏️ Edit</button>
   </div>
 </div>
@@ -255,6 +261,13 @@
   <div class="tvbox" style="width:420px">
     <div class="tvhead"><b>📋 Activity</b><button class="btn" id="activityClose" style="margin-left:auto;padding:3px 10px">✕</button></div>
     <div id="activityList" class="tvlist" style="max-height:50vh"></div>
+  </div>
+</div>
+<div id="game">
+  <div class="tvbox" style="width:300px">
+    <div class="tvhead"><b>🎮 Tic-tac-toe</b><span id="gameStatus" style="color:var(--muted);font-size:12px"></span><button class="btn" id="gameClose" style="margin-left:auto;padding:3px 10px">✕</button></div>
+    <div id="gameBoard"></div>
+    <div style="display:flex;gap:8px"><button class="btn active" id="gameJoin" style="flex:1">Sit down to play</button><button class="btn" id="gameReset">New game</button></div>
   </div>
 </div>
 <div id="customize">
@@ -344,6 +357,7 @@
   const reactions=new Map(),adminMuted=new Set();
   const lkAudio=new Map(),lkVideo=new Map(),lkScreens=new Map();let screenFocus=null;
   let presentState=null,autoPresented=false; // synced "present to the room" state
+  let gameState=null; // shared tic-tac-toe state
   const hsl=h=>'hsl('+h+' 70% 60%)';
   const STATUS_COLOR={available:'#39d3a6',away:'#8a96b3',busy:'#ffb454',dnd:'#ff5d6c',inMeeting:'#5b8cff'};
   const hueOf=id=>{let h=0;for(let i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))%360;return h;};
@@ -385,6 +399,7 @@
         if(m.tv)applyTv(m.tv);
         tvKick();                                          // start the wall player now (API), or raw-embed fallback if the API is blocked
         presentState=m.presentation||null;updatePresentation();
+        gameState=m.game||null;
         applyBranding(world.branding);populateFloors(world);
         initLiveKit();}
       else if(m.t==='floor'){applyFloorChange(m);}
@@ -400,6 +415,7 @@
       }
       else if(m.t==='world'){world=m.world;WORLD={w:world.w,h:world.h};world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});applyBranding(world.branding);if(threeMode)Three3D.rebuild();toast('🛠️ Office layout updated');}
       else if(m.t==='activity'){logActivity((m.kind==='join'?'🟢 ':'⚪ ')+(m.name||'Someone')+(m.kind==='join'?' joined':' left'));}
+      else if(m.t==='game'){if(!m.floor||m.floor===myFloor){const prevW=gameState&&gameState.winner;gameState=m.game||null;if(gameOpen())renderGame();if(gameState&&gameState.winner&&gameState.winner!==prevW)logActivity('🎮 '+((gameState.winner==='X'?gameState.names.X:gameState.names.O)||gameState.winner)+' won tic-tac-toe');}}
       else if(m.t==='present'){if(!m.floor||m.floor===myFloor){const wasPres=presentState&&presentState.byName;presentState=m.presentation||null;updatePresentation();
         if(m.presentation)logActivity('📺 '+m.presentation.byName+' started presenting');else if(wasPres)logActivity('📺 '+wasPres+' stopped presenting');}}
       else if(m.t==='booking'){if(world&&(!m.floor||m.floor===myFloor)){const r=(world.rooms||[]).find(x=>x.id===m.roomId);if(r){const wasActive=r.booking&&r.booking.id;const oldIds=new Set((r.bookings||[]).map(b=>b.id));r.booking=m.booking;if(m.bookings)r.bookings=m.bookings;if(roomsOpen())renderRooms();
@@ -424,7 +440,7 @@
   const keys=new Set();let target=null;const joy={x:0,y:0,active:false}; // virtual joystick vector (mobile)
   addEventListener('keydown',e=>{const tg=e.target; if(tg&&(tg.tagName==='INPUT'||tg.tagName==='TEXTAREA'))return; const _wb=document.getElementById('wb'); if(_wb&&_wb.style.display==='flex')return; const k=e.key.toLowerCase();
     if(k==='t'){openTv();e.preventDefault();return;}                 // open the TV from any view
-    if(k==='escape'){closeTv();closeWidget();closeRooms();closeCustomize();closeActivity();return;}
+    if(k==='escape'){closeTv();closeWidget();closeRooms();closeCustomize();closeActivity();closeGame();return;}
     if(viewMode==='3d'&&k==='v'){cameraMode=cameraMode==='thirdPerson'?'firstPerson':'thirdPerson';toast(cameraMode==='firstPerson'?'👁️ First-person':'🎥 Third-person');return;}
     if(viewMode==='3d'&&k===' '){if(jumpZ<=0.5)jumpV=220;e.preventDefault();return;} // cosmetic jump
     if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','shift'].includes(k)){keys.add(k);if(k!=='shift')target=null;e.preventDefault();}});
@@ -1243,6 +1259,7 @@
     peers.forEach((e,id)=>removeVoice(id));peers.clear();
     portalArmed=false; // disarm: you must step off the arrival portal before it can re-trigger
     presentState=m.presentation||null;updatePresentation();
+    gameState=m.game||null;if(gameOpen())renderGame();
     applyBranding(world.branding);populateFloors(world);
     if(threeMode)Three3D.rebuild();
     toast('🪜 Entered '+(world.name||myFloor));}
@@ -1317,7 +1334,7 @@
     tvSync={pos:Math.max(0,+t.position||0),at:Date.now(),playing:t.playing!==false};
     if(ytPlayer&&ytPlayer.getCurrentTime)tvApplyRemote();else if(ytReady&&!ytPlayer)tvEnsurePlayer();else if(tvRaw)tvRawSync(); // apply the shared play/pause + position
     if(document.getElementById('tv').style.display==='block'){renderTvQueue();tvNowText();}}
-  function hidePanels(except){['tv','rooms','customize','activity'].forEach(id=>{if(id!==except){const el=document.getElementById(id);if(el)el.style.display='none';}});} // one bottom panel at a time
+  function hidePanels(except){['tv','rooms','customize','activity','game'].forEach(id=>{if(id!==except){const el=document.getElementById(id);if(el)el.style.display='none';}});} // one bottom panel at a time
   function openTv(){hidePanels('tv');const ov=document.getElementById('tv');ov.style.display='block';   // controls panel only — the video stays on the wall
     if(ytReady&&!ytPlayer)tvEnsurePlayer();renderTvQueue();tvNowText();document.getElementById('tvResults').innerHTML='';const q=document.getElementById('tvQ');if(q){q.value='';setTimeout(()=>q.focus(),50);}}
   function closeTv(){document.getElementById('tv').style.display='none';}            // keep the video playing on the wall
@@ -1336,6 +1353,24 @@
   function activityOpen(){const a=document.getElementById('activity');return a&&a.style.display==='block';}
   function openActivity(){hidePanels('activity');document.getElementById('activity').style.display='block';renderActivity();}
   function closeActivity(){document.getElementById('activity').style.display='none';}
+  // ---------- Mini-game: shared tic-tac-toe ----------
+  function gameSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o));}
+  function gameOpen(){const g=document.getElementById('game');return g&&g.style.display==='block';}
+  function openGame(){hidePanels('game');document.getElementById('game').style.display='block';renderGame();}
+  function closeGame(){document.getElementById('game').style.display='none';}
+  function renderGame(){const board=document.getElementById('gameBoard'),status=document.getElementById('gameStatus'),joinBtn=document.getElementById('gameJoin');if(!board)return;
+    const g=gameState||{board:Array(9).fill(null),turn:'X',seats:{X:null,O:null},names:{X:'',O:''},winner:null,draw:false};
+    const mySeat=g.seats.X===myId?'X':g.seats.O===myId?'O':null;
+    let s;if(g.winner)s='🎉 '+((g.winner==='X'?g.names.X:g.names.O)||g.winner)+' wins!';
+    else if(g.draw)s='Draw — start a new game';
+    else{const tn=(g.turn==='X'?g.names.X:g.names.O)||g.turn;s=g.turn===mySeat?'Your turn ('+mySeat+')':(g.seats[g.turn]?tn+"’s turn":'Waiting for an opponent…');}
+    if(status)status.textContent=s;
+    const seatOpen=!g.seats.X||!g.seats.O;
+    if(joinBtn){joinBtn.style.display=(mySeat||!seatOpen)?'none':'';joinBtn.textContent='Sit down to play ('+(!g.seats.X?'X':'O')+')';}
+    board.innerHTML='';
+    g.board.forEach((v,i)=>{const c=document.createElement('div');const playable=mySeat&&!g.winner&&!g.draw&&!v&&g.turn===mySeat;
+      c.className='gcell'+(v==='X'?' x':v==='O'?' o':'')+(playable?'':' dis');c.textContent=v||'';
+      if(playable)c.onclick=()=>gameSend({t:'gameMove',cell:i});board.appendChild(c);});}
   // Meeting reminders: ~5 min before a booking YOU made starts, nudge once (toast + notification when backgrounded).
   const remindedBookings=new Set();
   setInterval(()=>{if(!world||!world.rooms||!myId)return;const now=Date.now();
@@ -1646,6 +1681,10 @@
   document.getElementById('custClose').addEventListener('click',closeCustomize);
   document.getElementById('btnActivity').addEventListener('click',()=>{activityOpen()?closeActivity():openActivity();});
   document.getElementById('activityClose').addEventListener('click',closeActivity);
+  document.getElementById('btnGame').addEventListener('click',()=>{gameOpen()?closeGame():openGame();});
+  document.getElementById('gameClose').addEventListener('click',closeGame);
+  document.getElementById('gameJoin').addEventListener('click',()=>gameSend({t:'gameJoin'}));
+  document.getElementById('gameReset').addEventListener('click',()=>gameSend({t:'gameReset'}));
   document.getElementById('custSave').addEventListener('click',applyCustomize);
   document.getElementById('custReset').addEventListener('click',resetCustomize);
   document.getElementById('tvMute').addEventListener('click',tvUnmute);
