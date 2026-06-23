@@ -811,12 +811,13 @@ function hhmm(ts) { const d = new Date(ts); return String(d.getHours()).padStart
 // Built-in commands answered from server state — no LLM, so they work even without an API key. Returns text or null.
 function localAnswer(p, q) {
   const f = floorOf(p);
-  if (/^(help|commands|\?|what can you do)/i.test(q)) return "Try: “@ai who's here”, “@ai schedule”, or “@ai summarize”. Ask me anything else too" + (aiConfigured() ? "." : " — though free-form answers need an API key (see AI_ASSISTANT.md).");
-  if (/who('?s| is)?\s*(here|around|online|in)|^who\b/i.test(q)) {
+  const s = String(q || "").toLowerCase().trim();
+  if (s === "help" || s === "commands" || s === "?" || s.startsWith("what can you do")) return "Try: \"@ai who's here\", \"@ai schedule\", or \"@ai summarize\". Ask me anything else too" + (aiConfigured() ? "." : " — though free-form answers need an API key (see AI_ASSISTANT.md).");
+  if (s.startsWith("who")) {   // "who's here" / "who is here" / "who is around" …
     const here = [...clients.values()].filter((c) => c.floor === f.slug).map((c) => c.name);
     return "👥 On " + f.name + " right now (" + here.length + "): " + (here.join(", ") || "just you");
   }
-  if (/schedule|what'?s\s*booked|bookings?|agenda|today'?s?\s*meetings?|what'?s\s*on/i.test(q)) {
+  if (s.includes("schedule") || s.includes("booked") || s.includes("booking") || s.includes("agenda") || s.includes("what's on") || s.includes("whats on") || s.includes("meetings")) {
     const lines = [];
     for (const r of f.rooms) for (const b of (r.bookings || []).slice().sort((a, c) => a.startsAt - c.startsAt)) lines.push("• " + r.name + ": " + b.title + " (" + hhmm(b.startsAt) + "–" + hhmm(b.endsAt) + ") · " + b.by);
     return lines.length ? "📅 Today on " + f.name + ":\n" + lines.join("\n") : "📅 Nothing booked yet on " + f.name + ".";

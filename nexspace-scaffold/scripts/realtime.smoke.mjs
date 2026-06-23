@@ -315,9 +315,9 @@ try {
   admin.ws.send(JSON.stringify({ t: "chat", scope: "floor", body: "just a normal message" }));
   await wait(250);
   (admin.chats.filter((c) => c.from === "assistant").length === aiBefore) ? ok("a normal chat does not trigger the assistant") : bad("assistant triggered on a non-@ai chat");
-  admin.ws.send(JSON.stringify({ t: "chat", scope: "floor", body: "@ai who's here" }));
+  admin.ws.send(JSON.stringify({ t: "chat", scope: "floor", body: "@ai who is here" }));
   await wait(300);
-  (admin.chats.some((c) => c.from === "assistant" && c.ai && /right now/.test(c.body) && c.body.includes("Admin Ada"))) ? ok("@ai who's here answers locally (no API key needed)") : bad("local who's-here command failed");
+  (admin.chats.some((c) => c.from === "assistant" && c.ai && /right now/.test(c.body) && c.body.includes(guest.name))) ? ok("@ai who is here answers locally (no API key needed)") : bad("local who's-here command failed");
 
   // present-to-room — present broadcasts the presenter; guest can't present; unpresent clears it
   admin.ws.send(JSON.stringify({ t: "present" }));
