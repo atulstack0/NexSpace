@@ -143,6 +143,18 @@
   #card{width:min(470px,92vw);background:linear-gradient(180deg,var(--panel),#121828);border:1px solid var(--line);border-radius:18px;padding:28px 30px;text-align:center}
   #card .orb{width:34px;height:34px;border-radius:50%;margin:0 auto 10px;background:conic-gradient(from 200deg,var(--accent),var(--accent2),var(--accent))}
   #card h1{font-size:21px;margin:0 0 4px} #card p{color:var(--muted);font-size:13px;line-height:1.6}
+  /* first-run onboarding tour (§7 / P6-05) */
+  #tour{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;background:radial-gradient(1000px 500px at 50% 30%,rgba(91,140,255,.18),transparent),rgba(8,11,18,.92)}
+  #tour.show{display:flex}
+  #tourCard{width:min(460px,92vw);max-height:88vh;overflow:auto;background:linear-gradient(180deg,var(--panel),#121828);border:1px solid var(--line);border-radius:18px;padding:24px 26px}
+  #tourCard h2{font-size:19px;margin:0 0 12px;color:var(--text)}
+  #tourCard ul{margin:0 0 16px;padding-left:20px;color:var(--muted);font-size:13.5px;line-height:1.75}
+  #tourCard ul b{color:var(--text)}
+  #tourBtns{display:flex;gap:8px;justify-content:flex-end}
+  #tourBtns button{padding:9px 16px;border-radius:10px;border:1px solid var(--line);background:var(--accent);color:#fff;font-weight:600;font-size:13px;cursor:pointer}
+  #tourBtns button.ghost{background:transparent;color:var(--muted)}
+  #helpFab{position:fixed;left:12px;bottom:12px;z-index:35;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--text);font-size:16px;cursor:pointer;opacity:.8}
+  #helpFab:hover{opacity:1;border-color:var(--accent)}
   #name,#email,#password{width:100%;margin:8px 0 0;padding:11px 13px;border-radius:10px;border:1px solid var(--line);background:#0d1424;color:var(--text);font-size:14px}
   #go{width:100%;margin-top:12px;padding:13px;border:0;border-radius:12px;font-size:15px;font-weight:700;color:#fff;cursor:pointer;background:linear-gradient(135deg,var(--accent),#7aa2ff)}
   .tip{font-size:11px;color:var(--muted);margin-top:12px}
@@ -302,6 +314,19 @@
     Sign in with Google</button>
   <div class="tip">🎧 Headphones recommended. Sign in with email + password, with Google, or leave the fields blank to join as a <b>guest</b>.</div>
 </div></div>
+<div id="tour"><div id="tourCard">
+  <h2>Welcome to NexSpace 👋</h2>
+  <ul>
+    <li><b>Move</b> with <b>WASD</b> / arrow keys — or <b>click the floor</b> to walk there (it now routes around furniture and walls).</li>
+    <li><b>Voice is spatial</b> — walk closer to hear people, step away for privacy. Your camera &amp; mic are <b>off by default</b>; turn them on from the toolbar.</li>
+    <li><b>Rooms &amp; doors</b> — step inside a room for private audio; knock on a closed door to be let in.</li>
+    <li><b>Media wall</b> — click the <b>TV</b> to start a synced watch‑party for everyone nearby.</li>
+    <li><b>Chat</b> — switch scope (Nearby / Floor / #channels / DMs), and type <b>@ai</b> for the in‑office assistant.</li>
+    <li><b>2D / 3D</b> — toggle <b>🗺️ 2D</b> and <b>🧊 3D</b> anytime; your choice is remembered next visit.</li>
+  </ul>
+  <div id="tourBtns"><button id="tourSkip" class="ghost">Skip</button><button id="tourDone">Got it →</button></div>
+</div></div>
+<button id="helpFab" title="Show the welcome tour again">?</button>
 
 <script>
 "use strict";
@@ -380,6 +405,29 @@
     if(dx&&!blocked(me.x+dx,me.y,rad))me.x+=dx;
     if(dy&&!blocked(me.x,me.y+dy,rad))me.y+=dy;
     me.x=Math.max(16,Math.min(WORLD.w-16,me.x));me.y=Math.max(16,Math.min(WORLD.h-16,me.y));}
+  // click-to-move pathfinding: BFS over a coarse nav grid + line-of-sight smoothing (§6.2 / P1-07)
+  function losBlocked(x0,y0,x1,y1){const d=Math.hypot(x1-x0,y1-y0),n=Math.max(1,Math.ceil(d/12));for(let i=1;i<=n;i++){const t=i/n;if(blocked(x0+(x1-x0)*t,y0+(y1-y0)*t,16))return true;}return false;}
+  function findPath(sx,sy,gx,gy){
+    if(!world)return null;
+    const G=32,gw=Math.max(1,Math.ceil(WORLD.w/G)),gh=Math.max(1,Math.ceil(WORLD.h/G)),rad=16;
+    const cl=(v,m)=>Math.max(0,Math.min(m-1,Math.floor(v/G)));
+    const key=(x,y)=>y*gw+x,blk=new Map();
+    const isBlk=(x,y)=>{const k=key(x,y);let v=blk.get(k);if(v===undefined){v=blocked(x*G+G/2,y*G+G/2,rad);blk.set(k,v);}return v;};
+    const s=[cl(sx,gw),cl(sy,gh)],g=[cl(gx,gw),cl(gy,gh)];
+    if(isBlk(g[0],g[1])){let best=null,bd=1e9;for(let r=1;r<=5&&!best;r++)for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const x=g[0]+dx,y=g[1]+dy;if(x<0||y<0||x>=gw||y>=gh||isBlk(x,y))continue;const dd=dx*dx+dy*dy;if(dd<bd){bd=dd;best=[x,y];}}if(!best)return null;g[0]=best[0];g[1]=best[1];}
+    const q=[s],came=new Map();came.set(key(s[0],s[1]),null);let found=false,head=0;
+    const nb=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+    while(head<q.length){const c=q[head++];if(c[0]===g[0]&&c[1]===g[1]){found=true;break;}
+      for(const[dx,dy]of nb){const x=c[0]+dx,y=c[1]+dy;if(x<0||y<0||x>=gw||y>=gh)continue;const k=key(x,y);if(came.has(k)||isBlk(x,y))continue;
+        if(dx&&dy&&(isBlk(c[0]+dx,c[1])||isBlk(c[0],c[1]+dy)))continue;came.set(k,c);q.push([x,y]);}
+      if(q.length>6000)break;}
+    if(!found)return null;
+    const pts=[];let cur=g;while(cur){pts.push({x:cur[0]*G+G/2,y:cur[1]*G+G/2});cur=came.get(key(cur[0],cur[1]));}
+    pts.reverse();pts[pts.length-1]={x:gx,y:gy};
+    const out=[];let anchor={x:sx,y:sy};
+    for(let j=0;j<pts.length;j++){if(j===pts.length-1){out.push(pts[j]);break;}if(losBlocked(anchor.x,anchor.y,pts[j+1].x,pts[j+1].y)){out.push(pts[j]);anchor=pts[j];}}
+    return out;}
+  function setMoveTarget(w){const p=findPath(me.x,me.y,w.x,w.y);if(p&&p.length){pathQueue=p;target=p[p.length-1];}else{pathQueue=[];target=w;}}
 
   // ---------- Networking ----------
   let ws=null;
@@ -404,7 +452,9 @@
         presentState=m.presentation||null;updatePresentation();
         gameState=m.game||null;
         applyBranding(world.branding);populateFloors(world);
-        initLiveKit();}
+        initLiveKit();
+        try{if(localStorage.getItem('nexspace_view')==='3d'&&viewMode!=='3d'){const b3=document.querySelector('#viewSeg button[data-view="3d"]');if(b3)setTimeout(()=>b3.click(),300);}}catch(_){}
+        maybeShowTour();}
       else if(m.t==='floor'){applyFloorChange(m);}
       else if(m.t==='tv'){applyTv(m);}
       else if(m.t==='snapshot'){
@@ -441,13 +491,13 @@
   let lastSend=0;
 
   // ---------- Input ----------
-  const keys=new Set();let target=null;const joy={x:0,y:0,active:false}; // virtual joystick vector (mobile)
+  const keys=new Set();let target=null,pathQueue=[];const joy={x:0,y:0,active:false}; // virtual joystick vector (mobile)
   addEventListener('keydown',e=>{const tg=e.target; if(tg&&(tg.tagName==='INPUT'||tg.tagName==='TEXTAREA'))return; const _wb=document.getElementById('wb'); if(_wb&&_wb.style.display==='flex')return; const k=e.key.toLowerCase();
     if(k==='t'){openTv();e.preventDefault();return;}                 // open the TV from any view
     if(k==='escape'){closeTv();closeWidget();closeRooms();closeCustomize();closeActivity();closeGame();return;}
     if(viewMode==='3d'&&k==='v'){cameraMode=cameraMode==='thirdPerson'?'firstPerson':'thirdPerson';toast(cameraMode==='firstPerson'?'👁️ First-person':'🎥 Third-person');return;}
     if(viewMode==='3d'&&k===' '){if(jumpZ<=0.5)jumpV=220;e.preventDefault();return;} // cosmetic jump
-    if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','shift'].includes(k)){keys.add(k);if(k!=='shift')target=null;e.preventDefault();}});
+    if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','shift'].includes(k)){keys.add(k);if(k!=='shift'){target=null;pathQueue.length=0;}e.preventDefault();}});
   addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
   const toWorld=e=>({x:(e.clientX-VW/2)/cam.zoom+cam.x,y:(e.clientY-VH/2)/cam.zoom+cam.y});
   function canvasPrimary(e){                                 // 2D primary action: interact (TV/portal/widget) else move-to
@@ -457,7 +507,7 @@
       if(w.x>=M.x-12&&w.x<=M.x+M.w+12&&w.y>=M.y-(M.screenH||150)-12&&w.y<=M.y+(M.base||16)+12){openTv();return;}}
     if(world&&world.portals){for(const pt of world.portals){if(w.x>=pt.x&&w.x<=pt.x+pt.w&&w.y>=pt.y&&w.y<=pt.y+pt.h){travelTo(pt.to);return;}}}
     if(world&&world.widgets){for(const wd of world.widgets){if(wd.type!=='timer'&&w.x>=wd.x&&w.x<=wd.x+wd.w&&w.y>=wd.y&&w.y<=wd.y+wd.h){openWidget(wd);return;}}}
-    target=w;
+    setMoveTarget(w);
   }
   canvas.addEventListener('mousedown',e=>{if(e.button!==0)return;
     if(viewMode==='3d'){if(!pointerLocked&&canvas.requestPointerLock)canvas.requestPointerLock();return;} // click to look around
@@ -639,7 +689,11 @@
     if(keys.has('w')||keys.has('arrowup'))dy-=1;if(keys.has('s')||keys.has('arrowdown'))dy+=1;
     if(keys.has('a')||keys.has('arrowleft'))dx-=1;if(keys.has('d')||keys.has('arrowright'))dx+=1;
     if(joy.active){dx+=joy.x;dy+=joy.y;}                       // joystick movement (mobile)
-    if(dx||dy){const m=Math.hypot(dx,dy);dx/=m;dy/=m;me.facing=Math.atan2(dy,dx);moveMe(dx*SPEED*dt,dy*SPEED*dt);}
+    if(dx||dy){const m=Math.hypot(dx,dy);dx/=m;dy/=m;me.facing=Math.atan2(dy,dx);moveMe(dx*SPEED*dt,dy*SPEED*dt);target=null;pathQueue.length=0;}
+    else if(pathQueue.length){const wp=pathQueue[0],tx=wp.x-me.x,ty=wp.y-me.y,d=Math.hypot(tx,ty);
+      if(d<(pathQueue.length>1?10:4)){pathQueue.shift();if(!pathQueue.length)target=null;}
+      else{me.facing=Math.atan2(ty,tx);const s=Math.min(d,SPEED*dt),bx=me.x,by=me.y;
+        moveMe(tx/d*s,ty/d*s);if(Math.abs(me.x-bx)<0.2&&Math.abs(me.y-by)<0.2){pathQueue.shift();if(!pathQueue.length)target=null;}}}
     else if(target){const tx=target.x-me.x,ty=target.y-me.y,d=Math.hypot(tx,ty);
       if(d<4)target=null;else{me.facing=Math.atan2(ty,tx);const s=Math.min(d,SPEED*dt),bx=me.x,by=me.y;
         moveMe(tx/d*s,ty/d*s);if(Math.abs(me.x-bx)<0.2&&Math.abs(me.y-by)<0.2)target=null;}}
@@ -1270,7 +1324,7 @@
     if(portalArmed){portalArmed=false;travelTo(on.to);} // stepped onto a portal while armed → travel once
   }
   function applyFloorChange(m){world=m.world;WORLD={w:world.w,h:world.h};myFloor=world.slug||(m.you&&m.you.floor)||myFloor;
-    me.x=m.you.x;me.y=m.you.y;cam.x=me.x;cam.y=me.y;target=null;
+    me.x=m.you.x;me.y=m.you.y;cam.x=me.x;cam.y=me.y;target=null;pathQueue.length=0;
     doors={};world.rooms.forEach(r=>{if(r.door&&r.door.state)doors[r.id]=r.door.state;});
     peers.forEach((e,id)=>removeVoice(id));peers.clear();
     portalArmed=false; // disarm: you must step off the arrival portal before it can re-trigger
@@ -1592,6 +1646,7 @@
   const cv2d=document.getElementById('game'), cv3d=document.getElementById('game3d');
   document.querySelectorAll('#viewSeg button').forEach(b=>b.addEventListener('click',function(){
     document.querySelectorAll('#viewSeg button').forEach(x=>x.classList.remove('active'));this.classList.add('active');viewMode=this.dataset.view;
+    try{localStorage.setItem('nexspace_view',viewMode);}catch(_){}
     if(viewMode==='3d'){
       yaw=me.facing||(-Math.PI/2);
       threeMode=Three3D.available()&&Three3D.init();
@@ -1734,6 +1789,13 @@
     document.getElementById('rolePill').textContent='you: '+myRole;
     document.getElementById('overlay').style.display='none';startAudio();if(actx&&actx.state==='suspended')actx.resume();connect(myName);requestAnimationFrame(loop);});
   document.getElementById('name').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('go').click();});
+  // first-run onboarding tour (§7 / P6-05)
+  function showTour(){document.getElementById('tour').classList.add('show');}
+  function hideTour(){document.getElementById('tour').classList.remove('show');try{localStorage.setItem('nexspace_tour_v1','1');}catch(_){}}
+  function maybeShowTour(){let seen='1';try{seen=localStorage.getItem('nexspace_tour_v1');}catch(_){}if(seen!=='1')setTimeout(showTour,700);}
+  document.getElementById('tourDone').addEventListener('click',hideTour);
+  document.getElementById('tourSkip').addEventListener('click',hideTour);
+  document.getElementById('helpFab').addEventListener('click',showTour);
   // Login: use ?sso=<token> from a Google redirect (or an invite), else a stored token from a prior sign-in.
   (function(){const p=new URLSearchParams(location.search);const fromUrl=p.get('sso')||p.get('invite');
     let tok=fromUrl;if(!tok){try{tok=localStorage.getItem('nexspace_token')||null;}catch(_){}}

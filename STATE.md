@@ -36,7 +36,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 
 | Area | Status | Where |
 |---|---|---|
-| 2D world, avatars, WASD + click move, collisions, camera, minimap | ✅ | `apps/web/index.html` |
+| 2D world, avatars, WASD + click move, collisions, camera, minimap; **click-to-move now uses A\* nav-grid pathfinding** (BFS + line-of-sight smoothing) that routes around furniture/walls and through open doors | ✅ | `apps/web/index.html` |
 | Proximity + room + broadcast spatial audio (Web Audio PannerNode) | ✅ | `apps/web/index.html` |
 | Real voice/video (LiveKit) — video-in-bubble, proximity track culling, mic/cam toggles | ✅ opt-in | `apps/api` (token/egress) + `apps/web` |
 | Rooms, doors (open/closed/locked) + knock-to-enter — closed (unlocked) doors open from outside so empty rooms are enterable; **3D walls have a real door opening** + a state-coloured door panel (hidden when open) | ✅ | realtime + web |
@@ -52,7 +52,8 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Notifications — browser notification + tab-title flash + 💬 unread badge for DMs, @-mentions, and nudges when the tab is unfocused; permission requested on opening chat | ✅ | `apps/web/index.html` |
 | Activity feed (📋) — joins/leaves, new bookings, presentations logged with timestamps; **meeting reminders** nudge you ~5 min before a booking you made starts (toast + notification) | ✅ | realtime `activity` event, web |
 | Mini-game (🎮) — shared tic-tac-toe: two players take X/O seats, turn-enforced moves, win/draw detection, reset; synced live so others spectate; seats freed on leave | ✅ | realtime `gameJoin`/`gameMove`/`gameReset`, web |
-| 2D ⇄ 3D toggle — pseudo-3D **and** real Three.js WebGL | ✅ | `apps/web/index.html` |
+| 2D ⇄ 3D toggle — pseudo-3D **and** real Three.js WebGL; **view choice persisted** (localStorage) and restored on next visit | ✅ | `apps/web/index.html` |
+| First-run onboarding tour — dismissible welcome overlay with the core tips (move/voice/rooms/TV/chat/views), shown once, re-openable via the **?** button; controls carry hover tooltips | ✅ | `apps/web/index.html` |
 | 3D office props — desks (monitor + chair), meeting tables, sofas, plants, chairs, rugs by `furniture.kind`; styled businessman avatars (vest/shirt/tie-by-person/trousers/shoes) that turn to face their walk direction with floating name tags; TV overlay perspective-sized + wall-occluded | ✅ | `apps/web/index.html` (Three3D) |
 | Real character model — optional GLB (Renderpeople "Eric" or a Mixamo business character); loads `apps/web/models/eric.glb` via GLTFLoader, auto-fits + tints per person, **falls back to the styled avatar** if absent | ✅ opt-in | `apps/web/index.html`, `CHARACTER.md` |
 | Walk animation — procedural leg/arm swing on the styled avatar when moving; GLB models play embedded **Walk/Idle** clips (AnimationMixer), blended by movement | ✅ | `apps/web/index.html` (Three3D) |
@@ -85,7 +86,8 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 - **glTF art** — 3D uses primitives (boxes/cylinders/billboards), not modeled assets.
 - **Outdoor "chai stall"** environment + in-world mini-games. (Multi-floor + portals, and interactive objects — notes, YouTube/Spotify/web embeds, shared timers — are now built.)
 - **Calendar / Teams** (need OAuth + accounts) and **SCIM** auto-provisioning.
-- **AI layer** (note-taker/assistant), **mobile/desktop apps**, **SOC2/GDPR/HIPAA** compliance.
+- **AI** recording transcription (Whisper/Deepgram) + NPC greeter — the in-office **assistant + auto meeting-notes are built**; deep transcription/NPCs are not. **Native mobile/desktop apps** (web is responsive), **SOC2/GDPR/HIPAA** compliance.
+- **Gallery/grid video view**, mic/cam **device picker**, editor **undo/redo + room-drawing + templates**, **guest time-cap** — still open code-only items (next batches).
 - **Scale follow-ups**: spatial-hash interest management, Redis-persisted boot state.
 
 ---
