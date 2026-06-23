@@ -574,7 +574,7 @@ wss.on("connection", (ws) => {
       deliverChat(payload); publishEvent("chat", payload); // local + cross-node
       rememberChat(payload);
       const aiM = body.trim().match(/^(?:@ai|\/ai)\b\s*([\s\S]*)$/i);   // ask the in-office assistant
-      if (aiM && Date.now() - (p.lastAiAt || 0) > 3000) { p.lastAiAt = Date.now(); askAssistant(p, aiM[1] || "", { scope, channel, to, floor: p.floor, askerId: p.id, x: p.x, y: p.y, roomId: payload.roomId }); }
+      if (aiM) askAssistant(p, aiM[1] || "", { scope, channel, to, floor: p.floor, askerId: p.id, x: p.x, y: p.y, roomId: payload.roomId });
     } else if (m.t === "draw") {
       const stroke = m.stroke; if (!stroke || !Array.isArray(stroke.pts) || stroke.pts.length > 2000) return;
       whiteboard.strokes.push(stroke); if (whiteboard.strokes.length > 3000) whiteboard.strokes.shift();
@@ -825,8 +825,9 @@ function localAnswer(p, q) {
 }
 async function askAssistant(p, prompt, ctx) {
   const q = (prompt || "").trim();
-  const local = localAnswer(p, q); if (local !== null) { postAssistant(local, ctx); return; }   // who / schedule / help — no LLM
+  const local = localAnswer(p, q); if (local !== null) { postAssistant(local, ctx); return; }   // who / schedule / help — no LLM, no cooldown
   if (!aiConfigured()) { postAssistant("I'm not enabled for free-form questions yet — an admin can turn me on with a free Google Gemini key (set GEMINI_API_KEY). I can still do “@ai who's here” and “@ai schedule”. See AI_ASSISTANT.md.", ctx); return; }
+  if (Date.now() - (p.lastAiAt || 0) < 3000) return; p.lastAiAt = Date.now();   // rate-limit only the (paid) LLM calls
   const sys = "You are NexSpace's friendly in-office assistant inside a virtual office. Keep replies concise (a few sentences) and useful. You can answer questions, summarize the recent room chat, and draft short meeting notes. Reply in plain text.";
   const recent = recentByFloor.get(ctx.floor || DEFAULT_FLOOR) || [];
   const ctxText = recent.length ? ("Recent room chat:\n" + recent.slice(-25).map((c) => c.name + ": " + c.body).join("\n") + "\n\n") : "";
