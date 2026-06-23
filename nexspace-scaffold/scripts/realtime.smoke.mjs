@@ -87,6 +87,7 @@ try {
   (admin.world?.widgets?.some((wd) => wd.type === "note") && admin.world?.widgets?.some((wd) => wd.type === "timer")) ? ok("welcome carries interactive widgets (note+timer)") : bad("interactive widgets missing from world");
   (admin.world?.furniture?.length > 0 && admin.world?.furniture[0].id && admin.world?.furniture.every((o) => o.kind)) ? ok("welcome carries editable furniture (with ids + kinds)") : bad("furniture missing from world or lacks kinds");
   (admin.tv && typeof admin.tv.videoId === "string" && admin.tv.videoId) ? ok("welcome carries shared TV state") : bad("TV state missing from welcome");
+  await wait(150); // the join-activity broadcast lands just after guest's welcome resolves
   (admin.activity.some((a) => a.kind === "join" && a.name === guest.name)) ? ok("a peer joining is announced as an activity event") : bad("join activity not broadcast");
 
   // walk into the Focus Room at (500,500). The server-authoritative speed cap (MAX_SPEED) only
