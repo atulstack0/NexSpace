@@ -155,6 +155,22 @@
   #tourBtns button.ghost{background:transparent;color:var(--muted)}
   #helpFab{position:fixed;left:12px;bottom:12px;z-index:35;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--text);font-size:16px;cursor:pointer;opacity:.8}
   #helpFab:hover{opacity:1;border-color:var(--accent)}
+  /* gallery / grid video view (§6.6 / P2-09) */
+  #gallery{position:fixed;inset:0;z-index:55;display:none;flex-direction:column;background:rgba(8,11,18,.96)}
+  #gallery.show{display:flex}
+  #galleryHead{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)}
+  #galleryHead b{font-size:16px;color:var(--text)} #galleryHint{color:var(--muted);font-size:13px;flex:1}
+  #galleryGrid{flex:1;display:grid;gap:10px;padding:16px;overflow:auto;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));align-content:start}
+  .galTile{position:relative;background:#0d1424;border:1px solid var(--line);border-radius:12px;overflow:hidden;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;min-height:150px}
+  .galTile video{width:100%;height:100%;object-fit:cover;display:block}
+  .galTile .nm{position:absolute;left:8px;bottom:8px;background:rgba(0,0,0,.55);color:#fff;font-size:12px;padding:3px 8px;border-radius:8px}
+  .galTile .ph{color:var(--muted);font-size:13px;text-align:center;padding:12px}
+  /* mic/cam device picker (§6.6 / P2-08) */
+  #devicePop{position:fixed;top:54px;left:12px;z-index:56;display:none;background:rgba(20,27,44,.98);border:1px solid var(--accent);border-radius:12px;padding:12px;box-shadow:0 8px 28px rgba(0,0,0,.4);width:min(300px,90vw)}
+  #devicePop.show{display:block}
+  #devicePop .row{display:flex;flex-direction:column;gap:4px;margin-bottom:8px}
+  #devicePop label{color:var(--muted);font-size:12px}
+  #devicePop select{padding:8px;border-radius:8px;border:1px solid var(--line);background:#0d1424;color:var(--text);font-size:13px;max-width:100%}
   #name,#email,#password{width:100%;margin:8px 0 0;padding:11px 13px;border-radius:10px;border:1px solid var(--line);background:#0d1424;color:var(--text);font-size:14px}
   #go{width:100%;margin-top:12px;padding:13px;border:0;border-radius:12px;font-size:15px;font-weight:700;color:#fff;cursor:pointer;background:linear-gradient(135deg,var(--accent),#7aa2ff)}
   .tip{font-size:11px;color:var(--muted);margin-top:12px}
@@ -186,6 +202,8 @@
   <button class="btn" id="btnMic" title="Deafen (mute everyone you hear)">🔊</button>
   <button class="btn" id="btnMicPub" title="Your microphone (LiveKit)" style="display:none">🎤</button>
   <button class="btn" id="btnCam" title="Your camera (LiveKit)" style="display:none">🎥</button>
+  <button class="btn" id="btnGallery" title="Gallery / grid view of cameras (§6.6)" style="display:none">🔲 Gallery</button>
+  <button class="btn" id="btnDevices" title="Choose microphone & camera (§6.6)" style="display:none">⚙️</button>
   <button class="btn" id="btnScreen" title="Share your screen (LiveKit)" style="display:none">🖥️ Share</button>
   <button class="btn" id="btnPresent" title="Present your screen to the room" style="display:none">📺 Present</button>
   <button class="btn" id="btnScreens" title="View shared screens" style="display:none">🖥️ Screens (0)</button>
@@ -327,6 +345,11 @@
   <div id="tourBtns"><button id="tourSkip" class="ghost">Skip</button><button id="tourDone">Got it →</button></div>
 </div></div>
 <button id="helpFab" title="Show the welcome tour again">?</button>
+<div id="gallery"><div id="galleryHead"><b>🔲 Gallery</b><span id="galleryHint"></span><button id="galleryClose" class="btn">✕ Close</button></div><div id="galleryGrid"></div></div>
+<div id="devicePop">
+  <div class="row"><label>🎤 Microphone</label><select id="micSel"></select></div>
+  <div class="row"><label>🎥 Camera</label><select id="camSel"></select></div>
+</div>
 
 <script>
 "use strict";
@@ -351,7 +374,7 @@
   const R=()=>RANGES[mode];
   // LiveKit (optional real media). API runs on :3001 (same host as the page).
   const API_BASE='';   // same-origin: the realtime server serves /auth/login (single-service). Local full-API setups also handle it.
-  let lkRoom=null,lkActive=false,localVideoEl=null,myToken=null,myRole='guest',myAvatar='';
+  let lkRoom=null,lkActive=false,localVideoEl=null,localVideoTrack=null,myToken=null,myRole='guest',myAvatar='';
   function loadAppear(){try{const s=localStorage.getItem('nexspace_appear');return s?JSON.parse(s):null;}catch(_){return null;}}
   function saveAppear(a){try{localStorage.setItem('nexspace_appear',JSON.stringify(a));}catch(_){}}
   let myAppear=loadAppear();   // {suit,tie,skin,model} or null (null = default hue-based look)
@@ -628,11 +651,12 @@
       room.on(LK.RoomEvent.TrackSubscribed,onTrack);
       room.on(LK.RoomEvent.TrackUnsubscribed,offTrack);
       room.on(LK.RoomEvent.LocalTrackPublished,(pub)=>{if(pub.track&&pub.track.kind==='video'&&pub.track.source!==LK.Track.Source.ScreenShare){
-        const el=pub.track.attach();el.muted=true;el.playsInline=true;el.style.display='none';document.body.appendChild(el);localVideoEl=el;}});
+        const el=pub.track.attach();el.muted=true;el.playsInline=true;el.style.display='none';document.body.appendChild(el);localVideoEl=el;localVideoTrack=pub.track;if(galleryOpen)buildGallery();}});
       await room.connect(url,token);
       lkRoom=room;lkActive=true;
       const mb=document.getElementById('btnMicPub'),cb=document.getElementById('btnCam');
       mb.style.display='';cb.style.display='';document.getElementById('btnScreen').style.display='';document.getElementById('btnPresent').style.display='';
+      document.getElementById('btnGallery').style.display='';document.getElementById('btnDevices').style.display='';
       // Mic/cam are isolated: if permission is blocked they must NOT drop the whole room to synth audio.
       let micOn=false;
       try{await room.localParticipant.setMicrophoneEnabled(true);micOn=true;}catch(e){toast('🎤 Allow microphone access, then click the 🎤 button');}
@@ -654,13 +678,13 @@
       if(lkRoom&&lkRoom.startAudio)lkRoom.startAudio().catch(()=>{});
     }else if(track.kind==='video'){const el=track.attach();el.muted=true;el.playsInline=true;el.style.display='none';
       if(LK&&track.source===LK.Track.Source.ScreenShare){document.getElementById('screenHolder').appendChild(el);lkScreens.set(id,{el,name:(participant.name||id)});updateScreens();}
-      else{document.body.appendChild(el);lkVideo.set(id,{el});}}
+      else{document.body.appendChild(el);lkVideo.set(id,{el,track});if(galleryOpen)buildGallery();}}
   }
   function offTrack(track,pub,participant){const id=participant.identity;
     if(track.kind==='audio'){const a=lkAudio.get(id);if(a){if(a.el){try{a.el.pause();}catch(_){}a.el.remove();}lkAudio.delete(id);}}
     else if(track.kind==='video'){
       if(LK&&track.source===LK.Track.Source.ScreenShare){const s=lkScreens.get(id);if(s&&s.el)s.el.remove();lkScreens.delete(id);if(screenFocus===id)screenFocus=null;updateScreens();}
-      else{const v=lkVideo.get(id);if(v&&v.el)v.el.remove();lkVideo.delete(id);}}
+      else{const v=lkVideo.get(id);if(v&&v.el)v.el.remove();lkVideo.delete(id);if(galleryOpen)buildGallery();}}
     try{track.detach&&track.detach();}catch(e){}
   }
   // Audio diagnostics — run nexAudio() in the browser console to see why you can/can't hear people.
@@ -1669,7 +1693,39 @@
     try{await lkRoom.localParticipant.setMicrophoneEnabled(on);this.classList.toggle('active',on);toast(on?'🎤 Mic on':'🎤 Mic off');}
     catch(e){this.classList.remove('active');toast('🎤 Microphone blocked — allow it via the 🔒 icon in the address bar, then click 🎤 again');}});
   document.getElementById('btnCam').addEventListener('click',function(){if(!lkActive||!lkRoom)return;
-    const on=!lkRoom.localParticipant.isCameraEnabled;lkRoom.localParticipant.setCameraEnabled(on);this.classList.toggle('active',on);if(!on)localVideoEl=null;toast(on?'🎥 Camera on':'🎥 Camera off');});
+    const on=!lkRoom.localParticipant.isCameraEnabled;lkRoom.localParticipant.setCameraEnabled(on);this.classList.toggle('active',on);if(!on){localVideoEl=null;localVideoTrack=null;if(galleryOpen)buildGallery();}toast(on?'🎥 Camera on':'🎥 Camera off');});
+  // Gallery / grid view of everyone's camera (§6.6 / P2-09) — fresh track.attach() per tile so it never steals the avatar's video
+  let galleryOpen=false,galAttached=[];
+  function buildGallery(){
+    const grid=document.getElementById('galleryGrid'),hint=document.getElementById('galleryHint');if(!grid)return;
+    galAttached.forEach(a=>{try{a.track.detach(a.el);}catch(_){}});galAttached=[];grid.innerHTML='';
+    const tiles=[];
+    if(localVideoTrack)tiles.push({track:localVideoTrack,name:(myName||'You')+' (you)'});
+    for(const[id,v]of lkVideo){if(v.track){const p=peers.get(id);tiles.push({track:v.track,name:(p&&p.name)||'Guest'});}}
+    if(!tiles.length){const d=document.createElement('div');d.className='galTile';d.innerHTML='<div class="ph">No one has their camera on yet.<br>Turn on 🎥 to appear here.</div>';grid.appendChild(d);hint.textContent='0 cameras';return;}
+    hint.textContent=tiles.length+(tiles.length>1?' cameras':' camera');
+    for(const t of tiles){const tile=document.createElement('div');tile.className='galTile';
+      let el=null;try{el=t.track.attach();}catch(_){}
+      if(el){el.muted=true;el.playsInline=true;tile.appendChild(el);galAttached.push({track:t.track,el});}
+      const nm=document.createElement('div');nm.className='nm';nm.textContent=t.name;tile.appendChild(nm);grid.appendChild(tile);}
+  }
+  function openGallery(){if(!lkActive){toast('Gallery view needs LiveKit voice/video enabled');return;}galleryOpen=true;document.getElementById('gallery').classList.add('show');buildGallery();}
+  function closeGallery(){galleryOpen=false;document.getElementById('gallery').classList.remove('show');galAttached.forEach(a=>{try{a.track.detach(a.el);}catch(_){}});galAttached=[];const g=document.getElementById('galleryGrid');if(g)g.innerHTML='';}
+  document.getElementById('btnGallery').addEventListener('click',()=>{galleryOpen?closeGallery():openGallery();});
+  document.getElementById('galleryClose').addEventListener('click',closeGallery);
+  // Mic/cam device picker (§6.6 / P2-08)
+  let devOpen=false;
+  async function fillDevices(){const mic=document.getElementById('micSel'),cam=document.getElementById('camSel');
+    try{const ds=await navigator.mediaDevices.enumerateDevices();mic.innerHTML='';cam.innerHTML='';let mi=0,ci=0;
+      ds.forEach(d=>{const o=document.createElement('option');o.value=d.deviceId;
+        if(d.kind==='audioinput'){o.textContent=d.label||('Microphone '+(++mi));mic.appendChild(o);}
+        else if(d.kind==='videoinput'){o.textContent=d.label||('Camera '+(++ci));cam.appendChild(o);}});
+      if(!mic.children.length)mic.innerHTML='<option>No microphone found</option>';
+      if(!cam.children.length)cam.innerHTML='<option>No camera found</option>';
+    }catch(e){mic.innerHTML=cam.innerHTML='<option>Allow mic/camera first</option>';}}
+  document.getElementById('micSel').addEventListener('change',async function(){if(lkRoom&&lkRoom.switchActiveDevice){try{await lkRoom.switchActiveDevice('audioinput',this.value);toast('🎤 Mic switched');}catch(e){toast('Could not switch mic');}}});
+  document.getElementById('camSel').addEventListener('change',async function(){if(lkRoom&&lkRoom.switchActiveDevice){try{await lkRoom.switchActiveDevice('videoinput',this.value);toast('🎥 Camera switched');}catch(e){toast('Could not switch camera');}}});
+  document.getElementById('btnDevices').addEventListener('click',function(){const p=document.getElementById('devicePop');devOpen=!devOpen;p.classList.toggle('show',devOpen);if(devOpen)fillDevices();});
   document.getElementById('btnScreen').addEventListener('click',async function(){
     if(!lkActive||!lkRoom){toast('Screen share needs LiveKit (set creds in apps/api/.env)');return;}
     const on=!lkRoom.localParticipant.isScreenShareEnabled;
