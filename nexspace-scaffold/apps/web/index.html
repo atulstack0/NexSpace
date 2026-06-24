@@ -305,7 +305,7 @@
 </div>
 <div id="editBar">
   <span class="elabel">✏️ Editing floor</span>
-  <select id="edFurnKind" class="btn" title="Furniture type" style="padding:6px 8px"><option value="desk">🖥 Desk</option><option value="table">🪑 Table</option><option value="couch">🛋 Couch</option><option value="plant">🪴 Plant</option><option value="chair">💺 Chair</option><option value="rug">🟫 Rug</option><option value="chai">☕ Chai stall</option></select>
+  <select id="edFurnKind" class="btn" title="Furniture type" style="padding:6px 8px"><option value="desk">🖥 Desk</option><option value="table">🪑 Table</option><option value="couch">🛋 Couch</option><option value="plant">🪴 Plant</option><option value="chair">💺 Chair</option><option value="rug">🟫 Rug</option><option value="chai">☕ Chai stall</option><option value="whiteboard">📋 Whiteboard</option><option value="bookshelf">📚 Bookshelf</option><option value="cooler">🚰 Water cooler</option><option value="server">🖧 Server rack</option></select>
   <button class="btn" id="edAddFurniture">＋ Add</button>
   <button class="btn" id="edAddNote">＋ Note</button>
   <button class="btn" id="edAddTimer">＋ Timer</button>
@@ -450,7 +450,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-25b · Freeze-Tag 3D ground rings + custom GLB avatar + chai stall + auto-hide rails','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-25c · new props: whiteboard / bookshelf / water cooler / server rack','color:#ffb454;font-weight:700');
   // forward browser errors + key client events to the server's live log stream (/logs.html). Buffers until the socket opens.
   const _clogBuf=[];
   function clog(level,msg){const e={t:'clientlog',level,msg:String(msg).slice(0,400)};try{if(ws&&ws.readyState===1){ws.send(JSON.stringify(e));return;}}catch(_){}_clogBuf.push(e);if(_clogBuf.length>50)_clogBuf.shift();}
@@ -999,6 +999,28 @@
       ctx.fillStyle='#cfd6e6';ctx.beginPath();ctx.arc(x+w*0.30,y+h*0.72,7,0,7);ctx.fill();            // kettle
       ctx.fillStyle='#e8c08a';ctx.beginPath();ctx.arc(x+w*0.62,y+h*0.74,5,0,7);ctx.fill();            // cup
       return;}
+    if(k==='whiteboard'){ // 📋 whiteboard on a stand: tray + white board + marker squiggles
+      ctx.fillStyle='#3a4258';rr(x,y+h*0.62,w,h*0.38,3);ctx.fill();                                   // tray/stand bar
+      ctx.fillStyle='#f4f6fb';rr(x+2,y,w-4,h*0.58,4);ctx.fill();                                       // board
+      ctx.strokeStyle='#9aa3b6';ctx.lineWidth=1.5;rr(x+2,y,w-4,h*0.58,4);ctx.stroke();
+      ctx.lineWidth=2;ctx.strokeStyle='#5b8cff';ctx.beginPath();ctx.moveTo(x+10,y+7);ctx.lineTo(x+w*0.42,y+7);ctx.stroke();
+      ctx.strokeStyle='#ff5d6c';ctx.beginPath();ctx.moveTo(x+10,y+14);ctx.lineTo(x+w*0.30,y+14);ctx.stroke();
+      return;}
+    if(k==='bookshelf'){ // 📚 bookshelf: wood case + colored book spines
+      ctx.fillStyle='#6b4a2c';rr(x,y,w,h,4);ctx.fill();ctx.strokeStyle='rgba(0,0,0,.25)';ctx.lineWidth=1;rr(x,y,w,h,4);ctx.stroke();
+      const cols=['#d94f4f','#5b8cff','#39d3a6','#ffb454','#a06bff','#e8c08a'],n=Math.max(6,Math.floor(w/16)),bw=(w-8)/n;
+      for(let i=0;i<n;i++){ctx.fillStyle=cols[i%cols.length];rr(x+4+i*bw,y+4,bw-2,h-8,1);ctx.fill();}
+      return;}
+    if(k==='cooler'){ // 🚰 water cooler: white base ring + blue tank
+      const cx=x+w/2,cy=y+h/2,r=Math.min(w,h)/2;
+      ctx.fillStyle='#dfe6f2';ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.fill();
+      ctx.fillStyle='#7fb6ff';ctx.beginPath();ctx.arc(cx,cy,r*0.6,0,7);ctx.fill();
+      ctx.strokeStyle='rgba(255,255,255,.4)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.stroke();
+      return;}
+    if(k==='server'){ // 🖧 server rack: dark cabinet + LED dots
+      ctx.fillStyle='#1a1f2b';rr(x,y,w,h,4);ctx.fill();ctx.strokeStyle='rgba(120,150,210,.3)';ctx.lineWidth=1;rr(x,y,w,h,4);ctx.stroke();
+      for(let i=0;i<4;i++){ctx.fillStyle=i%2?'#39d3a6':'#ffb454';ctx.beginPath();ctx.arc(x+9,y+8+i*((h-12)/3),2.2,0,7);ctx.fill();}
+      return;}
     // desk: wood top + monitor strip at the back + chair pad in front
     fill('#8c6a47',8);edge(8);
     ctx.fillStyle='#12233f';rr(x+w*0.28,y+4,w*0.44,8,3);ctx.fill();              // monitor (back edge)
@@ -1325,6 +1347,33 @@
         add(new THREE.CylinderGeometry(8, 9, 15, 12), kettle, -w * 0.25, 46, d * 0.12);              // kettle
         add(new THREE.SphereGeometry(3.2, 10, 10), kettle, w * 0.12, 43, d * 0.12);                  // cup
         add(new THREE.SphereGeometry(3.2, 10, 10), kettle, w * 0.24, 43, d * 0.12);
+      } else if (kind === "whiteboard") {   // 📋 whiteboard on a stand
+        const white = pMat(0xf4f6fb, 0.45);
+        add(new THREE.BoxGeometry(w, 64, 4), white, 0, 62, 0);                                        // board face
+        add(new THREE.BoxGeometry(w + 6, 6, 7), metal, 0, 94, 0);                                     // top frame rail
+        add(new THREE.BoxGeometry(w * 0.7, 4, 10), metal, 0, 30, 3);                                  // marker tray
+        for (const sx of [-1, 1]) add(new THREE.CylinderGeometry(2.2, 2.2, 58, 8), metal, sx * (w / 2 - 8), 29, 0); // legs
+        add(new THREE.BoxGeometry(w * 0.5, 3, 16), dark, 0, 3, 0);                                     // foot bar
+        const sq = (col, sx) => add(new THREE.BoxGeometry(w * 0.28, 3, 1), new THREE.MeshBasicMaterial({ color: col }), sx, 70, 2.6);
+        sq(0x5b8cff, -w * 0.12); sq(0xff5d6c, w * 0.14);                                               // marker squiggles
+      } else if (kind === "bookshelf") {   // 📚 bookshelf: wood case + colored book spines
+        add(new THREE.BoxGeometry(w, 118, d), wood, 0, 59, 0);                                         // case body
+        add(new THREE.BoxGeometry(w + 4, 6, d + 4), woodTop, 0, 118, 0);                               // top cap
+        const cols = [0xd94f4f, 0x5b8cff, 0x39d3a6, 0xffb454, 0xa06bff, 0xe8c08a];
+        for (let s = 0; s < 3; s++) { const yy = 24 + s * 36, n = Math.max(4, Math.floor(w / 22)), bw = (w - 12) / n;
+          add(new THREE.BoxGeometry(w - 8, 3, d - 4), woodTop, 0, yy - 15, 0);                         // shelf plank
+          for (let i = 0; i < n; i++) add(new THREE.BoxGeometry(bw - 3, 28, d - 8), pMat(cols[(i + s) % cols.length], 0.6), -w / 2 + 6 + bw * (i + 0.5), yy, 1); // book spines
+        }
+      } else if (kind === "cooler") {   // 🚰 water cooler: white unit + blue bottle
+        add(new THREE.BoxGeometry(w * 0.74, 50, d * 0.74), pMat(0xdfe6f2, 0.4), 0, 25, 0);             // dispenser body
+        add(new THREE.BoxGeometry(w * 0.5, 6, 4), dark, 0, 30, d * 0.37);                              // spout panel
+        add(new THREE.CylinderGeometry(w * 0.3, w * 0.34, 34, 16), pMat(0x7fb6ff, 0.25), 0, 67, 0);    // water bottle (blue)
+        add(new THREE.CylinderGeometry(w * 0.12, w * 0.12, 6, 12), pMat(0xdfe6f2, 0.4), 0, 87, 0);     // bottle neck
+      } else if (kind === "server") {   // 🖧 server rack: dark cabinet + blinking LED rows
+        add(new THREE.BoxGeometry(w, 116, d), pMat(0x1a1f2b, 0.6), 0, 58, 0);                          // cabinet
+        add(new THREE.BoxGeometry(w - 8, 110, 1), pMat(0x0e1118, 0.5), 0, 58, d / 2 + 0.4);            // front panel inset
+        for (let i = 0; i < 8; i++) add(new THREE.BoxGeometry(w - 18, 8, 1), pMat(0x2a3142, 0.6), 0, 14 + i * 12, d / 2 + 0.9); // rack unit slats
+        for (let i = 0; i < 8; i++) add(new THREE.BoxGeometry(3, 3, 1), new THREE.MeshBasicMaterial({ color: i % 3 ? 0x39d3a6 : 0xffb454 }), -w / 2 + 8, 14 + i * 12, d / 2 + 1.2); // LEDs
       } else if (kind === "table") {
         const topY = 30;
         if ((o.r || 0) > 30) { const r = Math.min(w, d) / 2; add(new THREE.CylinderGeometry(r, r, 6, 28), woodTop, 0, topY, 0); add(new THREE.CylinderGeometry(5, 7, topY - 3, 12), wood, 0, (topY - 3) / 2, 0); add(new THREE.CylinderGeometry(r * 0.6, r * 0.6, 2, 16), dark, 0, 2, 0); }

@@ -294,6 +294,10 @@ try {
   admin.ws.send(JSON.stringify({ t: "editFloor", op: "add", kind: "furniture", furnitureKind: "chai", x: 820, y: 820, id: "f-chai01" }));
   await wait(200);
   (guest.world?.furniture?.some((o) => o.id === "f-chai01" && o.kind === "chai")) ? ok("editFloor accepts the ☕ chai-stall furniture kind") : bad("chai furniture kind not accepted");
+  // new office props — whiteboard / bookshelf / water cooler / server rack
+  for (const fk of ["whiteboard", "bookshelf", "cooler", "server"]) admin.ws.send(JSON.stringify({ t: "editFloor", op: "add", kind: "furniture", furnitureKind: fk, x: 880, y: 880, id: "f-" + fk + "01" }));
+  await wait(220);
+  (["whiteboard", "bookshelf", "cooler", "server"].every((fk) => guest.world?.furniture?.some((o) => o.id === "f-" + fk + "01" && o.kind === fk))) ? ok("editFloor accepts the new office prop kinds (whiteboard/bookshelf/cooler/server)") : bad("new office prop kinds not accepted");
   // client-supplied id on add + restore op (powers editor undo/redo)
   admin.ws.send(JSON.stringify({ t: "editFloor", op: "add", wtype: "note", x: 320, y: 320, id: "w-undo01" }));
   await wait(220);
