@@ -302,6 +302,7 @@
   <button class="btn" id="edDrawRoom" title="Draw a new room zone — toggle, then drag a rectangle (§6.10)">▭ Room</button>
   <button class="btn" id="edDrawWall" title="Draw a wall — toggle, then drag a rectangle">▥ Wall</button>
   <span class="sep"></span>
+  <button class="btn" id="edRotate" title="Rotate selected furniture 90° (R · Shift+R reverse)">⟳ Rotate</button>
   <button class="btn warn" id="edDel">🗑 Delete</button>
   <button class="btn" id="edUndo" title="Undo (Ctrl+Z)">↶ Undo</button>
   <button class="btn" id="edRedo" title="Redo (Ctrl+Y / Ctrl+Shift+Z)">↷ Redo</button>
@@ -430,7 +431,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24v · jump fix (WebGL) + draw-wall tool + 📜 Logs + editable walls/rooms + human GLB','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24w · furniture rotation (R) + better layouts + richer live logs + jump fix + editable walls/rooms','color:#ffb454;font-weight:700');
   // forward browser errors + key client events to the server's live log stream (/logs.html). Buffers until the socket opens.
   const _clogBuf=[];
   function clog(level,msg){const e={t:'clientlog',level,msg:String(msg).slice(0,400)};try{if(ws&&ws.readyState===1){ws.send(JSON.stringify(e));return;}}catch(_){}_clogBuf.push(e);if(_clogBuf.length>50)_clogBuf.shift();}
@@ -697,6 +698,10 @@
     const kind=(what==='furniture')?'furniture':'widget';
     edSend(msg);toast('Added '+(what==='furniture'?fk:what)+' near you');
     pushUndo({undo:()=>edRemove(kind,id),redo:()=>edSend(msg)});}
+  function editRotate(dir){const sel=editSelSet.filter(s=>s.kind==='furniture');if(!sel.length){toast('Select furniture to rotate (chairs, desks…)');return;}
+    const recs=sel.map(s=>{const from=((s.obj.rot||0)%360+360)%360,to=(from+(dir<0?270:90))%360;s.obj.rot=to;edSend({t:'editFloor',op:'rotate',id:s.obj.id,rot:to});return{id:s.obj.id,from,to};});
+    pushUndo({undo:()=>recs.forEach(r=>edSend({t:'editFloor',op:'rotate',id:r.id,rot:r.from})),redo:()=>recs.forEach(r=>edSend({t:'editFloor',op:'rotate',id:r.id,rot:r.to}))});
+    toast('⟳ Rotated '+sel.length+' item'+(sel.length>1?'s':''));}
   function editApplyTemplate(){const name=(document.getElementById('edTemplate')||{}).value||'office';
     const snapshot=(world&&world.furniture)?world.furniture.map(o=>({...o})):[];
     edSend({t:'editFloor',op:'template',name});editSelSet=[];updateEditBar();toast('Applied the '+name+' layout');
@@ -764,6 +769,7 @@
     const k=e.key.toLowerCase();
     if((e.ctrlKey||e.metaKey)&&k==='z'){e.preventDefault();if(e.shiftKey)doRedo();else doUndo();return;}
     if((e.ctrlKey||e.metaKey)&&k==='y'){e.preventDefault();doRedo();return;}
+    if(k==='r'&&!e.ctrlKey&&!e.metaKey&&editSelSet.length){editRotate(e.shiftKey?-1:1);e.preventDefault();return;}
     if((e.key==='Delete'||e.key==='Backspace')&&editSelSet.length){editDelete();e.preventDefault();}});
 
   // ---------- Audio (proximity + room override + broadcast) ----------
@@ -930,7 +936,8 @@
       ctx.strokeStyle='rgba(91,140,255,.5)';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(me.x,me.y,R().outer,0,7);ctx.stroke();}
     if(myBcast)ripples(me.x,me.y);
     for(const o of world.obstacles){ctx.fillStyle='#222c44';if(o.r){rr(o.x,o.y,o.w,o.h,o.r);ctx.fill();}else ctx.fillRect(o.x,o.y,o.w,o.h);}
-    if(world.furniture)for(const o of world.furniture)drawFurniture2D(o);
+    if(world.furniture)for(const o of world.furniture){const rot=((o.rot||0)%360+360)%360;
+      if(rot){const cx=o.x+o.w/2,cy=o.y+o.h/2;ctx.save();ctx.translate(cx,cy);ctx.rotate(rot*Math.PI/180);ctx.translate(-cx,-cy);drawFurniture2D(o);ctx.restore();}else drawFurniture2D(o);}
     drawPortals();
     for(const r of world.rooms)drawDoor(r);
     drawMedia();
@@ -1233,7 +1240,7 @@
     function pMat(c, r) { return new THREE.MeshStandardMaterial({ color: c, roughness: r == null ? 0.7 : r, metalness: 0.04 }); }
     function buildProp(o) {
       const w = o.w || 80, d = o.h || 60, kind = o.kind || "desk";
-      const g = new THREE.Group(); g.position.set(o.x + w / 2, 0, o.y + d / 2);
+      const g = new THREE.Group(); g.position.set(o.x + w / 2, 0, o.y + d / 2); g.rotation.y = -((o.rot || 0) * Math.PI / 180);  // cosmetic facing (R in the editor)
       const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); g.add(m); return m; };
       const wood = pMat(0x7a5a3c), woodTop = pMat(0x8c6a47), metal = pMat(0x99a3b0, 0.5), dark = pMat(0x222838), fabric = pMat(0x42577d), fabricA = pMat(0x37496a), screen = new THREE.MeshBasicMaterial({ color: 0x12233f }), pot = pMat(0x86503a);
       const chair = (gp, z) => { const c = new THREE.Group(); c.position.set(0, 0, z); const ca = (geo, mat, x, y, zz) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, zz); c.add(m); };
@@ -2053,6 +2060,7 @@
   document.getElementById('edUndo').addEventListener('click',doUndo);
   document.getElementById('edRedo').addEventListener('click',doRedo);
   document.getElementById('edApplyTemplate').addEventListener('click',editApplyTemplate);
+  document.getElementById('edRotate').addEventListener('click',()=>editRotate(1));
   document.getElementById('edDrawRoom').addEventListener('click',()=>{drawRoomMode=!drawRoomMode;drawWallMode=false;wallDraw=null;editSelSet=[];roomDraw=null;updateRoomBtn();updateWallBtn();toast(drawRoomMode?'▭ Draw-room on — drag a rectangle on the floor':'Draw-room off');});
   document.getElementById('edDrawWall').addEventListener('click',()=>{drawWallMode=!drawWallMode;drawRoomMode=false;roomDraw=null;editSelSet=[];wallDraw=null;updateWallBtn();updateRoomBtn();toast(drawWallMode?'▥ Draw-wall on — drag a rectangle on the floor':'Draw-wall off');});
   // responsive toolbar: ☰ expands / ✕ collapses the HUD; collapsed by default on phones to free the screen

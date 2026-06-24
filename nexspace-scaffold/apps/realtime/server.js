@@ -367,7 +367,7 @@ function sanitizeFurniture(o) {
   const kind = ["desk", "table", "couch", "plant", "chair", "rug"].includes(o.kind) ? o.kind : "desk";
   const w = Math.max(10, Math.min(600, Number(o.w) || 80)), h = Math.max(10, Math.min(600, Number(o.h) || 80));
   const id = (typeof o.id === "string" && /^f-[a-z0-9]{2,40}$/i.test(o.id)) ? o.id : "f-" + crypto.randomBytes(3).toString("hex");
-  return { id, x: Math.round(Number(o.x) || 0), y: Math.round(Number(o.y) || 0), w, h, r: Math.max(0, Math.min(60, Number(o.r) || 12)), kind };
+  return { id, x: Math.round(Number(o.x) || 0), y: Math.round(Number(o.y) || 0), w, h, r: Math.max(0, Math.min(60, Number(o.r) || 12)), kind, rot: ((Math.round(Number(o.rot) || 0)) % 360 + 360) % 360 };
 }
 function floorTemplate(name, f) {
   const W = f.w, H = f.h, mw = f.mediaWall, cxc = W / 2;
@@ -743,6 +743,9 @@ wss.on("connection", (ws) => {
       if (op === "move") {
         const o = arrFor(m.kind).find((x) => x.id === m.id);
         if (o) { o.x = grid(cx(m.x, f.w - (o.w || 40))); o.y = grid(cx(m.y, f.h - (o.h || 40))); changed = true; }
+      } else if (op === "rotate") {                         // rotate a furniture piece (0/90/180/270) — cosmetic facing
+        const o = (f.furniture || []).find((x) => x.id === m.id);
+        if (o) { o.rot = ((Math.round(Number(m.rot) || 0)) % 360 + 360) % 360; changed = true; }
       } else if (op === "add" && m.kind === "furniture") {
         const fk = ["desk", "table", "couch", "plant", "chair", "rug"].includes(m.furnitureKind) ? m.furnitureKind : "desk";
         const dim = fk === "plant" ? { w: 80, h: 80, r: 40 } : fk === "chair" ? { w: 70, h: 70, r: 30 } : fk === "couch" ? { w: 150, h: 90, r: 12 } : fk === "table" ? { w: 200, h: 120, r: 16 } : fk === "rug" ? { w: 260, h: 180, r: 0 } : { w: 150, h: 80, r: 12 };
@@ -807,7 +810,7 @@ wss.on("connection", (ws) => {
           (f.walls = f.walls || []).push(o); changed = true;
         } else if (m.kind === "furniture") {
           o.kind = ["desk", "table", "couch", "plant", "chair", "rug"].includes(src.kind) ? src.kind : "desk";
-          o.r = Math.max(0, Math.min(60, Number(src.r) || 12)); f.furniture.push(o); changed = true;
+          o.r = Math.max(0, Math.min(60, Number(src.r) || 12)); o.rot = ((Math.round(Number(src.rot) || 0)) % 360 + 360) % 360; f.furniture.push(o); changed = true;
         } else if (m.kind === "portal") {
           o.to = String(src.to || "").slice(0, 40); o.label = String(src.label || "Portal").slice(0, 40);
           if (src.spawn && typeof src.spawn === "object") o.spawn = { x: Number(src.spawn.x) || 0, y: Number(src.spawn.y) || 0 };

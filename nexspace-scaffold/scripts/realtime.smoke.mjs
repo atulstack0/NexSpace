@@ -275,6 +275,12 @@ try {
   await wait(220);
   ((guest.world?.furniture?.length || 0) === fBefore + 1) ? ok("owner editFloor add furniture broadcasts") : bad("furniture add did not broadcast");
   (guest.world?.furniture?.some((o) => o.kind === "plant")) ? ok("furniture carries its kind (plant) through the world state") : bad("furniture kind not round-tripped");
+  // furniture rotation (cosmetic facing)
+  admin.ws.send(JSON.stringify({ t: "editFloor", op: "add", kind: "furniture", furnitureKind: "chair", x: 760, y: 760, id: "f-rot01" }));
+  await wait(180);
+  admin.ws.send(JSON.stringify({ t: "editFloor", op: "rotate", id: "f-rot01", rot: 90 }));
+  await wait(200);
+  (guest.world?.furniture?.find((o) => o.id === "f-rot01")?.rot === 90) ? ok("editFloor rotate sets furniture facing") : bad("rotate did not apply");
   // client-supplied id on add + restore op (powers editor undo/redo)
   admin.ws.send(JSON.stringify({ t: "editFloor", op: "add", wtype: "note", x: 320, y: 320, id: "w-undo01" }));
   await wait(220);
