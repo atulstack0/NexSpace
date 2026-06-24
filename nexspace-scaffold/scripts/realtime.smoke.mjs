@@ -308,6 +308,16 @@ try {
   admin.ws.send(JSON.stringify({ t: "editFloor", op: "removeRoom", id: "r-test01" }));
   await wait(220);
   (!guest.world?.rooms?.some((r) => r.id === "r-test01")) ? ok("editFloor removeRoom deletes the room (room-draw undo)") : bad("removeRoom did not delete");
+  // walls are editable too — server assigns ids; move + remove a real wall segment
+  const wall = guest.world?.obstacles?.find((o) => o.id && o.w < 500 && o.h < 500);
+  if (wall) { const wid = wall.id, wx = wall.x;
+    admin.ws.send(JSON.stringify({ t: "editFloor", op: "move", kind: "wall", id: wid, x: wx + 40, y: wall.y }));
+    await wait(220);
+    (guest.world?.obstacles?.find((o) => o.id === wid)?.x !== wx) ? ok("editFloor move relocates a wall") : bad("wall move did not apply");
+    admin.ws.send(JSON.stringify({ t: "editFloor", op: "remove", kind: "wall", id: wid }));
+    await wait(200);
+    (!guest.world?.obstacles?.some((o) => o.id === wid)) ? ok("editFloor remove deletes a wall") : bad("wall remove did not delete");
+  } else bad("no editable wall with an id was found");
   guest.ws.send(JSON.stringify({ t: "editFloor", op: "add", wtype: "note", x: 100, y: 100 }));
   await wait(200);
   (guest.denied.includes("edit the floor")) ? ok("guest denied floor editing (RBAC)") : bad("guest floor edit was NOT blocked");

@@ -428,7 +428,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24q · rename rooms (dbl-click) + labelled toolbar + resizable rooms + richer 3D furniture + human GLB','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24r · editable walls + rename/resizable rooms + labelled toolbar + live logs + human GLB','color:#ffb454;font-weight:700');
   const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
   const mini=document.getElementById('minimap'),mctx=mini.getContext('2d');
   let DPR=Math.max(1,Math.min(2,devicePixelRatio||1)),VW=0,VH=0;
@@ -650,6 +650,7 @@
   // ---------- Owner/admin floor editor (move/add/remove elements; live to everyone) ----------
   function editHit(arr,kind,w){if(!arr)return null;for(let i=arr.length-1;i>=0;i--){const o=arr[i];if(w.x>=o.x&&w.x<=o.x+o.w&&w.y>=o.y&&w.y<=o.y+o.h)return{kind,obj:o};}return null;}
   function editHitRoom(w){if(!world||!world.rooms)return null;for(let i=world.rooms.length-1;i>=0;i--){const r=world.rooms[i],b=r.bounds;if(b&&w.x>=b.x&&w.x<=b.x+b.w&&w.y>=b.y&&w.y<=b.y+b.h)return{kind:'room',obj:r};}return null;}
+  function editHitWall(w){if(!world||!world.obstacles)return null;for(let i=world.obstacles.length-1;i>=0;i--){const o=world.obstacles[i];if(!o.id)continue;if(o.w>=WORLD.w*0.8||o.h>=WORLD.h*0.8)continue;if(w.x>=o.x&&w.x<=o.x+o.w&&w.y>=o.y&&w.y<=o.y+o.h)return{kind:'wall',obj:o};}return null;}  // skip floor-boundary + id-less walls
   const itemBox=(s)=>(s&&s.kind==='room')?s.obj.bounds:s.obj;   // rooms carry position in .bounds; everything else on the object
   const ROOM_HANDLES=['nw','n','ne','e','se','s','sw','w'];      // resize handles for a selected room
   function roomHandlePts(b){return{nw:[b.x,b.y],n:[b.x+b.w/2,b.y],ne:[b.x+b.w,b.y],e:[b.x+b.w,b.y+b.h/2],se:[b.x+b.w,b.y+b.h],s:[b.x+b.w/2,b.y+b.h],sw:[b.x,b.y+b.h],w:[b.x,b.y+b.h/2]};}
@@ -664,7 +665,7 @@
   function editDown(w,shift){if(!world)return;
     if(!shift&&editSelSet.length===1&&editSelSet[0].kind==='room'){const b=editSelSet[0].obj.bounds,hh=roomHandleAt(w,b);   // grab a resize handle on the already-selected room
       if(hh){roomResize={room:editSelSet[0].obj,h:hh,ob:{x:b.x,y:b.y,w:b.w,h:b.h},downX:w.x,downY:w.y};editDrag=null;return;}}
-    const hit=editHit(world.widgets,'widget',w)||editHit(world.portals,'portal',w)||editHit(world.furniture,'furniture',w)||editHitRoom(w);
+    const hit=editHit(world.widgets,'widget',w)||editHit(world.portals,'portal',w)||editHit(world.furniture,'furniture',w)||editHitWall(w)||editHitRoom(w);
     if(shift){if(hit){const i=editSelSet.findIndex(s=>s.obj===hit.obj);if(i>=0)editSelSet.splice(i,1);else editSelSet.push(hit);}}
     else{if(hit){if(!selHas(hit.obj))editSelSet=[hit];}else editSelSet=[];}
     updateEditBar();
@@ -728,7 +729,7 @@
     document.getElementById('editBar').style.display=editMode?'flex':'none';
     const be=document.getElementById('btnEdit');if(be)be.classList.toggle('active',editMode);
     canvas.style.cursor=editMode?'move':'crosshair';if(editMode)toast('✏️ Edit mode — click to select, Shift-click for multi, drag to move, Ctrl+Z to undo');updateEditBar();}
-  function updateEditBar(){const h=document.getElementById('edHint');if(h)h.textContent=editSelSet.length?(editSelSet.length+' selected — drag to move · 🗑 delete · Shift-click to add/remove'):'click furniture or a room to select · drag to move · 🗑 to delete';
+  function updateEditBar(){const h=document.getElementById('edHint');if(h)h.textContent=editSelSet.length?(editSelSet.length+' selected — drag to move · 🗑 delete · Shift-click to add/remove'):'click furniture, a wall, or a room to select · drag to move · 🗑 to delete';
     const d=document.getElementById('edDel');if(d)d.style.opacity=editSelSet.length?'1':'.55';
     const u=document.getElementById('edUndo'),r=document.getElementById('edRedo');if(u)u.style.opacity=undoStack.length?'1':'.45';if(r)r.style.opacity=redoStack.length?'1':'.45';}
   function drawEditSel(){

@@ -233,10 +233,12 @@ function inRoom(p, room) {
   const b = room.bounds;
   return p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
 }
+function ensureWallIds(f) { if (f && f.walls) for (const o of f.walls) if (!o.id) o.id = "k-" + crypto.randomBytes(3).toString("hex"); }  // walls need stable ids to be editable
 function worldForClient(slug) {
   const f = floors.get(slug) || anyFloor();
-  const obstacles = (f.walls || []).slice();
-  if (f.mediaWall) obstacles.push({ x: f.mediaWall.x, y: f.mediaWall.y, w: f.mediaWall.w, h: f.mediaWall.base }); // TV base is a wall
+  ensureWallIds(f);
+  const obstacles = (f.walls || []).map(o => ({ ...o }));   // include the id so the editor can target a wall
+  if (f.mediaWall) obstacles.push({ x: f.mediaWall.x, y: f.mediaWall.y, w: f.mediaWall.w, h: f.mediaWall.base }); // TV base is a wall (derived, no id → not editable)
   return {
     slug: f.slug, name: f.name, w: f.w, h: f.h, obstacles,
     furniture: (f.furniture || []).map(o => ({ ...o })),
@@ -703,7 +705,7 @@ wss.on("connection", (ws) => {
       if (rank(p.role) < RANK.admin) return deny(ws, "edit the floor", "admin");
       const f = floorOf(p), op = m.op; let changed = false;
       const cx = (v, max) => clamp(Number(v), 0, max), grid = (v) => Math.round(v / 10) * 10;
-      const arrFor = (kind) => kind === "portal" ? f.portals : kind === "furniture" ? f.furniture : f.widgets;
+      const arrFor = (kind) => kind === "portal" ? f.portals : kind === "furniture" ? f.furniture : kind === "wall" ? f.walls : f.widgets;
       if (op === "move") {
         const o = arrFor(m.kind).find((x) => x.id === m.id);
         if (o) { o.x = grid(cx(m.x, f.w - (o.w || 40))); o.y = grid(cx(m.y, f.h - (o.h || 40))); changed = true; }
@@ -759,10 +761,12 @@ wss.on("connection", (ws) => {
         const i = arr.findIndex((x) => x.id === m.id); if (i >= 0) { arr.splice(i, 1); changed = true; }
       } else if (op === "restore" && m.obj && typeof m.obj === "object") {  // re-insert a deleted element verbatim (undo) — sanitized
         const arr = arrFor(m.kind), src = m.obj;
-        const id = (typeof src.id === "string" && /^[fwp]-[a-z0-9]{2,40}$/i.test(src.id) && !arr.some((x) => x.id === src.id)) ? src.id : ((m.kind === "furniture" ? "f-" : "w-") + crypto.randomBytes(3).toString("hex"));
-        const W = Math.max(10, Math.min(600, Number(src.w) || 80)), H = Math.max(10, Math.min(600, Number(src.h) || 80));
+        const id = (typeof src.id === "string" && /^[fwpk]-[a-z0-9]{2,40}$/i.test(src.id) && !arr.some((x) => x.id === src.id)) ? src.id : ((m.kind === "furniture" ? "f-" : m.kind === "wall" ? "k-" : "w-") + crypto.randomBytes(3).toString("hex"));
+        const W = Math.max(8, Math.min(2000, Number(src.w) || 80)), H = Math.max(8, Math.min(2000, Number(src.h) || 80));
         const o = { id, x: grid(cx(src.x, f.w - W)), y: grid(cx(src.y, f.h - H)), w: W, h: H };
-        if (m.kind === "furniture") {
+        if (m.kind === "wall") {
+          (f.walls = f.walls || []).push(o); changed = true;
+        } else if (m.kind === "furniture") {
           o.kind = ["desk", "table", "couch", "plant", "chair", "rug"].includes(src.kind) ? src.kind : "desk";
           o.r = Math.max(0, Math.min(60, Number(src.r) || 12)); f.furniture.push(o); changed = true;
         } else if (m.kind === "portal") {
