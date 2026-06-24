@@ -285,6 +285,7 @@
         <button class="btn" id="btnActivity" title="Activity feed">📋 Activity</button>
         <button class="btn" id="btnGame" title="Play tic-tac-toe">🎮 Game</button>
         <button class="btn" id="btnEdit" title="Edit the floor — move/add/remove elements (owner/admin)" style="display:none">✏️ Edit</button>
+        <button class="btn" id="btnLogs" title="Live server + client logs (admin)" style="display:none">📜 Logs</button>
       </div>
     </div>
   </div>
@@ -428,7 +429,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24s · client logs → /logs.html + editable walls + rename/resizable rooms + human GLB','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24t · in-app 📜 Logs button (admin) + client logs → /logs.html + editable walls + human GLB','color:#ffb454;font-weight:700');
   // forward browser errors + key client events to the server's live log stream (/logs.html). Buffers until the socket opens.
   const _clogBuf=[];
   function clog(level,msg){const e={t:'clientlog',level,msg:String(msg).slice(0,400)};try{if(ws&&ws.readyState===1){ws.send(JSON.stringify(e));return;}}catch(_){}_clogBuf.push(e);if(_clogBuf.length>50)_clogBuf.shift();}
@@ -549,7 +550,8 @@
         if(m.you){if(m.you.name)myName=m.you.name;if(m.you.role)myRole=m.you.role;if(m.you.avatar)myAvatar=m.you.avatar;
           const rp=document.getElementById('rolePill');if(rp)rp.innerHTML='you: '+escapeHtml(myName||'Guest')+' · <b>'+escapeHtml(myRole||'guest')+'</b>';
           const so=document.getElementById('btnSignout');if(so)so.style.display=myToken?'':'none';
-          const be=document.getElementById('btnEdit');if(be)be.style.display=(myRole==='admin'||myRole==='owner')?'':'none';}
+          const be=document.getElementById('btnEdit');if(be)be.style.display=(myRole==='admin'||myRole==='owner')?'':'none';
+          const bl=document.getElementById('btnLogs');if(bl)bl.style.display=(myRole==='admin'||myRole==='owner')?'':'none';}
         if(m.whiteboard)wbStrokes=m.whiteboard.slice();
         if(m.tv)applyTv(m.tv);
         tvKick();                                          // start the wall player now (API), or raw-embed fallback if the API is blocked
@@ -1815,6 +1817,7 @@
   document.getElementById('btnMic').addEventListener('click',function(){muted=!muted;this.textContent=muted?'🔇 Deafened':'🔊 Sound';this.classList.toggle('danger',muted);this.classList.toggle('active',muted);});
   document.getElementById('btnLinks').addEventListener('click',function(){showLinks=!showLinks;this.classList.toggle('active',showLinks);});
   document.getElementById('btnAnalytics').addEventListener('click',()=>window.open('/analytics.html','_blank'));
+  document.getElementById('btnLogs').addEventListener('click',()=>window.open('/logs.html','_blank','noopener'));
   function rebuildChatScopes(){const sel=document.getElementById('chatScope');const cur=sel.value;
     let html='<option value="nearby">Nearby</option><option value="floor">Floor</option><option value="channel:general">#general</option><option value="channel:random">#random</option>';
     for(const [id,e] of peers)html+='<option value="dm:'+id+'">DM → '+escapeHtml(e.name||'Guest')+'</option>';

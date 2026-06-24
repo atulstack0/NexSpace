@@ -61,7 +61,10 @@
         autoBtn=document.getElementById('autoBtn'), clearBtn=document.getElementById('clearBtn'), empty=document.getElementById('empty');
   const MAX_ROWS=2000;
   let level='all', q='', auto=true, shown=0;
-  const key=new URLSearchParams(location.search).get('key');
+  const params=new URLSearchParams(location.search);
+  let token=''; try{token=localStorage.getItem('nexspace_token')||'';}catch(_){}   // admin session JWT (same store the app uses)
+  const key=params.get('key');
+  const authQS = token ? ('?token='+encodeURIComponent(token)) : (key ? ('?key='+encodeURIComponent(key)) : '');
   function hhmmss(t){const d=new Date(t);const p=n=>String(n).padStart(2,'0');return p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());}
   function visible(e){ if(level!=='all'&&e.level!==level) return false; if(q&&e.msg.toLowerCase().indexOf(q)<0) return false; return true; }
   function add(e){
@@ -84,7 +87,7 @@
   autoBtn.addEventListener('click',()=>{auto=!auto; autoBtn.classList.toggle('active',auto); if(auto)window.scrollTo(0,document.body.scrollHeight);});
   clearBtn.addEventListener('click',()=>{wrap.innerHTML=''; refreshCount();});
   function connect(){
-    const es=new EventSource('/logs/stream'+(key?('?key='+encodeURIComponent(key)):''));
+    const es=new EventSource('/logs/stream'+authQS);
     es.onopen=()=>{statusEl.classList.remove('bad'); statusText.textContent='live';};
     es.onmessage=ev=>{ let e; try{e=JSON.parse(ev.data);}catch(_){return;} add(e); };
     es.onerror=()=>{ statusEl.classList.add('bad'); statusText.textContent='reconnecting…'; }; // EventSource auto-reconnects

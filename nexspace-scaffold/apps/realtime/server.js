@@ -61,9 +61,11 @@ function pushLog(level, args) {
 })();
 // Logs are sensitive (names, emails, chat). Require ?key=LOGS_TOKEN in production; allow localhost in dev when unset.
 function logsAuthorized(req, u) {
-  const key = u.searchParams.get("key") || "";
+  const tok = u.searchParams.get("token") || "";                         // admin/owner session JWT (same pattern as /analytics)
+  if (tok) { const c = verifyJWT(tok); if (c && rank(c.role) >= RANK.admin) return true; }
+  const key = u.searchParams.get("key") || "";                           // shared token (CLI / external)
   if (process.env.LOGS_TOKEN) return key === process.env.LOGS_TOKEN;
-  const ra = req.socket.remoteAddress || "";
+  const ra = req.socket.remoteAddress || "";                             // dev: localhost open when neither is configured
   return ra.includes("127.0.0.1") || ra.includes("::1");
 }
 
