@@ -450,7 +450,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24z · ❄️ Freeze Tag game + chai stall + auto-hide rails + rotation + better layouts','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-25 · custom GLB avatar (pixellabs) + ❄️ Freeze Tag + chai stall + auto-hide rails','color:#ffb454;font-weight:700');
   // forward browser errors + key client events to the server's live log stream (/logs.html). Buffers until the socket opens.
   const _clogBuf=[];
   function clog(level,msg){const e={t:'clientlog',level,msg:String(msg).slice(0,400)};try{if(ws&&ws.readyState===1){ws.send(JSON.stringify(e));return;}}catch(_){}_clogBuf.push(e);if(_clogBuf.length>50)_clogBuf.shift();}
@@ -1162,7 +1162,9 @@
     // Swap MODEL_URL for your own (e.g. a free Ready Player Me avatar .glb, or a local "models/eric.glb"). On any
     // load/parse/CORS failure the avatars gracefully stay on the built-in styled businessman (see CHARACTER.md).
     let ericProto = null, ericClips = [], ericState = "none";   // none | loading | ready | failed
-    const MODEL_URL = "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/models/gltf/Soldier.glb";
+    // Uploaded character (apps/web/models/pixellabs-glb-3347.glb). If it 404s or fails to parse, avatars
+    // fall back to the styled businessman — see the deploy note. Swap for any other .glb / CDN url.
+    const MODEL_URL = "models/pixellabs-glb-3347.glb";
     const ERIC_FOR = "all";                            // "all" → everyone uses the model · "me" → only your avatar
     const ERIC_FACE = Math.PI;                          // base yaw so the model faces forward (flip by ±Math.PI if it faces away)
     function loadEric() {

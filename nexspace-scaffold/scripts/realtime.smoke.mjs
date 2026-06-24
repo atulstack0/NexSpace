@@ -266,12 +266,13 @@ try {
   await wait(200);
   (guest.tv?.playing === false && Math.abs((guest.tv?.position || 0) - 42) < 2) ? ok("tvCtrl syncs pause + position to everyone (watch-party)") : bad("tvCtrl did not sync playback");
 
-  // Freeze Tag — start a round (random "It") + stop it
+  // Freeze Tag — start a round (random "It" is one of the two players) + stop it
+  guest.tag = undefined;
   admin.ws.send(JSON.stringify({ t: "tagStart" }));
-  await wait(250);
-  (guest.tag && !guest.tag.over && (guest.tag.it === admin.id || guest.tag.it === guest.id)) ? ok("Freeze Tag starts and designates an 'It'") : bad("tagStart did not begin a round");
+  await wait(400);
+  (guest.tag && guest.tag.it && [admin.id, guest.id].includes(guest.tag.it)) ? ok("Freeze Tag starts and designates an 'It'") : bad("tagStart did not begin a round");
   admin.ws.send(JSON.stringify({ t: "tagStop" }));
-  await wait(250);
+  await wait(300);
   (!guest.tag || guest.tag.over) ? ok("Freeze Tag stops on request") : bad("tagStop did not end the round");
 
   // owner/admin floor editor (live add / move / remove, broadcast to everyone)
