@@ -44,7 +44,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Broadcast mode | ✅ | realtime + web |
 | Shared YouTube TV (watch-party) — one screen, search/paste, shared queue, **playback synced to the same second** + shared play/pause (YouTube IFrame API), thumbnail on the wall in 2D/3D | ✅ | realtime `/youtube/search` + `tv*`/`tvCtrl`, web |
 | Text chat — nearby / floor / #channels / private DMs, room-aware, cross-node, XSS-safe | ✅ | realtime + web |
-| In-office AI assistant — `@ai <q>` in chat (or 🤖 button): answers, summarizes recent room chat, drafts notes; **free Google Gemini** / Anthropic / OpenAI (or OpenAI-compatible Groq/OpenRouter) via env key, graceful when unset, per-user cooldown. **Built-in no-key commands**: `@ai who's here`, `@ai schedule`, `@ai help`. **Auto meeting-notes** posted when a booking ends (if a key is set). | ✅ opt-in | realtime `askAssistant`, web; `AI_ASSISTANT.md` |
+| In-office AI assistant — `@ai <q>` in chat (or 🤖 button): answers, summarizes recent room chat, drafts notes; **free Google Gemini** / Anthropic / OpenAI (or OpenAI-compatible Groq/OpenRouter) via env key, graceful when unset, per-user cooldown. **Built-in no-key commands**: `@ai who's here`, `@ai schedule`, `@ai help`. **Auto meeting-notes** posted when a booking ends (if a key is set). **AI greeter NPC** — DMs each new joiner a contextual welcome (occupancy + tips) from "🤖 Guide" (set `GUIDE_OFF=1` to disable). | ✅ opt-in | realtime `askAssistant`/`postGuide`, web; `AI_ASSISTANT.md` |
 | Screen sharing (LiveKit) — publish + multi-share focus viewer; **present-to-room** mode: one presenter's screen auto-enlarges for everyone in their room with a "X is presenting" banner (synced, RBAC member+, auto-stops on leave) | ✅ opt-in | realtime `present`/`unpresent`, `apps/web` |
 | Collaborative whiteboard — synced strokes + clear, late-joiner state, cross-node | ✅ | realtime + web |
 | Reactions (floating emoji), nudge, moderation (admin mute / kick) | ✅ | realtime + web |
@@ -86,7 +86,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 - **glTF art** — 3D uses primitives (boxes/cylinders/billboards), not modeled assets.
 - **Outdoor "chai stall"** environment + in-world mini-games. (Multi-floor + portals, and interactive objects — notes, YouTube/Spotify/web embeds, shared timers — are now built.)
 - **Calendar / Teams** (need OAuth + accounts) and **SCIM** auto-provisioning.
-- **AI** recording transcription (Whisper/Deepgram) + NPC greeter — the in-office **assistant + auto meeting-notes are built**; deep transcription/NPCs are not. **Native mobile/desktop apps** (web is responsive), **SOC2/GDPR/HIPAA** compliance.
+- **AI** recording transcription (Whisper/Deepgram) — the in-office **assistant + auto meeting-notes + greeter NPC are built**; deep transcription of recordings is not (needs a speech-to-text service). **Native mobile/desktop apps** (web is responsive), **SOC2/GDPR/HIPAA** compliance.
 - _All code-only backlog items are now built._ Remaining items need external services/accounts/assets/infra: Calendar/Teams/Zapier integrations, SAML/SCIM, recording transcription, native desktop/mobile apps, full glTF art, SOC2/GDPR/HIPAA, 1,000+ load test.
 - **Scale follow-ups**: spatial-hash interest management, Redis-persisted boot state.
 

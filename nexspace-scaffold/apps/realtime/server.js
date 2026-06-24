@@ -496,6 +496,7 @@ wss.on("connection", (ws) => {
       notifySlack("👋 " + name + " entered the office");
       send(ws, { t: "welcome", id, world: worldForClient(player.floor), you: { ...player }, whiteboard: whiteboard.strokes, tv: tvState(), presentation: f0.presentation || null, game: f0.game || null });
       broadcastActivity(player.floor, "join", player.name, ws);   // tell the floor someone arrived
+      setTimeout(() => { if (clients.has(ws)) postGuide(player); }, 1500); // AI greeter welcomes the new joiner (§6.21)
       console.log(`+ ${player.name} (${id}) [${role}] — ${clients.size} online`);
       return;
     }
@@ -876,11 +877,20 @@ async function callLLM(system, userText) {
   const c = j.candidates && j.candidates[0];
   return (c && c.content && c.content.parts && c.content.parts.map((x) => x.text || "").join("")) || "(no response)";
 }
-function postAssistant(text, ctx) {
-  const payload = { from: "assistant", name: "🤖 Assistant", scope: ctx.scope, channel: ctx.channel,
+function postAssistant(text, ctx, fromName) {
+  const payload = { from: "assistant", name: fromName || "🤖 Assistant", scope: ctx.scope, channel: ctx.channel,
     to: ctx.scope === "dm" ? ctx.askerId : ctx.to, body: String(text || "").slice(0, 1500),
     floor: ctx.floor, x: ctx.x, y: ctx.y, roomId: ctx.roomId, ts: Date.now(), ai: true };
   deliverChat(payload); publishEvent("chat", payload);
+}
+// AI greeter NPC (§6.21 / P6-09) — DMs a contextual welcome to each new joiner (set GUIDE_OFF=1 to disable)
+function postGuide(p) {
+  if (process.env.GUIDE_OFF === "1") return;
+  const f = floorOf(p);
+  const others = Math.max(0, [...clients.values()].filter((c) => c.floor === f.slug).length - 1);
+  const who = others === 0 ? "You're the first one here" : others === 1 ? "1 other person is here" : others + " others are here";
+  const body = "👋 Welcome to " + f.name + ", " + p.name + "! " + who + ". Tips: walk with WASD or click the floor, you hear people nearby (spatial audio), click the 📺 TV for a watch-party, and type \"@ai help\" anytime. Have fun!";
+  postAssistant(body, { scope: "dm", askerId: p.id, channel: null, to: p.id, floor: p.floor, x: p.x, y: p.y, roomId: null }, "🤖 Guide");
 }
 function hhmm(ts) { const d = new Date(ts); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
 // Built-in commands answered from server state — no LLM, so they work even without an API key. Returns text or null.

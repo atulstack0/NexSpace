@@ -391,6 +391,8 @@ try {
   guest.ws.send(JSON.stringify({ t: "chat", scope: "floor", body: "after-mute" }));
   await wait(300);
   (!admin.chats.some((c) => c.body === "after-mute")) ? ok("muted user's chat is blocked") : bad("mute not enforced");
+  // AI greeter (P6-09) — each joiner gets a welcome DM from the Guide (fires ~1.5s after join; plenty elapsed by now)
+  (guest.chats.some((c) => c.name === "🤖 Guide" && c.ai)) ? ok("AI greeter DMs a welcome to new joiners") : bad("greeter did not welcome the joiner");
   // moderation (6.16) — kick removes the user
   admin.ws.send(JSON.stringify({ t: "moderate", action: "kick", target: guest.id }));
   await wait(300);
