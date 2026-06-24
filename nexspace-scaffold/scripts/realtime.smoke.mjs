@@ -281,6 +281,9 @@ try {
   admin.ws.send(JSON.stringify({ t: "editFloor", op: "rotate", id: "f-rot01", rot: 90 }));
   await wait(200);
   (guest.world?.furniture?.find((o) => o.id === "f-rot01")?.rot === 90) ? ok("editFloor rotate sets furniture facing") : bad("rotate did not apply");
+  admin.ws.send(JSON.stringify({ t: "editFloor", op: "add", kind: "furniture", furnitureKind: "chai", x: 820, y: 820, id: "f-chai01" }));
+  await wait(200);
+  (guest.world?.furniture?.some((o) => o.id === "f-chai01" && o.kind === "chai")) ? ok("editFloor accepts the ☕ chai-stall furniture kind") : bad("chai furniture kind not accepted");
   // client-supplied id on add + restore op (powers editor undo/redo)
   admin.ws.send(JSON.stringify({ t: "editFloor", op: "add", wtype: "note", x: 320, y: 320, id: "w-undo01" }));
   await wait(220);
@@ -406,6 +409,9 @@ try {
   admin.ws.send(JSON.stringify({ t: "emote", emote: "wave" }));
   await wait(250);
   (guest.emotes.some((e) => e.emote === "wave" && e.from === admin.id)) ? ok("emote broadcasts to peers") : bad("emote not broadcast");
+  admin.ws.send(JSON.stringify({ t: "emote", emote: "sipchai" }));
+  await wait(150);
+  (guest.emotes.some((e) => e.emote === "sipchai" && e.from === admin.id)) ? ok("☕ sip-chai emote broadcasts to peers") : bad("sip-chai emote not broadcast");
   admin.ws.send(JSON.stringify({ t: "emote", emote: "bogus" }));
   await wait(180);
   (!guest.emotes.some((e) => e.emote === "bogus")) ? ok("invalid emote is ignored") : bad("invalid emote was relayed");

@@ -215,6 +215,11 @@ function makeRooftopFloor() {
   const furniture = [
     { id: "f-r1", x: 700, y: 300, w: 200, h: 120, r: 18, kind: "table" },
     { id: "f-r2", x: 220, y: 760, w: 140, h: 90, r: 12, kind: "couch" }, { id: "f-r3", x: 1240, y: 760, w: 140, h: 90, r: 12, kind: "couch" },
+    // ☕ chai stall + a little seating nook (spec 6.25 / P4-11)
+    { id: "f-chai-rug", x: 980, y: 360, w: 280, h: 200, r: 0, kind: "rug" },
+    { id: "f-chai", x: 1040, y: 250, w: 180, h: 96, r: 0, kind: "chai" },
+    { id: "f-chai-s1", x: 1005, y: 470, w: 70, h: 70, r: 30, kind: "chair", rot: 180 },
+    { id: "f-chai-s2", x: 1130, y: 470, w: 70, h: 70, r: 30, kind: "chair", rot: 180 },
   ];
   const rooms = [
     { id: "cabana", name: "Cabana", color: "#39d3a6",
@@ -361,10 +366,10 @@ const persistClient = () => persistRedis || pub; // prefer the dedicated client;
 
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".ico": "image/x-icon" };
 // ---- Floor furniture templates (spec 6.10 / P4-05) ----
-function furnDim(fk) { return fk === "plant" ? { w: 80, h: 80, r: 40 } : fk === "chair" ? { w: 70, h: 70, r: 30 } : fk === "couch" ? { w: 150, h: 90, r: 12 } : fk === "table" ? { w: 200, h: 120, r: 16 } : fk === "rug" ? { w: 260, h: 180, r: 0 } : { w: 150, h: 80, r: 12 }; }
+function furnDim(fk) { return fk === "plant" ? { w: 80, h: 80, r: 40 } : fk === "chair" ? { w: 70, h: 70, r: 30 } : fk === "couch" ? { w: 150, h: 90, r: 12 } : fk === "table" ? { w: 200, h: 120, r: 16 } : fk === "rug" ? { w: 260, h: 180, r: 0 } : fk === "chai" ? { w: 180, h: 96, r: 0 } : { w: 150, h: 80, r: 12 }; }
 function sanitizeFurniture(o) {
   if (!o || typeof o !== "object") return null;
-  const kind = ["desk", "table", "couch", "plant", "chair", "rug"].includes(o.kind) ? o.kind : "desk";
+  const kind = ["desk", "table", "couch", "plant", "chair", "rug", "chai"].includes(o.kind) ? o.kind : "desk";
   const w = Math.max(10, Math.min(600, Number(o.w) || 80)), h = Math.max(10, Math.min(600, Number(o.h) || 80));
   const id = (typeof o.id === "string" && /^f-[a-z0-9]{2,40}$/i.test(o.id)) ? o.id : "f-" + crypto.randomBytes(3).toString("hex");
   return { id, x: Math.round(Number(o.x) || 0), y: Math.round(Number(o.y) || 0), w, h, r: Math.max(0, Math.min(60, Number(o.r) || 12)), kind, rot: ((Math.round(Number(o.rot) || 0)) % 360 + 360) % 360 };
@@ -690,7 +695,7 @@ wss.on("connection", (ws) => {
       broadcastLocal({ t: "react", from: p.id, emoji }); publishEvent("react", { from: p.id, emoji });
     } else if (m.t === "emote") {                              // avatar emotes (wave/clap/sit/dance)
       if (mutedIds.has(p.id)) return;
-      const e = ["wave", "clap", "sit", "dance"].includes(m.emote) ? m.emote : null; if (!e) return;
+      const e = ["wave", "clap", "sit", "dance", "sipchai"].includes(m.emote) ? m.emote : null; if (!e) return;
       broadcastLocal({ t: "emote", from: p.id, emote: e }); publishEvent("emote", { from: p.id, emote: e });
     } else if (m.t === "nudge") {
       const to = String(m.to || ""); for (const [ws2, q] of clients) if (q.id === to) send(ws2, { t: "nudge", from: p.id, name: p.name });
@@ -747,7 +752,7 @@ wss.on("connection", (ws) => {
         const o = (f.furniture || []).find((x) => x.id === m.id);
         if (o) { o.rot = ((Math.round(Number(m.rot) || 0)) % 360 + 360) % 360; changed = true; }
       } else if (op === "add" && m.kind === "furniture") {
-        const fk = ["desk", "table", "couch", "plant", "chair", "rug"].includes(m.furnitureKind) ? m.furnitureKind : "desk";
+        const fk = ["desk", "table", "couch", "plant", "chair", "rug", "chai"].includes(m.furnitureKind) ? m.furnitureKind : "desk";
         const dim = fk === "plant" ? { w: 80, h: 80, r: 40 } : fk === "chair" ? { w: 70, h: 70, r: 30 } : fk === "couch" ? { w: 150, h: 90, r: 12 } : fk === "table" ? { w: 200, h: 120, r: 16 } : fk === "rug" ? { w: 260, h: 180, r: 0 } : { w: 150, h: 80, r: 12 };
         const fid = (typeof m.id === "string" && /^f-[a-z0-9]{4,32}$/.test(m.id) && !f.furniture.some((x) => x.id === m.id)) ? m.id : "f-" + crypto.randomBytes(3).toString("hex");
         f.furniture.push({ id: fid, x: grid(cx(m.x, f.w - dim.w)), y: grid(cx(m.y, f.h - dim.h)), ...dim, kind: fk });
@@ -809,7 +814,7 @@ wss.on("connection", (ws) => {
         if (m.kind === "wall") {
           (f.walls = f.walls || []).push(o); changed = true;
         } else if (m.kind === "furniture") {
-          o.kind = ["desk", "table", "couch", "plant", "chair", "rug"].includes(src.kind) ? src.kind : "desk";
+          o.kind = ["desk", "table", "couch", "plant", "chair", "rug", "chai"].includes(src.kind) ? src.kind : "desk";
           o.r = Math.max(0, Math.min(60, Number(src.r) || 12)); o.rot = ((Math.round(Number(src.rot) || 0)) % 360 + 360) % 360; f.furniture.push(o); changed = true;
         } else if (m.kind === "portal") {
           o.to = String(src.to || "").slice(0, 40); o.label = String(src.label || "Portal").slice(0, 40);

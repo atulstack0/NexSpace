@@ -48,7 +48,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Screen sharing (LiveKit) — publish + multi-share focus viewer; **present-to-room** mode: one presenter's screen auto-enlarges for everyone in their room with a "X is presenting" banner (synced, RBAC member+, auto-stops on leave) | ✅ opt-in | realtime `present`/`unpresent`, `apps/web` |
 | Collaborative whiteboard — synced strokes + clear, late-joiner state, cross-node | ✅ | realtime + web |
 | Reactions (floating emoji), nudge, moderation (admin mute / kick) | ✅ | realtime + web |
-| Emotes — wave/clap/sit/dance from the 😀 bar: synced to the floor, animate the 3D avatar's pose (+ floating emoji in 2D); a furnished **lounge zone** (rug, sofas, table, plant) near spawn | ✅ | realtime `emote`, web |
+| Emotes — wave/clap/sit/dance/**☕ sip-chai** from the 😀 bar: synced to the floor, animate the 3D avatar's pose (+ floating emoji in 2D); a furnished **lounge zone** near spawn; a **☕ chai stall** on the rooftop (striped-awning stall + kettle/cups, rug + stools, a new `chai` furniture kind placeable in the editor) | ✅ | realtime `emote` + `chai` kind, web |
 | Notifications — browser notification + tab-title flash + 💬 unread badge for DMs, @-mentions, and nudges when the tab is unfocused; permission requested on opening chat | ✅ | `apps/web/index.html` |
 | Activity feed (📋) — joins/leaves, new bookings, presentations logged with timestamps; **meeting reminders** nudge you ~5 min before a booking you made starts (toast + notification) | ✅ | realtime `activity` event, web |
 | Mini-game (🎮) — shared tic-tac-toe: two players take X/O seats, turn-enforced moves, win/draw detection, reset; synced live so others spectate; seats freed on leave | ✅ | realtime `gameJoin`/`gameMove`/`gameReset`, web |
@@ -89,7 +89,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 
 - **Remote screen control** — not in the build. (Chat covers nearby / floor / #channels / DMs; whiteboard is collaborative.)
 - **glTF art** — 3D uses primitives (boxes/cylinders/billboards), not modeled assets.
-- **Outdoor "chai stall"** environment + in-world mini-games. (Multi-floor + portals, and interactive objects — notes, YouTube/Spotify/web embeds, shared timers — are now built.)
+- _Chai stall is now built_ (rooftop ☕ stall + seating + sip-chai emote). In-world mini-games beyond tic-tac-toe are still open.
 - **Calendar / Teams** (need OAuth + accounts) and **SCIM** auto-provisioning.
 - **AI** recording transcription (Whisper/Deepgram) — the in-office **assistant + auto meeting-notes + greeter NPC are built**; deep transcription of recordings is not (needs a speech-to-text service). **Native mobile/desktop apps** (web is responsive), **SOC2/GDPR/HIPAA** compliance.
 - _All code-only backlog items are now built._ Remaining items need external services/accounts/assets/infra: Calendar/Teams/Zapier integrations, SAML/SCIM, recording transcription, native desktop/mobile apps, full glTF art, SOC2/GDPR/HIPAA, 1,000+ load test.
