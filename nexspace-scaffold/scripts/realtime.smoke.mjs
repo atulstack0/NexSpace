@@ -318,6 +318,9 @@ try {
     await wait(200);
     (!guest.world?.obstacles?.some((o) => o.id === wid)) ? ok("editFloor remove deletes a wall") : bad("wall remove did not delete");
   } else bad("no editable wall with an id was found");
+  admin.ws.send(JSON.stringify({ t: "editFloor", op: "addWall", id: "k-test01", bounds: { x: 700, y: 700, w: 120, h: 16 } }));
+  await wait(220);
+  (guest.world?.obstacles?.some((o) => o.id === "k-test01")) ? ok("editFloor addWall draws a new wall") : bad("addWall did not broadcast a wall");
   guest.ws.send(JSON.stringify({ t: "editFloor", op: "add", wtype: "note", x: 100, y: 100 }));
   await wait(200);
   (guest.denied.includes("edit the floor")) ? ok("guest denied floor editing (RBAC)") : bad("guest floor edit was NOT blocked");

@@ -300,6 +300,7 @@
   <select id="edTemplate" class="btn" title="Floor layout template (§6.10)" style="padding:6px 8px"><option value="office">🏢 Office</option><option value="lounge">🛋 Lounge</option><option value="classroom">🎓 Classroom</option><option value="event">🎤 Event hall</option></select>
   <button class="btn" id="edApplyTemplate" title="Replace the floor's furniture with this layout">Apply layout</button>
   <button class="btn" id="edDrawRoom" title="Draw a new room zone — toggle, then drag a rectangle (§6.10)">▭ Room</button>
+  <button class="btn" id="edDrawWall" title="Draw a wall — toggle, then drag a rectangle">▥ Wall</button>
   <span class="sep"></span>
   <button class="btn warn" id="edDel">🗑 Delete</button>
   <button class="btn" id="edUndo" title="Undo (Ctrl+Z)">↶ Undo</button>
@@ -429,7 +430,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24t · in-app 📜 Logs button (admin) + client logs → /logs.html + editable walls + human GLB','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24u · draw-wall tool + 📜 Logs button + client logs + editable walls/rooms + human GLB','color:#ffb454;font-weight:700');
   // forward browser errors + key client events to the server's live log stream (/logs.html). Buffers until the socket opens.
   const _clogBuf=[];
   function clog(level,msg){const e={t:'clientlog',level,msg:String(msg).slice(0,400)};try{if(ws&&ws.readyState===1){ws.send(JSON.stringify(e));return;}}catch(_){}_clogBuf.push(e);if(_clogBuf.length>50)_clogBuf.shift();}
@@ -483,7 +484,7 @@
   let ytPlayer=null,ytReady=false,tvApplyingRemote=false,tvUnmuted=false,tvRaw=false,tvRawVid='',tvKickTimer=null,tvWallShown=false,tvSync={pos:0,at:0,playing:false}; // synced watch-party playback (off by default)
   window.onYouTubeIframeAPIReady=function(){ytReady=true;clearTimeout(tvKickTimer);if(myId)tvEnsurePlayer();}; // build the wall player as soon as we've joined
   (function(){const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);})();
-  let editMode=false,editSelSet=[],editDrag=null,undoStack=[],redoStack=[],drawRoomMode=false,roomDraw=null,roomResize=null; // owner/admin floor editor (multi-select + undo/redo + room draw/resize)
+  let editMode=false,editSelSet=[],editDrag=null,undoStack=[],redoStack=[],drawRoomMode=false,roomDraw=null,roomResize=null,drawWallMode=false,wallDraw=null; // owner/admin floor editor (multi-select + undo/redo + room/wall draw + resize)
   const reactions=new Map(),adminMuted=new Set();
   const emotes=new Map();   // id -> {type, t0} avatar emote (wave/clap/sit/dance)
   const EMOTE_EMOJI={wave:'👋',clap:'👏',sit:'🪑',dance:'🕺'};
@@ -608,7 +609,7 @@
   const toWorld=e=>({x:(e.clientX-VW/2)/cam.zoom+cam.x,y:(e.clientY-VH/2)/cam.zoom+cam.y});
   function canvasPrimary(e){                                 // 2D primary action: interact (TV/portal/widget) else move-to
     const w=toWorld(e);
-    if(editMode){if(drawRoomMode){editRoomDown(w);return;}editDown(w,e.shiftKey);return;} // edit mode: draw a room / drag-select elements
+    if(editMode){if(drawRoomMode){editRoomDown(w);return;}if(drawWallMode){editWallDown(w);return;}editDown(w,e.shiftKey);return;} // edit mode: draw a room/wall / drag-select elements
     if(world&&world.mediaWall){const M=world.mediaWall;
       if(w.x>=M.x-12&&w.x<=M.x+M.w+12&&w.y>=M.y-(M.screenH||150)-12&&w.y<=M.y+(M.base||16)+12){openTv();return;}}
     if(world&&world.portals){for(const pt of world.portals){if(w.x>=pt.x&&w.x<=pt.x+pt.w&&w.y>=pt.y&&w.y<=pt.y+pt.h){travelTo(pt.to);return;}}}
@@ -726,6 +727,18 @@
     edSend(msg);toast('Added room "'+name+'"');
     pushUndo({undo:()=>edSend({t:'editFloor',op:'removeRoom',id}),redo:()=>edSend(msg)});
     drawRoomMode=false;updateRoomBtn();});
+  // draw a new wall segment (P4-03): toggle draw-wall, then drag a rectangle
+  function updateWallBtn(){const b=document.getElementById('edDrawWall');if(b)b.classList.toggle('active',drawWallMode);}
+  function editWallDown(w){wallDraw={x0:w.x,y0:w.y,x1:w.x,y1:w.y};}
+  document.addEventListener('mousemove',e=>{if(!wallDraw||viewMode==='3d')return;const w=toWorld(e);wallDraw.x1=w.x;wallDraw.y1=w.y;});
+  document.addEventListener('mouseup',()=>{if(!wallDraw)return;const r=wallDraw;wallDraw=null;
+    const x=Math.min(r.x0,r.x1),y=Math.min(r.y0,r.y1),w=Math.abs(r.x1-r.x0),h=Math.abs(r.y1-r.y0);
+    if(w<16&&h<16){toast('Wall too small — drag a strip or block');return;}
+    const id='k-'+Math.random().toString(36).slice(2,8);
+    const msg={t:'editFloor',op:'addWall',id,bounds:{x:Math.round(x),y:Math.round(y),w:Math.round(Math.max(16,w)),h:Math.round(Math.max(16,h))}};
+    edSend(msg);toast('Added a wall');
+    pushUndo({undo:()=>edSend({t:'editFloor',op:'remove',kind:'wall',id}),redo:()=>edSend(msg)});
+    drawWallMode=false;updateWallBtn();});
   function editDelete(){if(!editSelSet.length){toast('Select an element first');return;}
     const snaps=editSelSet.map(s=>({kind:s.kind,obj:JSON.parse(JSON.stringify(s.obj))}));
     const del=(s)=>(s.kind==='room')?edSend({t:'editFloor',op:'removeRoom',id:s.obj.id}):edRemove(s.kind,s.obj.id);
@@ -733,7 +746,7 @@
     for(const s of snaps)del(s);
     editSelSet=[];updateEditBar();
     pushUndo({undo:()=>{for(const s of snaps)restore(s);},redo:()=>{for(const s of snaps)del(s);}});}
-  function editToggle(on){editMode=(on!==undefined)?on:!editMode;editSelSet=[];editDrag=null;drawRoomMode=false;roomDraw=null;roomResize=null;updateRoomBtn();
+  function editToggle(on){editMode=(on!==undefined)?on:!editMode;editSelSet=[];editDrag=null;drawRoomMode=false;roomDraw=null;roomResize=null;drawWallMode=false;wallDraw=null;updateRoomBtn();updateWallBtn();
     document.getElementById('editBar').style.display=editMode?'flex':'none';
     const be=document.getElementById('btnEdit');if(be)be.classList.toggle('active',editMode);
     canvas.style.cursor=editMode?'move':'crosshair';if(editMode)toast('✏️ Edit mode — click to select, Shift-click for multi, drag to move, Ctrl+Z to undo');updateEditBar();}
@@ -743,6 +756,8 @@
   function drawEditSel(){
     if(roomDraw){const x=Math.min(roomDraw.x0,roomDraw.x1),y=Math.min(roomDraw.y0,roomDraw.y1),w=Math.abs(roomDraw.x1-roomDraw.x0),h=Math.abs(roomDraw.y1-roomDraw.y0);
       ctx.save();ctx.fillStyle='rgba(57,211,166,.12)';ctx.fillRect(x,y,w,h);ctx.strokeStyle='#39d3a6';ctx.lineWidth=3;ctx.setLineDash([10,6]);ctx.strokeRect(x,y,w,h);ctx.setLineDash([]);ctx.restore();}
+    if(wallDraw){const x=Math.min(wallDraw.x0,wallDraw.x1),y=Math.min(wallDraw.y0,wallDraw.y1),w=Math.abs(wallDraw.x1-wallDraw.x0),h=Math.abs(wallDraw.y1-wallDraw.y0);
+      ctx.save();ctx.fillStyle='rgba(123,146,196,.28)';ctx.fillRect(x,y,w,h);ctx.strokeStyle='#9aa3b6';ctx.lineWidth=3;ctx.setLineDash([8,5]);ctx.strokeRect(x,y,w,h);ctx.setLineDash([]);ctx.restore();}
     if(!editSelSet.length)return;ctx.strokeStyle='#5b8cff';ctx.lineWidth=3;ctx.setLineDash([9,6]);for(const s of editSelSet){const p=itemBox(s);if(p)ctx.strokeRect(p.x-3,p.y-3,(p.w||40)+6,(p.h||40)+6);}ctx.setLineDash([]);
     if(editSelSet.length===1&&editSelSet[0].kind==='room'){const pts=roomHandlePts(editSelSet[0].obj.bounds),hs=7;ctx.fillStyle='#ffb454';ctx.strokeStyle='#0b1019';ctx.lineWidth=2;for(const k in pts){const p=pts[k];ctx.fillRect(p[0]-hs,p[1]-hs,hs*2,hs*2);ctx.strokeRect(p[0]-hs,p[1]-hs,hs*2,hs*2);}}}
   addEventListener('keydown',e=>{if(!editMode)return;const tg=e.target;if(tg&&(tg.tagName==='INPUT'||tg.tagName==='TEXTAREA'))return;
@@ -2038,7 +2053,8 @@
   document.getElementById('edUndo').addEventListener('click',doUndo);
   document.getElementById('edRedo').addEventListener('click',doRedo);
   document.getElementById('edApplyTemplate').addEventListener('click',editApplyTemplate);
-  document.getElementById('edDrawRoom').addEventListener('click',()=>{drawRoomMode=!drawRoomMode;editSelSet=[];roomDraw=null;updateRoomBtn();toast(drawRoomMode?'▭ Draw-room on — drag a rectangle on the floor':'Draw-room off');});
+  document.getElementById('edDrawRoom').addEventListener('click',()=>{drawRoomMode=!drawRoomMode;drawWallMode=false;wallDraw=null;editSelSet=[];roomDraw=null;updateRoomBtn();updateWallBtn();toast(drawRoomMode?'▭ Draw-room on — drag a rectangle on the floor':'Draw-room off');});
+  document.getElementById('edDrawWall').addEventListener('click',()=>{drawWallMode=!drawWallMode;drawRoomMode=false;roomDraw=null;editSelSet=[];wallDraw=null;updateWallBtn();updateRoomBtn();toast(drawWallMode?'▥ Draw-wall on — drag a rectangle on the floor':'Draw-wall off');});
   // responsive toolbar: ☰ expands / ✕ collapses the HUD; collapsed by default on phones to free the screen
   (function(){const bar=document.getElementById('bar'),tg=document.getElementById('barToggle');
     function sync(){const c=bar.classList.contains('collapsed');tg.textContent=c?'☰':'✕';tg.title=c?'Show controls':'Hide controls';tg.setAttribute('aria-label',c?'Show controls':'Hide controls');}

@@ -746,6 +746,11 @@ wss.on("connection", (ws) => {
         const door = { x: Math.round(x + w / 2 - 9), y: Math.round(y + h - 9), w: 18, h: 18, state: "open", knocking: false };
         f.rooms.push({ id, name, color, bounds: { x, y, w, h }, door, bookings: [] });
         changed = true;
+      } else if (op === "addWall" && m.bounds && typeof m.bounds === "object") {  // draw a new wall segment (P4-03)
+        const w = Math.max(16, Math.min(f.w, Number(m.bounds.w) || 40)), h = Math.max(16, Math.min(f.h, Number(m.bounds.h) || 40));
+        const x = grid(cx(m.bounds.x, f.w - w)), y = grid(cx(m.bounds.y, f.h - h));
+        const id = (typeof m.id === "string" && /^k-[a-z0-9]{4,32}$/.test(m.id) && !(f.walls || []).some((o) => o.id === m.id)) ? m.id : "k-" + crypto.randomBytes(3).toString("hex");
+        (f.walls = f.walls || []).push({ id, x, y, w: grid(w), h: grid(h) }); changed = true;
       } else if (op === "renameRoom") {                     // double-click a room to rename it
         const r = f.rooms.find((rm) => rm.id === m.id); if (r) { r.name = String(m.name || "Room").slice(0, 30); changed = true; }
       } else if (op === "removeRoom") {
