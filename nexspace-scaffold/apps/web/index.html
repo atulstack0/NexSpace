@@ -16,14 +16,20 @@
     background:radial-gradient(circle,rgba(91,140,255,.14),rgba(20,27,44,.45));border:1px solid var(--line);box-shadow:0 6px 20px rgba(0,0,0,.35)}
   #stickNub{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px 0 0 -26px;border-radius:50%;
     background:rgba(91,140,255,.6);border:1px solid rgba(255,255,255,.35)}
-  #bar{position:fixed;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:98vw;
-    background:rgba(20,27,44,.94);border:1px solid var(--line);border-radius:14px;padding:7px 11px;z-index:20;backdrop-filter:blur(10px);box-shadow:0 10px 34px rgba(0,0,0,.38)}
-  #barItems{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center}
-  #barToggle{font-size:15px;line-height:1;padding:6px 10px}     /* hamburger: collapse/expand the toolbar on any screen */
+  /* top HUD — two glass clusters: identity/nav docked left, grouped controls docked right (PUBG-style) */
+  #bar{position:fixed;top:12px;left:0;right:0;transform:none;display:flex;gap:10px;align-items:flex-start;justify-content:space-between;max-width:none;padding:0 14px;z-index:20;pointer-events:none;background:none;border:0;box-shadow:none}
+  #barLeft,#barRight{pointer-events:auto;display:flex;gap:7px;align-items:center;flex-wrap:wrap;
+    background:linear-gradient(180deg,rgba(16,22,38,.94),rgba(11,15,27,.85));border:1px solid rgba(123,146,196,.22);border-radius:14px;padding:8px 12px;
+    backdrop-filter:blur(12px);box-shadow:0 12px 34px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.05),inset 0 -2px 0 rgba(255,180,84,.22)}
+  #barRight{justify-content:flex-end;max-width:76vw}
+  #barItems{display:flex;gap:7px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+  .hud-group{display:flex;align-items:center;gap:5px;padding:3px;border:1px solid rgba(123,146,196,.16);border-radius:11px;background:rgba(12,17,30,.55)}
+  #barToggle{font-size:15px;line-height:1;padding:7px 10px}     /* hamburger: collapse/expand the right controls on any screen */
   #bar.collapsed #barItems{display:none}
   @media(max-width:820px){
-    #bar{max-width:96vw;gap:5px;padding:6px 9px;top:8px}
-    #barItems{order:3;width:100%;margin-top:6px;border-top:1px solid var(--line);padding-top:7px;max-height:60vh;overflow-y:auto}
+    #bar{gap:8px;padding:0 8px;top:8px;flex-wrap:wrap}
+    #barLeft,#barRight{padding:6px 9px;gap:5px}
+    #barItems{order:3;width:100%;margin-top:6px;border-top:1px solid rgba(123,146,196,.2);padding-top:7px;max-height:60vh;overflow-y:auto;justify-content:flex-start}
     #barItems .btn,#barItems select{padding:10px 12px;font-size:14px}      /* bigger touch targets */
     .tvmain{flex-direction:column} .tvside{width:100%;max-width:none} .tvplayer{aspect-ratio:16/9}
     #chat,#wb{max-width:96vw}
@@ -37,23 +43,24 @@
     #barItems{max-height:74vh} #stick{bottom:18px;left:14px;width:104px;height:104px}
     #hint{display:none}
   }
-  .brand{font-weight:700;display:flex;align-items:center;gap:8px}
-  .dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2))}
-  .pill{font-size:12px;color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:5px 10px}
+  .brand{font-weight:800;letter-spacing:1.4px;text-transform:uppercase;font-size:13px;display:flex;align-items:center;gap:9px;color:#eef2fb}
+  .dot{width:12px;height:12px;border-radius:3px;transform:rotate(45deg);background:linear-gradient(135deg,var(--warn),#ff8a3c);box-shadow:0 0 10px rgba(255,180,84,.75)}
+  .pill{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);background:rgba(16,22,38,.7);border:1px solid rgba(123,146,196,.22);border-radius:7px;padding:5px 9px}
   .pill b{color:var(--accent2)} #conn.bad b{color:var(--danger)}
-  .sep{width:1px;height:22px;background:var(--line)}
-  .btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:6px 9px;font-size:13px;cursor:pointer;transition:.15s;white-space:nowrap}
-  .btn:hover{border-color:var(--accent);color:#fff}
-  .btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
-  .btn.danger.active{background:var(--danger);border-color:var(--danger)}
-  .btn.live.active{background:var(--danger);border-color:var(--danger);animation:pulse 1.2s infinite}
+  .sep{width:1px;height:20px;background:rgba(123,146,196,.25)}
+  .btn{background:linear-gradient(180deg,rgba(42,55,86,.85),rgba(22,30,50,.92));color:#cfd8ef;border:1px solid rgba(123,146,196,.26);border-radius:9px;padding:7px 11px;font-size:12.5px;font-weight:600;letter-spacing:.3px;cursor:pointer;transition:.14s;white-space:nowrap}
+  .btn:hover{border-color:var(--warn);color:#fff;box-shadow:0 0 0 1px rgba(255,180,84,.35),0 5px 16px rgba(255,180,84,.16);transform:translateY(-1px)}
+  .btn.active{background:linear-gradient(180deg,var(--accent),#3f6de0);border-color:#7aa2ff;color:#fff;box-shadow:0 0 14px rgba(91,140,255,.5)}
+  .btn.danger.active{background:linear-gradient(180deg,var(--danger),#d83b4a);border-color:var(--danger);box-shadow:0 0 14px rgba(255,93,108,.5)}
+  .btn.live.active{background:linear-gradient(180deg,var(--danger),#d83b4a);border-color:var(--danger);animation:pulse 1.2s infinite}
   @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,93,108,.5)}50%{box-shadow:0 0 0 6px rgba(255,93,108,0)}}
   #editBar{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:19;display:none;gap:7px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:96vw;
     background:rgba(20,27,44,.96);border:1px solid var(--accent);border-radius:12px;padding:7px 11px;box-shadow:0 8px 28px rgba(0,0,0,.4)}
   #editBar .elabel{color:var(--muted);font-size:12px}
-  .seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
-  .seg button{background:var(--panel2);color:var(--muted);border:0;padding:6px 9px;font-size:12px;cursor:pointer}
-  .seg button.active{background:var(--accent);color:#fff}
+  .seg{display:flex;border:1px solid rgba(123,146,196,.26);border-radius:9px;overflow:hidden;background:rgba(22,30,50,.9)}
+  .seg button{background:transparent;color:var(--muted);border:0;padding:7px 11px;font-size:12px;font-weight:600;letter-spacing:.3px;cursor:pointer;transition:.14s}
+  .seg button:hover{color:#fff}
+  .seg button.active{background:linear-gradient(180deg,var(--accent),#3f6de0);color:#fff}
   #banner{position:fixed;top:72px;left:50%;transform:translateX(-50%);z-index:18;display:none;align-items:center;gap:9px;
     background:rgba(255,93,108,.16);border:1px solid var(--danger);color:#ffd2d7;border-radius:12px;padding:8px 15px;font-size:13px;font-weight:600}
   #presentBanner{position:fixed;top:108px;left:50%;transform:translateX(-50%);z-index:18;display:none;align-items:center;gap:10px;
@@ -61,8 +68,8 @@
   #presentBanner button{padding:3px 10px}
   #banner .l{width:9px;height:9px;border-radius:50%;background:var(--danger);animation:pulse 1.2s infinite}
   #recind{position:fixed;top:72px;left:12px;z-index:19;display:none;background:rgba(255,93,108,.16);border:1px solid var(--danger);color:#ffd2d7;border-radius:20px;padding:6px 12px;font-size:12px;font-weight:700}
-  #statusSel,#floorSel{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:6px 9px;font-size:13px;cursor:pointer;max-width:170px}
-  #statusSel:hover,#floorSel:hover{border-color:var(--accent)}
+  #statusSel,#floorSel{background:linear-gradient(180deg,rgba(42,55,86,.85),rgba(22,30,50,.92));color:#cfd8ef;border:1px solid rgba(123,146,196,.26);border-radius:9px;padding:7px 10px;font-size:12.5px;font-weight:600;cursor:pointer;max-width:180px}
+  #statusSel:hover,#floorSel:hover{border-color:var(--warn)}
   /* Shared YouTube TV — the player lives ON the wall TV (positioned over the canvas); everyone sees it. */
   #tvWorld{position:fixed;z-index:6;display:none;background:#000;border-radius:6px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.5);outline:2px solid rgba(91,140,255,.5)}
   #tvWorld.pip{z-index:25;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.6);outline:2px solid rgba(91,140,255,.8)}
@@ -188,46 +195,56 @@
 <canvas id="game"></canvas>
 <canvas id="game3d"></canvas>
 <div id="bar">
-  <span class="brand"><span class="dot"></span>NexSpace</span>
-  <span class="pill" id="conn"><b id="connText">connecting…</b></span>
-  <span class="pill">online: <b id="count">1</b></span>
-  <button class="btn" id="barToggle" title="Show/hide toolbar">☰</button>
-  <div id="barItems">
-  <span class="pill" id="rolePill">you: guest</span>
-  <button class="btn" id="btnSignout" style="display:none" title="Sign out">⎋ Sign out</button>
-  <select id="floorSel" title="Switch floor (multi-floor §6)" style="display:none"></select>
-  <span class="sep"></span>
-  <div class="seg" id="viewSeg" title="Same office, two renderers (spec 6.23)"><button data-view="2d" class="active">🗺️ 2D</button><button data-view="3d">🧊 3D</button></div>
-  <span class="sep"></span>
-  <button class="btn" id="btnMic" title="Deafen (mute everyone you hear)">🔊</button>
-  <button class="btn" id="btnMicPub" title="Your microphone (LiveKit)" style="display:none">🎤</button>
-  <button class="btn" id="btnCam" title="Your camera (LiveKit)" style="display:none">🎥</button>
-  <button class="btn" id="btnGallery" title="Gallery / grid view of cameras (§6.6)" style="display:none">🔲 Gallery</button>
-  <button class="btn" id="btnDevices" title="Choose microphone & camera (§6.6)" style="display:none">⚙️</button>
-  <button class="btn" id="btnScreen" title="Share your screen (LiveKit)" style="display:none">🖥️ Share</button>
-  <button class="btn" id="btnPresent" title="Present your screen to the room" style="display:none">📺 Present</button>
-  <button class="btn" id="btnScreens" title="View shared screens" style="display:none">🖥️ Screens (0)</button>
-  <div class="seg" id="rangeSeg"><button data-m="quiet">Quiet</button><button data-m="normal" class="active">Normal</button><button data-m="megaphone">Mega</button></div>
-  <button class="btn live" id="btnBroadcast">📢 Broadcast</button>
-  <button class="btn" id="btnRec" title="Record the room (LiveKit Egress)">⏺ Rec</button>
-  <select id="statusSel" title="Your status (6.19)">
-    <option value="available">🟢 Available</option>
-    <option value="busy">🟠 Busy</option>
-    <option value="dnd">🔴 Do Not Disturb</option>
-    <option value="inMeeting">🔵 In a meeting</option>
-    <option value="away">⚪ Away</option>
-  </select>
-  <button class="btn active" id="btnLinks">◠ Links</button>
-  <button class="btn" id="btnAnalytics" title="Analytics dashboard (admin)">📊</button>
-  <button class="btn" id="btnChat" title="Chat (6.9)">💬</button>
-  <button class="btn" id="btnWb" title="Whiteboard (6.8)">🖊️</button>
-  <button class="btn" id="btnReact" title="React (6.6)">😀</button>
-  <button class="btn" id="btnTv" title="Open the TV (or press T)">📺 TV</button>
-  <button class="btn" id="btnRooms" title="Book a room / today's schedule">📅 Rooms</button>
-  <button class="btn" id="btnCustomize" title="Customize your avatar">🎨 Avatar</button>
-  <button class="btn" id="btnActivity" title="Activity feed">📋</button>
-  <button class="btn" id="btnGame" title="Play tic-tac-toe">🎮</button>
-  <button class="btn" id="btnEdit" title="Edit the floor — move/add/remove elements (owner/admin)" style="display:none">✏️ Edit</button>
+  <div id="barLeft">
+    <span class="brand"><span class="dot"></span>NexSpace</span>
+    <span class="pill" id="conn"><b id="connText">connecting…</b></span>
+    <span class="pill">online: <b id="count">1</b></span>
+    <span class="pill" id="rolePill">you: guest</span>
+    <button class="btn" id="btnSignout" style="display:none" title="Sign out">⎋ Sign out</button>
+    <select id="floorSel" title="Switch floor (multi-floor §6)" style="display:none"></select>
+    <div class="seg" id="viewSeg" title="Same office, two renderers (spec 6.23)"><button data-view="2d" class="active">🗺️ 2D</button><button data-view="3d">🧊 3D</button></div>
+  </div>
+  <div id="barRight">
+    <button class="btn" id="barToggle" title="Show/hide controls">☰</button>
+    <div id="barItems">
+      <div class="hud-group" title="Voice & video">
+        <button class="btn" id="btnMic" title="Deafen (mute everyone you hear)">🔊</button>
+        <button class="btn" id="btnMicPub" title="Your microphone (LiveKit)" style="display:none">🎤</button>
+        <button class="btn" id="btnCam" title="Your camera (LiveKit)" style="display:none">🎥</button>
+        <button class="btn" id="btnGallery" title="Gallery / grid view of cameras (§6.6)" style="display:none">🔲 Gallery</button>
+        <button class="btn" id="btnDevices" title="Choose microphone & camera (§6.6)" style="display:none">⚙️</button>
+      </div>
+      <div class="hud-group" title="Screen sharing">
+        <button class="btn" id="btnScreen" title="Share your screen (LiveKit)" style="display:none">🖥️ Share</button>
+        <button class="btn" id="btnPresent" title="Present your screen to the room" style="display:none">📺 Present</button>
+        <button class="btn" id="btnScreens" title="View shared screens" style="display:none">🖥️ Screens (0)</button>
+      </div>
+      <div class="seg" id="rangeSeg" title="Voice range"><button data-m="quiet">Quiet</button><button data-m="normal" class="active">Normal</button><button data-m="megaphone">Mega</button></div>
+      <div class="hud-group" title="Live">
+        <button class="btn live" id="btnBroadcast">📢 Broadcast</button>
+        <button class="btn" id="btnRec" title="Record the room (LiveKit Egress)">⏺ Rec</button>
+      </div>
+      <select id="statusSel" title="Your status (6.19)">
+        <option value="available">🟢 Available</option>
+        <option value="busy">🟠 Busy</option>
+        <option value="dnd">🔴 Do Not Disturb</option>
+        <option value="inMeeting">🔵 In a meeting</option>
+        <option value="away">⚪ Away</option>
+      </select>
+      <div class="hud-group" title="Tools & panels">
+        <button class="btn active" id="btnLinks">◠ Links</button>
+        <button class="btn" id="btnAnalytics" title="Analytics dashboard (admin)">📊</button>
+        <button class="btn" id="btnChat" title="Chat (6.9)">💬</button>
+        <button class="btn" id="btnWb" title="Whiteboard (6.8)">🖊️</button>
+        <button class="btn" id="btnReact" title="React (6.6)">😀</button>
+        <button class="btn" id="btnTv" title="Open the TV (or press T)">📺 TV</button>
+        <button class="btn" id="btnRooms" title="Book a room / today's schedule">📅 Rooms</button>
+        <button class="btn" id="btnCustomize" title="Customize your avatar">🎨 Avatar</button>
+        <button class="btn" id="btnActivity" title="Activity feed">📋</button>
+        <button class="btn" id="btnGame" title="Play tic-tac-toe">🎮</button>
+        <button class="btn" id="btnEdit" title="Edit the floor — move/add/remove elements (owner/admin)" style="display:none">✏️ Edit</button>
+      </div>
+    </div>
   </div>
 </div>
 <div id="editBar">

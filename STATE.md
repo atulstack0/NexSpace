@@ -75,7 +75,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Multi-node fan-out (Redis pub/sub) | ✅ opt-in | realtime; `docs/SCALING.md` |
 | Multi-floor + portals — independent floors, floor-scoped presence/chat/snapshots, portal travel + floor switcher | ✅ | `apps/api` (Floor/portal objects), realtime, web |
 | Interactive objects — sticky notes, embeds (YouTube/Spotify/web → iframe), shared countdown timers; placed in the editor, synced live | ✅ | `apps/api` (widget objects), realtime, web, editor |
-| Responsive UI — collapsible toolbar (hamburger), mobile-friendly overlays | ✅ | `apps/web/index.html` |
+| Responsive UI — **two-cluster game-style top HUD** (identity/nav docked left, grouped control modules docked right; dark-glass panels, amber hover-glow, blue active states, tactical diamond reticle), collapsible (hamburger), mobile-friendly overlays | ✅ | `apps/web/index.html` |
 | In-office floor editor — owner/admin drag-move, add, delete furniture + notes/timers/portals live; **multi-select** (Shift-click → group drag/delete), **undo/redo** (Ctrl+Z / Ctrl+Y + ↶↷ buttons, exact via client-id adds + server `restore` op), grid-snapped; RBAC-gated; **persists** across restarts (Redis or JSON file) | ✅ | realtime `editFloor` (+`restore`) + persist, web |
 | Branding / white-label — per-space name, accent color, logo; served in world + applied live | ✅ | `apps/api` (Floor.branding), realtime, web |
 | CI — GitHub Actions (`check` + `redis-multinode` + `api-smoke`) | ✅ | `.github/workflows/ci.yml` |
