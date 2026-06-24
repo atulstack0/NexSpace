@@ -418,7 +418,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24h · UI polish (unified glass panels) + a11y + guest cap + room-draw + templates + side-rail HUD + mobile collapse','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24i · sculpted human avatar (head/hair/face + suit) + UI polish + a11y + guest cap + room-draw + templates + side-rail HUD','color:#ffb454;font-weight:700');
   const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
   const mini=document.getElementById('minimap'),mctx=mini.getContext('2d');
   let DPR=Math.max(1,Math.min(2,devicePixelRatio||1)),VW=0,VH=0;
@@ -1138,7 +1138,7 @@
       img.src = url;
       return null;
     }
-    function applyPic(a, url) { if (a.videoTex || a.picUrl === url) return; const t = picTex(url); if (t) { a.headMat.map = t; a.headMat.needsUpdate = true; a.picUrl = url; } }
+    function applyPic(a, url) { if (a.videoTex || a.picUrl === url) return; const t = picTex(url); if (t) { a.headMat.map = t; a.headMat.needsUpdate = true; a.picUrl = url; a.head.visible = true; if (a.headMesh) a.headMesh.visible = false; } }
     function init() {
       if (ready) return true; if (!available()) return false;
       renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("game3d"), antialias: true });
@@ -1279,24 +1279,39 @@
         const leg = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 3.6, 24, 10), matTrouser); leg.position.y = -12; p.add(leg);
         const foot = new THREE.Mesh(new THREE.BoxGeometry(7.5, 4.5, 14), matShoe); foot.position.set(0, -21.8, 3.5); p.add(foot);
       }
-      mesh(new THREE.CylinderGeometry(9.5, 8, 6, 12), matTrouser, 0, 26, 0);           // hips
-      mesh(new THREE.CylinderGeometry(8.6, 9.6, 22, 14), matVest, 0, 38, 0);           // waistcoat / vest torso
-      mesh(new THREE.SphereGeometry(7.2, 14, 12), matVest, 0, 50, 0);                  // shoulders
-      mesh(new THREE.CylinderGeometry(4.2, 4.2, 4, 12), matShirt, 0, 51, 2.5);         // white collar
-      mesh(new THREE.BoxGeometry(3.6, 18, 1.6), matTie, 0, 41, 8.4);                   // tie
-      mesh(new THREE.BoxGeometry(5, 4, 1.8), matTie, 0, 49.5, 8.2);                    // tie knot
-      for (const sx of [-1, 1]) {                                                      // arms hung from a shoulder pivot (swing opposite the legs)
-        const p = new THREE.Group(); p.position.set(sx * 12.6, 50, 0); bodyGroup.add(p); armP.push(p);
-        const arm = new THREE.Mesh(new THREE.CylinderGeometry(2.9, 2.5, 22, 10), matShirt); arm.position.y = -11; p.add(arm);
-        const hand = new THREE.Mesh(new THREE.SphereGeometry(3.1, 10, 10), matSkin); hand.position.set(sx * 1.6, -21.5, 0); p.add(hand);
+      mesh(new THREE.CylinderGeometry(9.8, 8.2, 7, 16), matTrouser, 0, 26, 0);          // hips / belt
+      mesh(new THREE.CylinderGeometry(8.2, 10.4, 25, 18), matVest, 0, 39, 0);           // tapered suit-jacket torso
+      mesh(new THREE.BoxGeometry(9, 17, 1.6), matShirt, 0, 44, 7.4);                    // shirt chest (the V)
+      mesh(new THREE.BoxGeometry(4.4, 18, 2), matVest, -3.7, 44.5, 7.9, 0.2);           // left lapel
+      mesh(new THREE.BoxGeometry(4.4, 18, 2), matVest, 3.7, 44.5, 7.9, -0.2);           // right lapel
+      mesh(new THREE.BoxGeometry(28, 8.5, 14), matVest, 0, 51.5, 0);                    // jacket shoulders (broad)
+      mesh(new THREE.CylinderGeometry(4.6, 4.6, 4.5, 16), matShirt, 0, 53.5, 2.6);      // shirt collar
+      mesh(new THREE.BoxGeometry(3.4, 16, 1.6), matTie, 0, 43.5, 8.6);                  // tie
+      mesh(new THREE.BoxGeometry(5, 4.4, 1.8), matTie, 0, 52, 8.5);                     // tie knot
+      for (const sx of [-1, 1]) {                                                       // arms: jacket sleeve + cuff + skin hand, swing from the shoulder
+        const p = new THREE.Group(); p.position.set(sx * 13.6, 52, 0); bodyGroup.add(p); armP.push(p);
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(3.1, 2.6, 23, 12), matVest); arm.position.y = -11.5; p.add(arm);
+        const cuff = new THREE.Mesh(new THREE.CylinderGeometry(2.7, 2.7, 2.6, 12), matShirt); cuff.position.y = -22.4; p.add(cuff);
+        const hand = new THREE.Mesh(new THREE.SphereGeometry(3, 12, 10), matSkin); hand.position.set(0, -25, 0); p.add(hand);
       }
-      mesh(new THREE.CylinderGeometry(2.6, 2.6, 4, 8), matSkin, 0, 56, 0);             // neck
+      mesh(new THREE.CylinderGeometry(3, 3.6, 5.5, 14), matSkin, 0, 58, 0);             // neck
+      // sculpted head (default look): skin + hair + eyes/brows, billboarded to camera — replaces the flat letter disc
+      const hairMat = pMat(0x2b211a, 0.78);
+      const headG = new THREE.Group(); headG.position.y = 68; bodyGroup.add(headG);
+      const skull = new THREE.Mesh(new THREE.SphereGeometry(8.7, 24, 20), matSkin); skull.scale.set(1, 1.14, 0.99); headG.add(skull);
+      const jaw = new THREE.Mesh(new THREE.SphereGeometry(6.4, 18, 14), matSkin); jaw.position.set(0, -5.4, 1); jaw.scale.set(1, 0.8, 1); headG.add(jaw); // chin/jaw
+      const hair = new THREE.Mesh(new THREE.SphereGeometry(9.2, 24, 20, 0, Math.PI * 2, 0, Math.PI * 0.64), hairMat); hair.position.y = 1.5; headG.add(hair);
+      for (const ex of [-2.9, 2.9]) {
+        const wht = new THREE.Mesh(new THREE.SphereGeometry(1.5, 12, 12), pMat(0xf3f1ee, 0.4)); wht.position.set(ex, 0.8, 7.5); wht.scale.set(1, 0.8, 0.6); headG.add(wht);
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.78, 10, 10), pMat(0x20140c, 0.25)); eye.position.set(ex, 0.7, 8.4); headG.add(eye);
+        const brow = new THREE.Mesh(new THREE.BoxGeometry(3, 0.85, 0.9), hairMat); brow.position.set(ex, 3.1, 8.0); headG.add(brow);
+      }
       const headMat = new THREE.MeshBasicMaterial({ map: letterTex((name && name[0]) || "?", "hsl(" + hue + ",70%,60%)"), transparent: true });
-      const head = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), headMat); head.position.y = 70; bodyGroup.add(head);
+      const head = new THREE.Mesh(new THREE.PlaneGeometry(28, 28), headMat); head.position.y = 68; head.visible = false; bodyGroup.add(head); // live-video / photo bubble (shown only when a camera/photo is active)
       const shadow = new THREE.Mesh(new THREE.CircleGeometry(15, 24), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28 })); // contact shadow (stays under the GLB too)
       shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.6;
       group.add(shadow); avatarGroup.add(group);
-      a = { group, bodyGroup, head, headMat, legP, armP, mats: { vest: matVest, tie: matTie, skin: matSkin }, appearKey: "", videoTex: null, picUrl: null, model: null, modelUrl: "", mixer: null, hue }; avatars.set(id, a); return a;
+      a = { group, bodyGroup, head, headMesh: headG, headMat, legP, armP, mats: { vest: matVest, tie: matTie, skin: matSkin }, appearKey: "", videoTex: null, picUrl: null, model: null, modelUrl: "", mixer: null, hue }; avatars.set(id, a); return a;
     }
     // Procedural walk: swing legs/arms while the avatar is moving; settle when idle. GLB models use their own clips.
     function walkAnim(a, x, z, dt) {
@@ -1344,18 +1359,18 @@
       }
       const seen = new Set();
       for (const [id, e] of peers) {
-        seen.add(id); const a = ensure(id, hueOf(id), e.name); a.group.position.set(e.rx, 0, e.ry); a.group.rotation.y = Math.PI / 2 - (e.facing || 0); a.head.lookAt(camera.position); setNameSprite(a, e.name || "Guest");
+        seen.add(id); const a = ensure(id, hueOf(id), e.name); a.group.position.set(e.rx, 0, e.ry); a.group.rotation.y = Math.PI / 2 - (e.facing || 0); a.head.lookAt(camera.position); if (a.headMesh) a.headMesh.lookAt(camera.position); setNameSprite(a, e.name || "Guest");
         applyAppear3D(a, e.appear); ensureModel(a, e.appear, false);   // custom colours + (custom or global) GLB model
         walkAnim(a, e.rx, e.ry, dt); applyEmotePose(a, emotes.get(id));
         const lv = lkVideo.get(id);
-        if (lv && lv.el && lv.el.readyState >= 2 && !a.videoTex) { a.videoTex = new THREE.VideoTexture(lv.el); a.headMat.map = a.videoTex; a.headMat.needsUpdate = true; }
+        if (lv && lv.el && lv.el.readyState >= 2 && !a.videoTex) { a.videoTex = new THREE.VideoTexture(lv.el); a.headMat.map = a.videoTex; a.headMat.needsUpdate = true; a.head.visible = true; if (a.headMesh) a.headMesh.visible = false; }
         else if (!a.videoTex && e.avatar) applyPic(a, e.avatar); // Google profile photo (when no live video)
       }
       if (cameraMode !== "firstPerson") {
-        seen.add("__me"); const a = ensure("__me", 212, "You"); a.group.visible = true; a.group.position.set(me.x, 0, me.y); a.group.rotation.y = Math.PI / 2 - (me.facing || 0); a.head.lookAt(camera.position); setNameSprite(a, myName || "You");
+        seen.add("__me"); const a = ensure("__me", 212, "You"); a.group.visible = true; a.group.position.set(me.x, 0, me.y); a.group.rotation.y = Math.PI / 2 - (me.facing || 0); a.head.lookAt(camera.position); if (a.headMesh) a.headMesh.lookAt(camera.position); setNameSprite(a, myName || "You");
         applyAppear3D(a, myAppear); ensureModel(a, myAppear, true);     // my custom look + model
         walkAnim(a, me.x, me.y, dt); applyEmotePose(a, emotes.get(myId));
-        if (localVideoEl && localVideoEl.readyState >= 2 && !a.videoTex) { a.videoTex = new THREE.VideoTexture(localVideoEl); a.headMat.map = a.videoTex; a.headMat.needsUpdate = true; }
+        if (localVideoEl && localVideoEl.readyState >= 2 && !a.videoTex) { a.videoTex = new THREE.VideoTexture(localVideoEl); a.headMat.map = a.videoTex; a.headMat.needsUpdate = true; a.head.visible = true; if (a.headMesh) a.headMesh.visible = false; }
         else if (!a.videoTex && myAvatar) applyPic(a, myAvatar);
       } else { const a = avatars.get("__me"); if (a) a.group.visible = false; }
       for (const [id, a] of avatars) { if (!seen.has(id)) { avatarGroup.remove(a.group); avatars.delete(id); } }
