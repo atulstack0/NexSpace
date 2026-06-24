@@ -450,7 +450,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-25c · new props: whiteboard / bookshelf / water cooler / server rack','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-25d · new props: whiteboard / bookshelf (open-front) / water cooler / server rack','color:#ffb454;font-weight:700');
   // forward browser errors + key client events to the server's live log stream (/logs.html). Buffers until the socket opens.
   const _clogBuf=[];
   function clog(level,msg){const e={t:'clientlog',level,msg:String(msg).slice(0,400)};try{if(ws&&ws.readyState===1){ws.send(JSON.stringify(e));return;}}catch(_){}_clogBuf.push(e);if(_clogBuf.length>50)_clogBuf.shift();}
@@ -1356,13 +1356,15 @@
         add(new THREE.BoxGeometry(w * 0.5, 3, 16), dark, 0, 3, 0);                                     // foot bar
         const sq = (col, sx) => add(new THREE.BoxGeometry(w * 0.28, 3, 1), new THREE.MeshBasicMaterial({ color: col }), sx, 70, 2.6);
         sq(0x5b8cff, -w * 0.12); sq(0xff5d6c, w * 0.14);                                               // marker squiggles
-      } else if (kind === "bookshelf") {   // 📚 bookshelf: wood case + colored book spines
-        add(new THREE.BoxGeometry(w, 118, d), wood, 0, 59, 0);                                         // case body
-        add(new THREE.BoxGeometry(w + 4, 6, d + 4), woodTop, 0, 118, 0);                               // top cap
+      } else if (kind === "bookshelf") {   // 📚 bookshelf: open-front case so the colored spines show
+        add(new THREE.BoxGeometry(w, 118, 4), wood, 0, 59, -d / 2 + 2);                                // back panel
+        for (const sx of [-1, 1]) add(new THREE.BoxGeometry(5, 118, d), wood, sx * (w / 2 - 2.5), 59, 0); // side panels
+        add(new THREE.BoxGeometry(w, 5, d), woodTop, 0, 2.5, 0);                                        // bottom board
+        add(new THREE.BoxGeometry(w + 4, 6, d + 4), woodTop, 0, 118, 0);                                // top cap
         const cols = [0xd94f4f, 0x5b8cff, 0x39d3a6, 0xffb454, 0xa06bff, 0xe8c08a];
-        for (let s = 0; s < 3; s++) { const yy = 24 + s * 36, n = Math.max(4, Math.floor(w / 22)), bw = (w - 12) / n;
-          add(new THREE.BoxGeometry(w - 8, 3, d - 4), woodTop, 0, yy - 15, 0);                         // shelf plank
-          for (let i = 0; i < n; i++) add(new THREE.BoxGeometry(bw - 3, 28, d - 8), pMat(cols[(i + s) % cols.length], 0.6), -w / 2 + 6 + bw * (i + 0.5), yy, 1); // book spines
+        for (let s = 0; s < 3; s++) { const yy = 24 + s * 36, n = Math.max(4, Math.floor(w / 22)), bw = (w - 14) / n;
+          add(new THREE.BoxGeometry(w - 10, 3, d - 6), woodTop, 0, yy - 15, 0);                         // shelf plank
+          for (let i = 0; i < n; i++) add(new THREE.BoxGeometry(bw - 3, 28, d - 10), pMat(cols[(i + s) % cols.length], 0.6), -w / 2 + 7 + bw * (i + 0.5), yy, 0); // book spines (now visible)
         }
       } else if (kind === "cooler") {   // 🚰 water cooler: white unit + blue bottle
         add(new THREE.BoxGeometry(w * 0.74, 50, d * 0.74), pMat(0xdfe6f2, 0.4), 0, 25, 0);             // dispenser body
