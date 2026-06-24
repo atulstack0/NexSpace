@@ -428,7 +428,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24l · branded join/landing screen + rigged human GLB avatar + 3D lighting + UI polish','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24m · richer 3D furniture (lit monitors / plush couch / fuller plants) + branded landing + human GLB avatar','color:#ffb454;font-weight:700');
   const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
   const mini=document.getElementById('minimap'),mctx=mini.getContext('2d');
   let DPR=Math.max(1,Math.min(2,devicePixelRatio||1)),VW=0,VH=0;
@@ -1190,18 +1190,26 @@
       } else if (kind === "plant") {
         const r = Math.max(14, Math.min(w, d) / 2);
         add(new THREE.CylinderGeometry(r * 0.5, r * 0.62, 22, 16), pot, 0, 11, 0);
-        const f1 = add(new THREE.SphereGeometry(r * 0.95, 12, 12), pMat(0x3f9b5a, 0.85), 0, 22 + r * 0.8, 0); f1.scale.y = 1.3;
-        add(new THREE.SphereGeometry(r * 0.6, 10, 10), pMat(0x2f7d46, 0.85), r * 0.4, 22 + r * 0.5, -r * 0.2);
-        add(new THREE.SphereGeometry(r * 0.55, 10, 10), pMat(0x4caa63, 0.85), -r * 0.45, 22 + r * 0.65, r * 0.2);
+        add(new THREE.CylinderGeometry(r * 0.48, r * 0.48, 3, 16), pMat(0x2a1c12, 0.96), 0, 22, 0);   // soil
+        const leaf = (col, rad, x, y, z, sy) => { const m = add(new THREE.SphereGeometry(rad, 12, 12), pMat(col, 0.82), x, y, z); if (sy) m.scale.y = sy; };
+        leaf(0x3f9b5a, r * 0.95, 0, 24 + r * 0.85, 0, 1.35);
+        leaf(0x2f7d46, r * 0.62, r * 0.45, 24 + r * 0.5, -r * 0.2);
+        leaf(0x4caa63, r * 0.58, -r * 0.48, 24 + r * 0.7, r * 0.2);
+        leaf(0x57b86e, r * 0.5, 0, 24 + r * 1.28, r * 0.1);
+        leaf(0x368a4f, r * 0.46, r * 0.12, 24 + r * 0.35, r * 0.5);
       } else if (kind === "chair") {
         chair(g, 0);
       } else if (kind === "couch") {
         const aw = Math.max(14, w * 0.12);
-        add(new THREE.BoxGeometry(w, 16, d), fabric, 0, 12, 0);
-        add(new THREE.BoxGeometry(w - 2 * aw, 10, d - 14), fabricA, 0, 24, 4);
-        add(new THREE.BoxGeometry(w, 26, 12), fabric, 0, 28, -d / 2 + 6);
-        add(new THREE.BoxGeometry(aw, 24, d), fabric, -w / 2 + aw / 2, 24, 0);
-        add(new THREE.BoxGeometry(aw, 24, d), fabric, w / 2 - aw / 2, 24, 0);
+        add(new THREE.BoxGeometry(w, 16, d), fabricA, 0, 12, 0);                              // base
+        add(new THREE.BoxGeometry(w, 28, 12), fabric, 0, 29, -d / 2 + 6);                     // backrest
+        add(new THREE.BoxGeometry(aw, 28, d), fabric, -w / 2 + aw / 2, 26, 0);                // left arm
+        add(new THREE.BoxGeometry(aw, 28, d), fabric, w / 2 - aw / 2, 26, 0);                 // right arm
+        const inner = w - 2 * aw, n = inner > 150 ? 3 : 2, cw = inner / n;                    // plush seat + back cushions
+        for (let i = 0; i < n; i++) { const cx = -inner / 2 + cw * (i + 0.5);
+          add(new THREE.BoxGeometry(cw - 4, 10, d - 18), fabricA, cx, 23, 5);
+          add(new THREE.BoxGeometry(cw - 4, 20, 9), fabricA, cx, 33, -d / 2 + 11);
+        }
       } else if (kind === "table") {
         const topY = 30;
         if ((o.r || 0) > 30) { const r = Math.min(w, d) / 2; add(new THREE.CylinderGeometry(r, r, 6, 28), woodTop, 0, topY, 0); add(new THREE.CylinderGeometry(5, 7, topY - 3, 12), wood, 0, (topY - 3) / 2, 0); add(new THREE.CylinderGeometry(r * 0.6, r * 0.6, 2, 16), dark, 0, 2, 0); }
@@ -1210,9 +1218,11 @@
         const topY = 30;
         add(new THREE.BoxGeometry(w, 5, d), woodTop, 0, topY, 0);
         for (const sx of [-1, 1]) add(new THREE.BoxGeometry(5, topY - 3, d - 8), wood, sx * (w / 2 - 6), (topY - 3) / 2, 0);
-        add(new THREE.BoxGeometry(Math.min(54, w * 0.42), 30, 3), screen, 0, topY + 20, -d / 2 + 12);
-        add(new THREE.BoxGeometry(8, 6, 8), dark, 0, topY + 5, -d / 2 + 12);
-        add(new THREE.BoxGeometry(Math.min(40, w * 0.35), 2, 12), dark, 0, topY + 3.5, d * 0.1);
+        add(new THREE.BoxGeometry(Math.min(56, w * 0.44), 32, 2.4), dark, 0, topY + 21, -d / 2 + 12);                                  // monitor bezel
+        add(new THREE.BoxGeometry(Math.min(50, w * 0.4), 27, 1), new THREE.MeshBasicMaterial({ color: 0x3b86c9 }), 0, topY + 21, -d / 2 + 11); // lit screen (glows regardless of lighting)
+        add(new THREE.BoxGeometry(7, 11, 6), dark, 0, topY + 6, -d / 2 + 12);                                                          // stand neck
+        add(new THREE.BoxGeometry(16, 2, 9), dark, 0, topY + 2.5, -d / 2 + 12);                                                        // stand base
+        add(new THREE.BoxGeometry(Math.min(40, w * 0.35), 2, 12), dark, 0, topY + 3.5, d * 0.1);                                       // keyboard
         chair(g, d / 2 + 14);
       }
       worldGroup.add(g);
