@@ -292,6 +292,13 @@ try {
   admin.ws.send(JSON.stringify({ t: "editFloor", op: "setFurniture", items: [{ id: "f-only1", kind: "table", x: 300, y: 300, w: 200, h: 120, r: 16 }] }));
   await wait(220);
   ((guest.world?.furniture?.length || 0) === 1 && guest.world.furniture[0].kind === "table") ? ok("editFloor setFurniture replaces the set (template undo)") : bad("setFurniture did not replace the set");
+  // room-drawing (P4-03) — add a new room zone, then remove it (powers undo)
+  admin.ws.send(JSON.stringify({ t: "editFloor", op: "addRoom", id: "r-test01", name: "Huddle", bounds: { x: 300, y: 300, w: 320, h: 240 } }));
+  await wait(240);
+  (guest.world?.rooms?.some((r) => r.id === "r-test01" && r.name === "Huddle")) ? ok("editFloor addRoom draws a new room zone") : bad("addRoom did not broadcast a room");
+  admin.ws.send(JSON.stringify({ t: "editFloor", op: "removeRoom", id: "r-test01" }));
+  await wait(220);
+  (!guest.world?.rooms?.some((r) => r.id === "r-test01")) ? ok("editFloor removeRoom deletes the room (room-draw undo)") : bad("removeRoom did not delete");
   guest.ws.send(JSON.stringify({ t: "editFloor", op: "add", wtype: "note", x: 100, y: 100 }));
   await wait(200);
   (guest.denied.includes("edit the floor")) ? ok("guest denied floor editing (RBAC)") : bad("guest floor edit was NOT blocked");

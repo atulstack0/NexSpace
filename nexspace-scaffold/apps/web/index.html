@@ -273,6 +273,7 @@
   <span class="sep"></span>
   <select id="edTemplate" class="btn" title="Floor layout template (§6.10)" style="padding:6px 8px"><option value="office">🏢 Office</option><option value="lounge">🛋 Lounge</option><option value="classroom">🎓 Classroom</option><option value="event">🎤 Event hall</option></select>
   <button class="btn" id="edApplyTemplate" title="Replace the floor's furniture with this layout">Apply layout</button>
+  <button class="btn" id="edDrawRoom" title="Draw a new room zone — toggle, then drag a rectangle (§6.10)">▭ Room</button>
   <span class="sep"></span>
   <button class="btn warn" id="edDel">🗑 Delete</button>
   <button class="btn" id="edUndo" title="Undo (Ctrl+Z)">↶ Undo</button>
@@ -394,7 +395,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24d · floor templates + side-rail HUD + mobile collapse + pathfinding/tour/gallery/devices/editor-undo','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24e · room-draw + floor templates + side-rail HUD + mobile collapse + pathfinding/tour/gallery/devices/editor-undo','color:#ffb454;font-weight:700');
   const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
   const mini=document.getElementById('minimap'),mctx=mini.getContext('2d');
   let DPR=Math.max(1,Math.min(2,devicePixelRatio||1)),VW=0,VH=0;
@@ -442,7 +443,7 @@
   let ytPlayer=null,ytReady=false,tvApplyingRemote=false,tvUnmuted=false,tvRaw=false,tvRawVid='',tvKickTimer=null,tvWallShown=false,tvSync={pos:0,at:0,playing:false}; // synced watch-party playback (off by default)
   window.onYouTubeIframeAPIReady=function(){ytReady=true;clearTimeout(tvKickTimer);if(myId)tvEnsurePlayer();}; // build the wall player as soon as we've joined
   (function(){const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);})();
-  let editMode=false,editSelSet=[],editDrag=null,undoStack=[],redoStack=[]; // owner/admin floor editor (multi-select + undo/redo)
+  let editMode=false,editSelSet=[],editDrag=null,undoStack=[],redoStack=[],drawRoomMode=false,roomDraw=null; // owner/admin floor editor (multi-select + undo/redo + room-draw)
   const reactions=new Map(),adminMuted=new Set();
   const emotes=new Map();   // id -> {type, t0} avatar emote (wave/clap/sit/dance)
   const EMOTE_EMOJI={wave:'👋',clap:'👏',sit:'🪑',dance:'🕺'};
@@ -566,7 +567,7 @@
   const toWorld=e=>({x:(e.clientX-VW/2)/cam.zoom+cam.x,y:(e.clientY-VH/2)/cam.zoom+cam.y});
   function canvasPrimary(e){                                 // 2D primary action: interact (TV/portal/widget) else move-to
     const w=toWorld(e);
-    if(editMode){editDown(w,e.shiftKey);return;}            // edit mode: drag/select elements instead of moving
+    if(editMode){if(drawRoomMode){editRoomDown(w);return;}editDown(w,e.shiftKey);return;} // edit mode: draw a room / drag-select elements
     if(world&&world.mediaWall){const M=world.mediaWall;
       if(w.x>=M.x-12&&w.x<=M.x+M.w+12&&w.y>=M.y-(M.screenH||150)-12&&w.y<=M.y+(M.base||16)+12){openTv();return;}}
     if(world&&world.portals){for(const pt of world.portals){if(w.x>=pt.x&&w.x<=pt.x+pt.w&&w.y>=pt.y&&w.y<=pt.y+pt.h){travelTo(pt.to);return;}}}
@@ -643,19 +644,35 @@
     const snapshot=(world&&world.furniture)?world.furniture.map(o=>({...o})):[];
     edSend({t:'editFloor',op:'template',name});editSelSet=[];updateEditBar();toast('Applied the '+name+' layout');
     pushUndo({undo:()=>edSend({t:'editFloor',op:'setFurniture',items:snapshot}),redo:()=>edSend({t:'editFloor',op:'template',name})});}
+  // draw a new room zone (P4-03): toggle draw-mode, then drag a rectangle on the floor
+  function updateRoomBtn(){const b=document.getElementById('edDrawRoom');if(b)b.classList.toggle('active',drawRoomMode);}
+  function editRoomDown(w){roomDraw={x0:w.x,y0:w.y,x1:w.x,y1:w.y};}
+  document.addEventListener('mousemove',e=>{if(!roomDraw||viewMode==='3d')return;const w=toWorld(e);roomDraw.x1=w.x;roomDraw.y1=w.y;});
+  document.addEventListener('mouseup',()=>{if(!roomDraw)return;const r=roomDraw;roomDraw=null;
+    const x=Math.min(r.x0,r.x1),y=Math.min(r.y0,r.y1),w=Math.abs(r.x1-r.x0),h=Math.abs(r.y1-r.y0);
+    if(w<120||h<120){toast('Room too small — drag a bigger rectangle');return;}
+    const name=(prompt('Name this room','Room')||'Room').slice(0,30);
+    const id='r-'+Math.random().toString(36).slice(2,8);
+    const msg={t:'editFloor',op:'addRoom',id,name,bounds:{x:Math.round(x),y:Math.round(y),w:Math.round(w),h:Math.round(h)}};
+    edSend(msg);toast('Added room "'+name+'"');
+    pushUndo({undo:()=>edSend({t:'editFloor',op:'removeRoom',id}),redo:()=>edSend(msg)});
+    drawRoomMode=false;updateRoomBtn();});
   function editDelete(){if(!editSelSet.length){toast('Select an element first');return;}
     const snaps=editSelSet.map(s=>({kind:s.kind,obj:JSON.parse(JSON.stringify(s.obj))}));
     for(const s of snaps)edRemove(s.kind,s.obj.id);
     editSelSet=[];updateEditBar();
     pushUndo({undo:()=>{for(const s of snaps)edSend({t:'editFloor',op:'restore',kind:s.kind,obj:s.obj});},redo:()=>{for(const s of snaps)edRemove(s.kind,s.obj.id);}});}
-  function editToggle(on){editMode=(on!==undefined)?on:!editMode;editSelSet=[];editDrag=null;
+  function editToggle(on){editMode=(on!==undefined)?on:!editMode;editSelSet=[];editDrag=null;drawRoomMode=false;roomDraw=null;updateRoomBtn();
     document.getElementById('editBar').style.display=editMode?'flex':'none';
     const be=document.getElementById('btnEdit');if(be)be.classList.toggle('active',editMode);
     canvas.style.cursor=editMode?'move':'crosshair';if(editMode)toast('✏️ Edit mode — click to select, Shift-click for multi, drag to move, Ctrl+Z to undo');updateEditBar();}
   function updateEditBar(){const h=document.getElementById('edHint');if(h)h.textContent=editSelSet.length?(editSelSet.length+' selected — drag to move · 🗑 delete · Shift-click to add/remove'):'click to select · Shift-click for multi · drag to move';
     const d=document.getElementById('edDel');if(d)d.style.opacity=editSelSet.length?'1':'.55';
     const u=document.getElementById('edUndo'),r=document.getElementById('edRedo');if(u)u.style.opacity=undoStack.length?'1':'.45';if(r)r.style.opacity=redoStack.length?'1':'.45';}
-  function drawEditSel(){if(!editSelSet.length)return;ctx.strokeStyle='#5b8cff';ctx.lineWidth=3;ctx.setLineDash([9,6]);for(const s of editSelSet){const o=s.obj;ctx.strokeRect(o.x-3,o.y-3,(o.w||40)+6,(o.h||40)+6);}ctx.setLineDash([]);}
+  function drawEditSel(){
+    if(roomDraw){const x=Math.min(roomDraw.x0,roomDraw.x1),y=Math.min(roomDraw.y0,roomDraw.y1),w=Math.abs(roomDraw.x1-roomDraw.x0),h=Math.abs(roomDraw.y1-roomDraw.y0);
+      ctx.save();ctx.fillStyle='rgba(57,211,166,.12)';ctx.fillRect(x,y,w,h);ctx.strokeStyle='#39d3a6';ctx.lineWidth=3;ctx.setLineDash([10,6]);ctx.strokeRect(x,y,w,h);ctx.setLineDash([]);ctx.restore();}
+    if(!editSelSet.length)return;ctx.strokeStyle='#5b8cff';ctx.lineWidth=3;ctx.setLineDash([9,6]);for(const s of editSelSet){const o=s.obj;ctx.strokeRect(o.x-3,o.y-3,(o.w||40)+6,(o.h||40)+6);}ctx.setLineDash([]);}
   addEventListener('keydown',e=>{if(!editMode)return;const tg=e.target;if(tg&&(tg.tagName==='INPUT'||tg.tagName==='TEXTAREA'))return;
     const k=e.key.toLowerCase();
     if((e.ctrlKey||e.metaKey)&&k==='z'){e.preventDefault();if(e.shiftKey)doRedo();else doUndo();return;}
@@ -1906,6 +1923,7 @@
   document.getElementById('edUndo').addEventListener('click',doUndo);
   document.getElementById('edRedo').addEventListener('click',doRedo);
   document.getElementById('edApplyTemplate').addEventListener('click',editApplyTemplate);
+  document.getElementById('edDrawRoom').addEventListener('click',()=>{drawRoomMode=!drawRoomMode;editSelSet=[];roomDraw=null;updateRoomBtn();toast(drawRoomMode?'▭ Draw-room on — drag a rectangle on the floor':'Draw-room off');});
   // responsive toolbar: ☰ expands / ✕ collapses the HUD; collapsed by default on phones to free the screen
   (function(){const bar=document.getElementById('bar'),tg=document.getElementById('barToggle');
     function sync(){const c=bar.classList.contains('collapsed');tg.textContent=c?'☰':'✕';tg.title=c?'Show controls':'Hide controls';tg.setAttribute('aria-label',c?'Show controls':'Hide controls');}

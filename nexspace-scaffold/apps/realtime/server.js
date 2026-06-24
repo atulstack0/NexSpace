@@ -689,6 +689,17 @@ wss.on("connection", (ws) => {
       } else if (op === "setFurniture" && Array.isArray(m.items)) {  // replace whole furniture set (powers template undo)
         f.furniture = m.items.slice(0, 200).map(sanitizeFurniture).filter(Boolean).map((o) => ({ ...o, x: Math.max(0, Math.min(f.w - o.w, o.x)), y: Math.max(0, Math.min(f.h - o.h, o.y)) }));
         changed = true;
+      } else if (op === "addRoom" && m.bounds && typeof m.bounds === "object" && f.rooms.length < 24) {  // draw a new room zone (P4-03)
+        const w = Math.max(120, Math.min(f.w - 40, Number(m.bounds.w) || 300)), h = Math.max(120, Math.min(f.h - 40, Number(m.bounds.h) || 220));
+        const x = grid(cx(m.bounds.x, f.w - w)), y = grid(cx(m.bounds.y, f.h - h));
+        const id = (typeof m.id === "string" && /^r-[a-z0-9]{4,32}$/.test(m.id) && !f.rooms.some((r) => r.id === m.id)) ? m.id : "r-" + crypto.randomBytes(3).toString("hex");
+        const name = String(m.name || "Room").slice(0, 30);
+        const color = (typeof m.color === "string" && /^#[0-9a-f]{3,8}$/i.test(m.color)) ? m.color : "#5b8cff";
+        const door = { x: Math.round(x + w / 2 - 9), y: Math.round(y + h - 9), w: 18, h: 18, state: "open", knocking: false };
+        f.rooms.push({ id, name, color, bounds: { x, y, w, h }, door, bookings: [] });
+        changed = true;
+      } else if (op === "removeRoom") {
+        const i = f.rooms.findIndex((r) => r.id === m.id); if (i >= 0) { f.rooms.splice(i, 1); changed = true; }
       } else if (op === "remove") {
         const arr = arrFor(m.kind);
         const i = arr.findIndex((x) => x.id === m.id); if (i >= 0) { arr.splice(i, 1); changed = true; }
