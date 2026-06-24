@@ -175,24 +175,46 @@ function makeDefaultFloor() {
   const walls = [ // structural (not editable)
     { x: 0, y: 0, w: W, h: 16 }, { x: 0, y: H - 16, w: W, h: 16 },
     { x: 0, y: 0, w: 16, h: H }, { x: W - 16, y: 0, w: 16, h: H },
+    // Focus Room (left) — right + bottom walls with a doorway
     { x: 520, y: 120, w: 16, h: 300 }, { x: 520, y: 520, w: 16, h: 240 }, { x: 120, y: 760, w: 430, h: 16 },
+    // Boardroom (top-right) — left/top/bottom + right wall with a doorway
     { x: 1500, y: 120, w: 16, h: 560 }, { x: 1516, y: 120, w: 300, h: 16 }, { x: 1516, y: 666, w: 300, h: 16 },
     { x: 1800, y: 120, w: 16, h: 236 }, { x: 1800, y: 452, w: 16, h: 230 },
+    // Meeting Room (bottom-right) — full perimeter with a doorway on the left edge (gap y1040–1180)
+    { x: 1560, y: 860, w: 456, h: 16 }, { x: 1560, y: 1300, w: 456, h: 16 }, { x: 2000, y: 860, w: 16, h: 456 },
+    { x: 1560, y: 860, w: 16, h: 180 }, { x: 1560, y: 1180, w: 16, h: 136 },
+    // open-plan cubicle dividers (waist-high partitions between the three desk pods)
+    { x: 760, y: 340, w: 16, h: 300 }, { x: 1180, y: 340, w: 16, h: 300 },
+    // a short reception/lobby partition by the entrance
+    { x: 700, y: 880, w: 16, h: 200 },
   ];
-  const furniture = [ // editable (owner can move/add/delete). kind drives the 3D prop model.
-    { id: "f-d1", x: 980, y: 560, w: 240, h: 120, r: 14, kind: "table" }, { id: "f-d2", x: 300, y: 300, w: 150, h: 80, r: 12, kind: "desk" },
-    { id: "f-d3", x: 1600, y: 330, w: 170, h: 90, r: 12, kind: "desk" }, { id: "f-d4", x: 900, y: 1150, w: 120, h: 120, r: 60, kind: "plant" },
-    { id: "f-d5", x: 1750, y: 1150, w: 150, h: 90, r: 12, kind: "couch" }, { id: "f-d6", x: 250, y: 1150, w: 90, h: 90, r: 10, kind: "plant" },
-    // ☕ lounge zone near the spawn — a rug with sofas, a coffee table and a plant for casual hangouts
-    { id: "f-lg-rug", x: 560, y: 1180, w: 320, h: 220, r: 0, kind: "rug" },
-    { id: "f-lg-c1", x: 580, y: 1190, w: 150, h: 70, r: 12, kind: "couch" }, { id: "f-lg-c2", x: 740, y: 1190, w: 150, h: 70, r: 12, kind: "couch" },
-    { id: "f-lg-tbl", x: 650, y: 1300, w: 120, h: 70, r: 14, kind: "table" }, { id: "f-lg-plant", x: 840, y: 1300, w: 80, h: 80, r: 40, kind: "plant" },
+  const furniture = [ // editable (owner can move/add/delete/rotate). kind drives the 3D prop model.
+    // ── open-plan: three desk pods (back-to-back desks + chairs) ──
+    { id: "f-p1a", x: 600, y: 380, w: 150, h: 80, r: 12, kind: "desk", rot: 0 }, { id: "f-p1b", x: 600, y: 480, w: 150, h: 80, r: 12, kind: "desk", rot: 180 },
+    { id: "f-p2a", x: 940, y: 380, w: 150, h: 80, r: 12, kind: "desk", rot: 0 }, { id: "f-p2b", x: 940, y: 480, w: 150, h: 80, r: 12, kind: "desk", rot: 180 },
+    { id: "f-p3a", x: 1280, y: 380, w: 150, h: 80, r: 12, kind: "desk", rot: 0 }, { id: "f-p3b", x: 1280, y: 480, w: 150, h: 80, r: 12, kind: "desk", rot: 180 },
+    { id: "f-ch1", x: 630, y: 310, w: 64, h: 64, r: 28, kind: "chair", rot: 180 }, { id: "f-ch2", x: 970, y: 570, w: 64, h: 64, r: 28, kind: "chair" },
+    { id: "f-ch3", x: 1310, y: 310, w: 64, h: 64, r: 28, kind: "chair", rot: 180 },
+    // ── reception desk + lobby plants near the entrance ──
+    { id: "f-recep", x: 820, y: 770, w: 220, h: 90, r: 14, kind: "desk" },
+    { id: "f-pl1", x: 560, y: 300, w: 80, h: 80, r: 40, kind: "plant" }, { id: "f-pl2", x: 1440, y: 760, w: 80, h: 80, r: 40, kind: "plant" },
+    { id: "f-pl3", x: 1080, y: 760, w: 80, h: 80, r: 40, kind: "plant" }, { id: "f-d6", x: 250, y: 1180, w: 90, h: 90, r: 10, kind: "plant" },
+    // ── Meeting Room interior — a big table with chairs all round ──
+    { id: "f-mt", x: 1660, y: 1010, w: 250, h: 130, r: 16, kind: "table" },
+    { id: "f-mc1", x: 1650, y: 930, w: 64, h: 64, r: 28, kind: "chair", rot: 180 }, { id: "f-mc2", x: 1770, y: 930, w: 64, h: 64, r: 28, kind: "chair", rot: 180 },
+    { id: "f-mc3", x: 1650, y: 1160, w: 64, h: 64, r: 28, kind: "chair" }, { id: "f-mc4", x: 1770, y: 1160, w: 64, h: 64, r: 28, kind: "chair" },
+    // ── lounge zone (bottom-left) — rug, sofas, coffee table, plant ──
+    { id: "f-lg-rug", x: 360, y: 1150, w: 320, h: 230, r: 0, kind: "rug" },
+    { id: "f-lg-c1", x: 380, y: 1160, w: 150, h: 70, r: 12, kind: "couch", rot: 0 }, { id: "f-lg-c2", x: 380, y: 1280, w: 150, h: 70, r: 12, kind: "couch", rot: 0 },
+    { id: "f-lg-tbl", x: 540, y: 1215, w: 110, h: 70, r: 14, kind: "table" }, { id: "f-lg-plant", x: 640, y: 1300, w: 80, h: 80, r: 40, kind: "plant" },
   ];
   const rooms = [
     { id: "focus", name: "Focus Room", color: "#7c6bff",
       bounds: { x: 140, y: 130, w: 380, h: 630 }, door: { x: 512, y: 418, w: 18, h: 104, state: "closed", knocking: false } },
     { id: "board", name: "Boardroom", color: "#39d3a6",
       bounds: { x: 1516, y: 136, w: 300, h: 546 }, door: { x: 1796, y: 356, w: 18, h: 96, state: "locked", knocking: false } },
+    { id: "meet", name: "Meeting Room", color: "#ffb454",
+      bounds: { x: 1560, y: 860, w: 456, h: 456 }, door: { x: 1552, y: 1040, w: 18, h: 140, state: "open", knocking: false } },
   ];
   // mounted on the top wall (screen flush against the wall at y0-16; base ledge just below)
   const mediaWall = { x: 940, y: 212, w: 320, base: 16, screenH: 196,
@@ -203,7 +225,7 @@ function makeDefaultFloor() {
     { id: "w-timer", type: "timer", x: 980, y: 300, w: 180, h: 96, label: "Standup ends", endsAt: Date.now() + 30 * 60000 },
   ];
   return { slug: "default", name: "HQ — Ground Floor", w: W, h: H, walls, furniture, rooms, mediaWall, portals, widgets,
-    branding: { name: "NexSpace", color: "#5b8cff", logo: "", whiteLabel: false }, spawn: { x: 890, y: 920 } };
+    branding: { name: "NexSpace", color: "#5b8cff", logo: "", whiteLabel: false }, spawn: { x: 900, y: 1010 } };
 }
 
 function makeRooftopFloor() {
