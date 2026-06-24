@@ -450,7 +450,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-25 · custom GLB avatar (pixellabs) + ❄️ Freeze Tag + chai stall + auto-hide rails','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-25b · Freeze-Tag 3D ground rings + custom GLB avatar + chai stall + auto-hide rails','color:#ffb454;font-weight:700');
   // forward browser errors + key client events to the server's live log stream (/logs.html). Buffers until the socket opens.
   const _clogBuf=[];
   function clog(level,msg){const e={t:'clientlog',level,msg:String(msg).slice(0,400)};try{if(ws&&ws.readyState===1){ws.send(JSON.stringify(e));return;}}catch(_){}_clogBuf.push(e);if(_clogBuf.length>50)_clogBuf.shift();}
@@ -1405,6 +1405,12 @@
       x.fillStyle = "#eaf0ff"; x.fillText(txt, W / 2, H / 2 + 1);
       return { tex: new THREE.CanvasTexture(c), w: W, h: H };
     }
+    function tagDisc(a, id) {   // Freeze-Tag ground ring: red under "It", ice-blue under frozen, else the normal contact shadow
+      if (!a.shadow) return; const m = a.shadow.material, on = tagState && !tagState.over;
+      if (on && tagState.it === id) { m.color.setHex(0xff5d6c); m.opacity = 0.6; a.shadow.scale.setScalar(1.8); }
+      else if (on && (tagState.frozen || []).indexOf(id) >= 0) { m.color.setHex(0x5b8cff); m.opacity = 0.55; a.shadow.scale.setScalar(1.7); }
+      else if (a.shadow.scale.x !== 1) { m.color.setHex(0x000000); m.opacity = 0.28; a.shadow.scale.setScalar(1); }
+    }
     function setNameSprite(a, name) {
       if (a.nameStr === name) return; a.nameStr = name;
       const nt = nameTex(name), s = 0.34;
@@ -1454,10 +1460,10 @@
       }
       const headMat = new THREE.MeshBasicMaterial({ map: letterTex((name && name[0]) || "?", "hsl(" + hue + ",70%,60%)"), transparent: true });
       const head = new THREE.Mesh(new THREE.PlaneGeometry(28, 28), headMat); head.position.y = 68; head.visible = false; bodyGroup.add(head); // live-video / photo bubble (shown only when a camera/photo is active)
-      const shadow = new THREE.Mesh(new THREE.CircleGeometry(15, 24), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28 })); // contact shadow (stays under the GLB too)
+      const shadow = new THREE.Mesh(new THREE.CircleGeometry(16, 28), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28 })); // contact shadow (also the Freeze-Tag ground ring)
       shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.6;
       group.add(shadow); avatarGroup.add(group);
-      a = { group, bodyGroup, head, headMesh: headG, headMat, legP, armP, mats: { vest: matVest, tie: matTie, skin: matSkin }, appearKey: "", videoTex: null, picUrl: null, model: null, modelUrl: "", mixer: null, hue }; avatars.set(id, a); return a;
+      a = { group, bodyGroup, head, headMesh: headG, headMat, shadow, legP, armP, mats: { vest: matVest, tie: matTie, skin: matSkin }, appearKey: "", videoTex: null, picUrl: null, model: null, modelUrl: "", mixer: null, hue }; avatars.set(id, a); return a;
     }
     // Procedural walk: swing legs/arms while the avatar is moving; settle when idle. GLB models use their own clips.
     function walkAnim(a, x, z, dt) {
@@ -1506,7 +1512,7 @@
       }
       const seen = new Set();
       for (const [id, e] of peers) {
-        seen.add(id); const a = ensure(id, hueOf(id), e.name); a.group.position.set(e.rx, 0, e.ry); a.group.rotation.y = Math.PI / 2 - (e.facing || 0); a.head.lookAt(camera.position); if (a.headMesh) a.headMesh.lookAt(camera.position); setNameSprite(a, tagName(id, e.name || "Guest"));
+        seen.add(id); const a = ensure(id, hueOf(id), e.name); a.group.position.set(e.rx, 0, e.ry); a.group.rotation.y = Math.PI / 2 - (e.facing || 0); a.head.lookAt(camera.position); if (a.headMesh) a.headMesh.lookAt(camera.position); setNameSprite(a, tagName(id, e.name || "Guest")); tagDisc(a, id);
         applyAppear3D(a, e.appear); ensureModel(a, e.appear, false);   // custom colours + (custom or global) GLB model
         walkAnim(a, e.rx, e.ry, dt); applyEmotePose(a, emotes.get(id));
         const lv = lkVideo.get(id);
@@ -1514,7 +1520,7 @@
         else if (!a.videoTex && e.avatar) applyPic(a, e.avatar); // Google profile photo (when no live video)
       }
       if (cameraMode !== "firstPerson") {
-        seen.add("__me"); const a = ensure("__me", 212, "You"); a.group.visible = true; a.group.position.set(me.x, jumpZ, me.y); a.group.rotation.y = Math.PI / 2 - (me.facing || 0); a.head.lookAt(camera.position); if (a.headMesh) a.headMesh.lookAt(camera.position); setNameSprite(a, tagName(myId, myName || "You"));
+        seen.add("__me"); const a = ensure("__me", 212, "You"); a.group.visible = true; a.group.position.set(me.x, jumpZ, me.y); a.group.rotation.y = Math.PI / 2 - (me.facing || 0); a.head.lookAt(camera.position); if (a.headMesh) a.headMesh.lookAt(camera.position); setNameSprite(a, tagName(myId, myName || "You")); tagDisc(a, myId);
         applyAppear3D(a, myAppear); ensureModel(a, myAppear, true);     // my custom look + model
         walkAnim(a, me.x, me.y, dt); applyEmotePose(a, emotes.get(myId));
         if (localVideoEl && localVideoEl.readyState >= 2 && !a.videoTex) { a.videoTex = new THREE.VideoTexture(localVideoEl); a.headMat.map = a.videoTex; a.headMat.needsUpdate = true; a.head.visible = true; if (a.headMesh) a.headMesh.visible = false; }
