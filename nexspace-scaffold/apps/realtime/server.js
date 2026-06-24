@@ -369,25 +369,29 @@ function sanitizeFurniture(o) {
   const id = (typeof o.id === "string" && /^f-[a-z0-9]{2,40}$/i.test(o.id)) ? o.id : "f-" + crypto.randomBytes(3).toString("hex");
   return { id, x: Math.round(Number(o.x) || 0), y: Math.round(Number(o.y) || 0), w, h, r: Math.max(0, Math.min(60, Number(o.r) || 12)), kind };
 }
-function floorTemplate(name, W, H) {
-  const items = [], add = (kind, x, y) => { const d = furnDim(kind); items.push({ kind, x, y, ...d }); };
-  const mx = 200, my = 250;
-  if (name === "lounge") {
-    for (let i = 0; i < 3; i++) { const cx = mx + i * ((W - 2 * mx) / 3) + 120, cy = my + 200; add("rug", cx - 30, cy - 20); add("couch", cx, cy); add("couch", cx, cy + 120); add("table", cx + 170, cy + 40); add("plant", cx + 330, cy); }
-  } else if (name === "classroom") {
-    add("table", W / 2 - 100, my);
-    for (let r = 0; r < 4; r++) for (let c = 0; c < 5; c++) add("desk", mx + c * 230, my + 230 + r * 150);
-    add("plant", mx - 60, my); add("plant", W - mx - 20, my);
-  } else if (name === "event") {
-    add("table", W / 2 - 100, my);
-    for (let r = 0; r < 5; r++) for (let c = 0; c < 7; c++) add("chair", mx + c * 150, my + 230 + r * 120);
-    add("plant", mx - 80, my + 220); add("plant", W - mx, my + 220);
-  } else {
-    for (let r = 0; r < 3; r++) for (let c = 0; c < 5; c++) add("desk", mx + c * 230, my + r * 230);
-    add("table", W / 2 - 100, H - my - 160); add("couch", mx, H - my - 120); add("couch", W - mx - 160, H - my - 120);
-    add("plant", mx - 40, my); add("plant", W - mx - 100, my);
+function floorTemplate(name, f) {
+  const W = f.w, H = f.h, mw = f.mediaWall, cxc = W / 2;
+  // keep every piece clear of the existing rooms and the TV wall so layouts never overlap them
+  const blocks = (f.rooms || []).map((r) => ({ ...r.bounds }));
+  if (mw) blocks.push({ x: mw.x - 10, y: 70, w: mw.w + 20, h: (mw.base || 16) + (mw.screenH || 150) + 230 });
+  const clear = (x, y, w, h) => { const pad = 26; for (const b of blocks) if (x < b.x + b.w + pad && x + w > b.x - pad && y < b.y + b.h + pad && y + h > b.y - pad) return false; return x >= 24 && y >= 70 && x + w <= W - 24 && y + h <= H - 24; };
+  const items = [], add = (kind, x, y) => { const d = furnDim(kind); x = Math.round(x); y = Math.round(y); if (clear(x, y, d.w, d.h)) items.push({ kind, x, y, ...d }); };
+  if (name === "lounge") {                                  // a few tidy conversation clusters
+    const cluster = (cx, cy) => { add("rug", cx - 130, cy - 90); add("couch", cx - 110, cy - 70); add("couch", cx - 110, cy + 34); add("table", cx + 64, cy - 24); add("plant", cx + 196, cy - 60); };
+    cluster(cxc - 360, H * 0.46); cluster(cxc + 320, H * 0.46); cluster(cxc - 20, H * 0.78);
+  } else if (name === "classroom") {                        // teacher desk up front + neat rows facing it
+    add("table", cxc - 100, 470); add("plant", cxc - 330, 470); add("plant", cxc + 250, 470);
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 6; c++) add("desk", cxc - 3 * 230 + 40 + c * 230, 700 + r * 150);
+  } else if (name === "event") {                            // a wide stage + theater seating with a centre aisle
+    add("table", cxc - 205, 460); add("table", cxc + 5, 460); add("plant", cxc - 360, 450); add("plant", cxc + 300, 450);
+    const cols = 8, gap = 150, x0 = cxc - (cols / 2) * gap + gap / 2;
+    for (let r = 0; r < 6; r++) for (let c = 0; c < cols; c++) { if (c === 3 || c === 4) continue; add("chair", x0 + c * gap, 690 + r * 120); }
+  } else {                                                  // office — back-to-back desk pods + a meeting table + a lounge corner
+    add("table", cxc - 100, 470); add("plant", cxc + 360, 470);
+    for (let r = 0; r < 2; r++) for (let c = 0; c < 4; c++) { const x = cxc - 4 * 180 + 40 + c * 360, y = 720 + r * 250; add("desk", x, y); add("desk", x, y + 92); }
+    add("rug", 210, H - 360); add("couch", 225, H - 345); add("couch", 225, H - 235); add("table", 392, H - 300); add("plant", 540, H - 350); add("plant", W - 260, H - 340);
   }
-  return items.map((o) => ({ id: "f-" + crypto.randomBytes(3).toString("hex"), x: Math.max(20, Math.min(W - o.w - 20, Math.round(o.x))), y: Math.max(20, Math.min(H - o.h - 20, Math.round(o.y))), w: o.w, h: o.h, r: o.r, kind: o.kind }));
+  return items.map((o) => ({ id: "f-" + crypto.randomBytes(3).toString("hex"), x: Math.max(20, Math.min(W - o.w - 20, o.x)), y: Math.max(20, Math.min(H - o.h - 20, o.y)), w: o.w, h: o.h, r: o.r, kind: o.kind }));
 }
 const server = http.createServer((req, res) => {
   let urlPath = (req.url || "/").split("?")[0];   // strip query first, so "/?sso=…" still serves the app
@@ -589,16 +593,16 @@ wss.on("connection", (ws) => {
     } else if (m.t === "broadcast") {
       if (m.on && rank(p.role) < RANK.member) return deny(ws, "broadcast", "member");
       if (m.on && mutedIds.has(p.id)) return deny(ws, "broadcast", "unmuted");
-      p.bcast = !!m.on;
+      p.bcast = !!m.on; console.log(`broadcast ${p.bcast ? "ON 📢" : "off"} by ${p.name}`);
     } else if (m.t === "media") {
-      const f = floorOf(p); if (f.mediaWall) { f.mediaWall.playing = !!m.playing; publishEvent("media", { floor: f.slug, playing: f.mediaWall.playing }); }
+      const f = floorOf(p); if (f.mediaWall) { f.mediaWall.playing = !!m.playing; console.log(`media wall ${f.mediaWall.playing ? "play ▶" : "pause ⏸"} by ${p.name}`); publishEvent("media", { floor: f.slug, playing: f.mediaWall.playing }); }
     } else if (m.t === "door") {
       const room = floorOf(p).rooms.find(r => r.id === m.roomId);
       if (!room || !["open", "closed", "locked"].includes(m.state)) return;
       const cur = room.door.state;
       if (m.state === "locked" && rank(p.role) < RANK.admin) return deny(ws, "lock doors", "admin");      // only admins can lock
       if (cur === "locked" && rank(p.role) < RANK.member) return deny(ws, "unlock the door", "member");   // unlocking a locked door needs member+
-      room.door.state = m.state; publishEvent("door", { floor: p.floor, roomId: m.roomId, state: m.state }); // anyone may open/close an unlocked door
+      room.door.state = m.state; console.log(`door '${room.name || room.id}' → ${m.state} by ${p.name}`); publishEvent("door", { floor: p.floor, roomId: m.roomId, state: m.state }); // anyone may open/close an unlocked door
     } else if (m.t === "knock") {
       const room = floorOf(p).rooms.find(r => r.id === m.roomId);
       if (!room) return;
@@ -621,6 +625,7 @@ wss.on("connection", (ws) => {
         return send(ws, { t: "booking", roomId: room.id, bookings: room.bookings, booking: activeBooking(room), error: "That time overlaps an existing booking." });
       room.bookings.push({ id: "bk-" + crypto.randomBytes(3).toString("hex"), title: String(m.title || "Meeting").slice(0, 60), by: p.name, byId: p.id, startsAt, endsAt });
       room.bookings.sort((a, b) => a.startsAt - b.startsAt);
+      console.log(`booked '${room.name || room.id}': "${String(m.title || "Meeting").slice(0, 40)}" (${mins}m) by ${p.name}`);
       refreshRoomActive(f, room, now);                          // activates immediately if it starts now (flips presence + broadcasts)
       broadcastBooking(f, room);
     } else if (m.t === "cancelBooking") {
@@ -650,13 +655,15 @@ wss.on("connection", (ws) => {
       if (rank(p.role) < RANK.member) return deny(ws, "present", "member");
       const f = floorOf(p); const r = f.rooms.find((rm) => inRoom(p, rm));
       f.presentation = { byId: p.id, byName: p.name, roomId: r ? r.id : null };
+      console.log(`present ▶ started by ${p.name}${r ? " in " + (r.name || r.id) : ""}`);
       broadcastPresentation(f);
     } else if (m.t === "unpresent") {                          // stop presenting (presenter or admin)
       const f = floorOf(p);
-      if (f.presentation && (f.presentation.byId === p.id || rank(p.role) >= RANK.admin)) { f.presentation = null; broadcastPresentation(f); }
+      if (f.presentation && (f.presentation.byId === p.id || rank(p.role) >= RANK.admin)) { console.log(`present ⏹ stopped by ${p.name}`); f.presentation = null; broadcastPresentation(f); }
     } else if (m.t === "recording") {
       if (rank(p.role) < RANK.admin) return deny(ws, "record", "admin");
       recording = m.on ? { on: true, by: p.name, egressId: m.egressId || null } : { on: false, by: null, egressId: null };
+      console.log(`recording ${recording.on ? "● started" : "■ stopped"} by ${p.name}`);
       publishEvent("recording", recording);
     } else if (m.t === "chat") {
       const body = String(m.body || "").slice(0, 500); if (!body.trim()) return;
@@ -691,6 +698,7 @@ wss.on("connection", (ws) => {
     } else if (m.t === "moderate") {
       if (rank(p.role) < RANK.admin) return deny(ws, "moderate", "admin");
       const action = m.action, target = String(m.target || "");
+      console.log(`moderate '${action}' on ${target} by ${p.name}`);
       applyModerate(action, target); publishEvent("moderate", { action, target });
     } else if (m.t === "portal") {
       // teleport to another floor (physical portal step-through or floor-switcher); any joined client may travel
@@ -709,17 +717,21 @@ wss.on("connection", (ws) => {
     } else if (m.t === "tvPlay") {            // shared TV: play a video now (everyone's screen switches)
       if (!validVideoId(m.videoId)) return;
       tvSetVideo(m.videoId, String(m.title || "").slice(0, 140), p.name);
+      console.log(`tv ▶ "${(tv.title || tv.videoId).slice(0, 60)}" by ${p.name}`);
       broadcastLocal(tvState()); publishEvent("tv", tv);
     } else if (m.t === "tvCtrl") {            // shared play/pause + seek — anyone can drive the watch-party
       tv.playing = !!m.playing; tv.position = Math.max(0, Number(m.position) || 0); tv.updatedAt = Date.now();
+      console.log(`tv ${tv.playing ? "play ▶" : "pause ⏸"} @${Math.round(tv.position)}s by ${p.name}`);
       broadcastLocal(tvState()); publishEvent("tv", tv);
     } else if (m.t === "tvQueue") {           // add to the shared queue
       if (!validVideoId(m.videoId) || tv.queue.length >= 50) return;
       tv.queue.push({ videoId: m.videoId, title: String(m.title || "").slice(0, 140), by: p.name });
+      console.log(`tv + queued "${String(m.title || m.videoId).slice(0, 60)}" by ${p.name}`);
       broadcastLocal(tvState()); publishEvent("tv", tv);
     } else if (m.t === "tvNext") {            // skip to the next queued video
       if (!tv.queue.length) return;
       const n = tv.queue.shift(); tvSetVideo(n.videoId, n.title, n.by);
+      console.log(`tv ⏭ next "${(n.title || n.videoId).slice(0, 60)}" by ${p.name}`);
       broadcastLocal(tvState()); publishEvent("tv", tv);
     } else if (m.t === "tvRemove") {
       const i = Number(m.index); if (Number.isInteger(i) && i >= 0 && i < tv.queue.length) { tv.queue.splice(i, 1); broadcastLocal(tvState()); publishEvent("tv", tv); }
@@ -747,7 +759,7 @@ wss.on("connection", (ws) => {
         f.widgets.push(wd); changed = true;
       } else if (op === "template") {                       // replace floor furniture with a themed layout (P4-05)
         const name = ["office", "lounge", "classroom", "event"].includes(m.name) ? m.name : "office";
-        f.furniture = floorTemplate(name, f.w, f.h); changed = true;
+        f.furniture = floorTemplate(name, f); changed = true;
       } else if (op === "setFurniture" && Array.isArray(m.items)) {  // replace whole furniture set (powers template undo)
         f.furniture = m.items.slice(0, 200).map(sanitizeFurniture).filter(Boolean).map((o) => ({ ...o, x: Math.max(0, Math.min(f.w - o.w, o.x)), y: Math.max(0, Math.min(f.h - o.h, o.y)) }));
         changed = true;
