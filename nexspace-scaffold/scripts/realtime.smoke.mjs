@@ -285,6 +285,13 @@ try {
   admin.ws.send(JSON.stringify({ t: "editFloor", op: "restore", kind: "widget", obj: { id: "w-undo01", type: "note", x: 320, y: 320, w: 180, h: 120, text: "Restored", color: "#ffd166" } }));
   await wait(220);
   (guest.world?.widgets?.some((o) => o.id === "w-undo01" && o.text === "Restored")) ? ok("editFloor restore re-inserts a deleted element verbatim (undo)") : bad("editFloor restore did not re-insert");
+  // floor templates (P4-05) — apply a layout, then replace the set (powers undo)
+  admin.ws.send(JSON.stringify({ t: "editFloor", op: "template", name: "classroom" }));
+  await wait(260);
+  ((guest.world?.furniture?.length || 0) >= 15) ? ok("editFloor template replaces the floor with a layout") : bad("template did not apply");
+  admin.ws.send(JSON.stringify({ t: "editFloor", op: "setFurniture", items: [{ id: "f-only1", kind: "table", x: 300, y: 300, w: 200, h: 120, r: 16 }] }));
+  await wait(220);
+  ((guest.world?.furniture?.length || 0) === 1 && guest.world.furniture[0].kind === "table") ? ok("editFloor setFurniture replaces the set (template undo)") : bad("setFurniture did not replace the set");
   guest.ws.send(JSON.stringify({ t: "editFloor", op: "add", wtype: "note", x: 100, y: 100 }));
   await wait(200);
   (guest.denied.includes("edit the floor")) ? ok("guest denied floor editing (RBAC)") : bad("guest floor edit was NOT blocked");

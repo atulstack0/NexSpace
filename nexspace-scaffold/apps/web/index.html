@@ -270,6 +270,10 @@
   <button class="btn" id="edAddFurniture">＋ Add</button>
   <button class="btn" id="edAddNote">＋ Note</button>
   <button class="btn" id="edAddTimer">＋ Timer</button>
+  <span class="sep"></span>
+  <select id="edTemplate" class="btn" title="Floor layout template (§6.10)" style="padding:6px 8px"><option value="office">🏢 Office</option><option value="lounge">🛋 Lounge</option><option value="classroom">🎓 Classroom</option><option value="event">🎤 Event hall</option></select>
+  <button class="btn" id="edApplyTemplate" title="Replace the floor's furniture with this layout">Apply layout</button>
+  <span class="sep"></span>
   <button class="btn warn" id="edDel">🗑 Delete</button>
   <button class="btn" id="edUndo" title="Undo (Ctrl+Z)">↶ Undo</button>
   <button class="btn" id="edRedo" title="Redo (Ctrl+Y / Ctrl+Shift+Z)">↷ Redo</button>
@@ -390,7 +394,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24c · side-rail HUD + mobile expand/collapse + pathfinding/tour/gallery/devices/editor-undo','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24d · floor templates + side-rail HUD + mobile collapse + pathfinding/tour/gallery/devices/editor-undo','color:#ffb454;font-weight:700');
   const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
   const mini=document.getElementById('minimap'),mctx=mini.getContext('2d');
   let DPR=Math.max(1,Math.min(2,devicePixelRatio||1)),VW=0,VH=0;
@@ -635,6 +639,10 @@
     const kind=(what==='furniture')?'furniture':'widget';
     edSend(msg);toast('Added '+(what==='furniture'?fk:what)+' near you');
     pushUndo({undo:()=>edRemove(kind,id),redo:()=>edSend(msg)});}
+  function editApplyTemplate(){const name=(document.getElementById('edTemplate')||{}).value||'office';
+    const snapshot=(world&&world.furniture)?world.furniture.map(o=>({...o})):[];
+    edSend({t:'editFloor',op:'template',name});editSelSet=[];updateEditBar();toast('Applied the '+name+' layout');
+    pushUndo({undo:()=>edSend({t:'editFloor',op:'setFurniture',items:snapshot}),redo:()=>edSend({t:'editFloor',op:'template',name})});}
   function editDelete(){if(!editSelSet.length){toast('Select an element first');return;}
     const snaps=editSelSet.map(s=>({kind:s.kind,obj:JSON.parse(JSON.stringify(s.obj))}));
     for(const s of snaps)edRemove(s.kind,s.obj.id);
@@ -1897,6 +1905,7 @@
   document.getElementById('edDel').addEventListener('click',editDelete);
   document.getElementById('edUndo').addEventListener('click',doUndo);
   document.getElementById('edRedo').addEventListener('click',doRedo);
+  document.getElementById('edApplyTemplate').addEventListener('click',editApplyTemplate);
   // responsive toolbar: ☰ expands / ✕ collapses the HUD; collapsed by default on phones to free the screen
   (function(){const bar=document.getElementById('bar'),tg=document.getElementById('barToggle');
     function sync(){const c=bar.classList.contains('collapsed');tg.textContent=c?'☰':'✕';tg.title=c?'Show controls':'Hide controls';tg.setAttribute('aria-label',c?'Show controls':'Hide controls');}

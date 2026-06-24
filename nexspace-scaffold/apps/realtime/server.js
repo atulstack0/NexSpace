@@ -324,6 +324,35 @@ if (process.env.PERSIST_REDIS_URL) {
 const persistClient = () => persistRedis || pub; // prefer the dedicated client; fall back to the fan-out client
 
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".ico": "image/x-icon" };
+// ---- Floor furniture templates (spec 6.10 / P4-05) ----
+function furnDim(fk) { return fk === "plant" ? { w: 80, h: 80, r: 40 } : fk === "chair" ? { w: 70, h: 70, r: 30 } : fk === "couch" ? { w: 150, h: 90, r: 12 } : fk === "table" ? { w: 200, h: 120, r: 16 } : fk === "rug" ? { w: 260, h: 180, r: 0 } : { w: 150, h: 80, r: 12 }; }
+function sanitizeFurniture(o) {
+  if (!o || typeof o !== "object") return null;
+  const kind = ["desk", "table", "couch", "plant", "chair", "rug"].includes(o.kind) ? o.kind : "desk";
+  const w = Math.max(10, Math.min(600, Number(o.w) || 80)), h = Math.max(10, Math.min(600, Number(o.h) || 80));
+  const id = (typeof o.id === "string" && /^f-[a-z0-9]{2,40}$/i.test(o.id)) ? o.id : "f-" + crypto.randomBytes(3).toString("hex");
+  return { id, x: Math.round(Number(o.x) || 0), y: Math.round(Number(o.y) || 0), w, h, r: Math.max(0, Math.min(60, Number(o.r) || 12)), kind };
+}
+function floorTemplate(name, W, H) {
+  const items = [], add = (kind, x, y) => { const d = furnDim(kind); items.push({ kind, x, y, ...d }); };
+  const mx = 200, my = 250;
+  if (name === "lounge") {
+    for (let i = 0; i < 3; i++) { const cx = mx + i * ((W - 2 * mx) / 3) + 120, cy = my + 200; add("rug", cx - 30, cy - 20); add("couch", cx, cy); add("couch", cx, cy + 120); add("table", cx + 170, cy + 40); add("plant", cx + 330, cy); }
+  } else if (name === "classroom") {
+    add("table", W / 2 - 100, my);
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 5; c++) add("desk", mx + c * 230, my + 230 + r * 150);
+    add("plant", mx - 60, my); add("plant", W - mx - 20, my);
+  } else if (name === "event") {
+    add("table", W / 2 - 100, my);
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 7; c++) add("chair", mx + c * 150, my + 230 + r * 120);
+    add("plant", mx - 80, my + 220); add("plant", W - mx, my + 220);
+  } else {
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 5; c++) add("desk", mx + c * 230, my + r * 230);
+    add("table", W / 2 - 100, H - my - 160); add("couch", mx, H - my - 120); add("couch", W - mx - 160, H - my - 120);
+    add("plant", mx - 40, my); add("plant", W - mx - 100, my);
+  }
+  return items.map((o) => ({ id: "f-" + crypto.randomBytes(3).toString("hex"), x: Math.max(20, Math.min(W - o.w - 20, Math.round(o.x))), y: Math.max(20, Math.min(H - o.h - 20, Math.round(o.y))), w: o.w, h: o.h, r: o.r, kind: o.kind }));
+}
 const server = http.createServer((req, res) => {
   let urlPath = (req.url || "/").split("?")[0];   // strip query first, so "/?sso=…" still serves the app
   if (urlPath === "/" || urlPath === "") urlPath = "/index.html";
@@ -654,6 +683,12 @@ wss.on("connection", (ws) => {
         else if (type === "timer") { wd.label = String(m.label || "Timer").slice(0, 40); wd.endsAt = Date.now() + 10 * 60000; }
         else { wd.kind = "web"; wd.url = String(m.url || "").slice(0, 400); wd.title = String(m.title || "Embed").slice(0, 80); }
         f.widgets.push(wd); changed = true;
+      } else if (op === "template") {                       // replace floor furniture with a themed layout (P4-05)
+        const name = ["office", "lounge", "classroom", "event"].includes(m.name) ? m.name : "office";
+        f.furniture = floorTemplate(name, f.w, f.h); changed = true;
+      } else if (op === "setFurniture" && Array.isArray(m.items)) {  // replace whole furniture set (powers template undo)
+        f.furniture = m.items.slice(0, 200).map(sanitizeFurniture).filter(Boolean).map((o) => ({ ...o, x: Math.max(0, Math.min(f.w - o.w, o.x)), y: Math.max(0, Math.min(f.h - o.h, o.y)) }));
+        changed = true;
       } else if (op === "remove") {
         const arr = arrFor(m.kind);
         const i = arr.findIndex((x) => x.id === m.id); if (i >= 0) { arr.splice(i, 1); changed = true; }
