@@ -428,7 +428,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24m · richer 3D furniture (lit monitors / plush couch / fuller plants) + branded landing + human GLB avatar','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24n · editable rooms (select/move/delete) + richer 3D furniture + branded landing + human GLB avatar','color:#ffb454;font-weight:700');
   const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
   const mini=document.getElementById('minimap'),mctx=mini.getContext('2d');
   let DPR=Math.max(1,Math.min(2,devicePixelRatio||1)),VW=0,VH=0;
@@ -644,6 +644,8 @@
 
   // ---------- Owner/admin floor editor (move/add/remove elements; live to everyone) ----------
   function editHit(arr,kind,w){if(!arr)return null;for(let i=arr.length-1;i>=0;i--){const o=arr[i];if(w.x>=o.x&&w.x<=o.x+o.w&&w.y>=o.y&&w.y<=o.y+o.h)return{kind,obj:o};}return null;}
+  function editHitRoom(w){if(!world||!world.rooms)return null;for(let i=world.rooms.length-1;i>=0;i--){const r=world.rooms[i],b=r.bounds;if(b&&w.x>=b.x&&w.x<=b.x+b.w&&w.y>=b.y&&w.y<=b.y+b.h)return{kind:'room',obj:r};}return null;}
+  const itemBox=(s)=>(s&&s.kind==='room')?s.obj.bounds:s.obj;   // rooms carry position in .bounds; everything else on the object
   function edSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o));}
   function edMove(kind,id,x,y){edSend({t:'editFloor',op:'move',kind,id,x,y});}
   function edRemove(kind,id){edSend({t:'editFloor',op:'remove',kind,id});}
@@ -652,20 +654,22 @@
   function doUndo(){const r=undoStack.pop();if(!r){toast('Nothing to undo');return;}r.undo();redoStack.push(r);editSelSet=[];updateEditBar();toast('↶ Undo');}
   function doRedo(){const r=redoStack.pop();if(!r){toast('Nothing to redo');return;}r.redo();undoStack.push(r);editSelSet=[];updateEditBar();toast('↷ Redo');}
   function editDown(w,shift){if(!world)return;
-    const hit=editHit(world.widgets,'widget',w)||editHit(world.portals,'portal',w)||editHit(world.furniture,'furniture',w);
+    const hit=editHit(world.widgets,'widget',w)||editHit(world.portals,'portal',w)||editHit(world.furniture,'furniture',w)||editHitRoom(w);
     if(shift){if(hit){const i=editSelSet.findIndex(s=>s.obj===hit.obj);if(i>=0)editSelSet.splice(i,1);else editSelSet.push(hit);}}
     else{if(hit){if(!selHas(hit.obj))editSelSet=[hit];}else editSelSet=[];}
     updateEditBar();
-    if(hit&&selHas(hit.obj))editDrag={downX:w.x,downY:w.y,items:editSelSet.map(s=>({kind:s.kind,obj:s.obj,sx:s.obj.x,sy:s.obj.y}))};
+    if(hit&&selHas(hit.obj))editDrag={downX:w.x,downY:w.y,items:editSelSet.map(s=>{const p=itemBox(s),it={kind:s.kind,obj:s.obj,sx:p.x,sy:p.y};if(s.kind==='room'&&s.obj.door){it.dsx=s.obj.door.x;it.dsy=s.obj.door.y;}return it;})};
     else editDrag=null;}
   document.addEventListener('mousemove',e=>{if(!editDrag||viewMode==='3d')return;const w=toWorld(e);
     const dx=Math.round((w.x-editDrag.downX)/10)*10,dy=Math.round((w.y-editDrag.downY)/10)*10;
-    for(const it of editDrag.items){it.obj.x=it.sx+dx;it.obj.y=it.sy+dy;}});
+    for(const it of editDrag.items){const p=(it.kind==='room')?it.obj.bounds:it.obj;p.x=it.sx+dx;p.y=it.sy+dy;if(it.kind==='room'&&it.obj.door){it.obj.door.x=it.dsx+dx;it.obj.door.y=it.dsy+dy;}}});
   document.addEventListener('mouseup',()=>{if(!editDrag)return;const items=editDrag.items;editDrag=null;
-    const moved=items.filter(it=>it.obj.x!==it.sx||it.obj.y!==it.sy).map(it=>({kind:it.kind,id:it.obj.id,fromX:it.sx,fromY:it.sy,toX:it.obj.x,toY:it.obj.y}));
+    const cur=(it)=>(it.kind==='room')?it.obj.bounds:it.obj;
+    const moved=items.filter(it=>cur(it).x!==it.sx||cur(it).y!==it.sy).map(it=>({kind:it.kind,id:it.obj.id,fromX:it.sx,fromY:it.sy,toX:cur(it).x,toY:cur(it).y}));
     if(!moved.length)return;
-    for(const it of moved)edMove(it.kind,it.id,it.toX,it.toY);
-    pushUndo({undo:()=>{for(const it of moved)edMove(it.kind,it.id,it.fromX,it.fromY);},redo:()=>{for(const it of moved)edMove(it.kind,it.id,it.toX,it.toY);}});});
+    const mv=(it,x,y)=>(it.kind==='room')?edSend({t:'editFloor',op:'moveRoom',id:it.id,x,y}):edMove(it.kind,it.id,x,y);
+    for(const it of moved)mv(it,it.toX,it.toY);
+    pushUndo({undo:()=>{for(const it of moved)mv(it,it.fromX,it.fromY);},redo:()=>{for(const it of moved)mv(it,it.toX,it.toY);}});});
   function editAdd(what){const x=Math.round(me.x-90),y=Math.round(me.y-60);
     const fk=(document.getElementById('edFurnKind')||{}).value||'desk';
     const id=(what==='furniture'?'f-':'w-')+Math.random().toString(36).slice(2,8);
@@ -692,20 +696,22 @@
     drawRoomMode=false;updateRoomBtn();});
   function editDelete(){if(!editSelSet.length){toast('Select an element first');return;}
     const snaps=editSelSet.map(s=>({kind:s.kind,obj:JSON.parse(JSON.stringify(s.obj))}));
-    for(const s of snaps)edRemove(s.kind,s.obj.id);
+    const del=(s)=>(s.kind==='room')?edSend({t:'editFloor',op:'removeRoom',id:s.obj.id}):edRemove(s.kind,s.obj.id);
+    const restore=(s)=>(s.kind==='room')?edSend({t:'editFloor',op:'addRoom',id:s.obj.id,name:s.obj.name,color:s.obj.color,bounds:s.obj.bounds}):edSend({t:'editFloor',op:'restore',kind:s.kind,obj:s.obj});
+    for(const s of snaps)del(s);
     editSelSet=[];updateEditBar();
-    pushUndo({undo:()=>{for(const s of snaps)edSend({t:'editFloor',op:'restore',kind:s.kind,obj:s.obj});},redo:()=>{for(const s of snaps)edRemove(s.kind,s.obj.id);}});}
+    pushUndo({undo:()=>{for(const s of snaps)restore(s);},redo:()=>{for(const s of snaps)del(s);}});}
   function editToggle(on){editMode=(on!==undefined)?on:!editMode;editSelSet=[];editDrag=null;drawRoomMode=false;roomDraw=null;updateRoomBtn();
     document.getElementById('editBar').style.display=editMode?'flex':'none';
     const be=document.getElementById('btnEdit');if(be)be.classList.toggle('active',editMode);
     canvas.style.cursor=editMode?'move':'crosshair';if(editMode)toast('✏️ Edit mode — click to select, Shift-click for multi, drag to move, Ctrl+Z to undo');updateEditBar();}
-  function updateEditBar(){const h=document.getElementById('edHint');if(h)h.textContent=editSelSet.length?(editSelSet.length+' selected — drag to move · 🗑 delete · Shift-click to add/remove'):'click to select · Shift-click for multi · drag to move';
+  function updateEditBar(){const h=document.getElementById('edHint');if(h)h.textContent=editSelSet.length?(editSelSet.length+' selected — drag to move · 🗑 delete · Shift-click to add/remove'):'click furniture or a room to select · drag to move · 🗑 to delete';
     const d=document.getElementById('edDel');if(d)d.style.opacity=editSelSet.length?'1':'.55';
     const u=document.getElementById('edUndo'),r=document.getElementById('edRedo');if(u)u.style.opacity=undoStack.length?'1':'.45';if(r)r.style.opacity=redoStack.length?'1':'.45';}
   function drawEditSel(){
     if(roomDraw){const x=Math.min(roomDraw.x0,roomDraw.x1),y=Math.min(roomDraw.y0,roomDraw.y1),w=Math.abs(roomDraw.x1-roomDraw.x0),h=Math.abs(roomDraw.y1-roomDraw.y0);
       ctx.save();ctx.fillStyle='rgba(57,211,166,.12)';ctx.fillRect(x,y,w,h);ctx.strokeStyle='#39d3a6';ctx.lineWidth=3;ctx.setLineDash([10,6]);ctx.strokeRect(x,y,w,h);ctx.setLineDash([]);ctx.restore();}
-    if(!editSelSet.length)return;ctx.strokeStyle='#5b8cff';ctx.lineWidth=3;ctx.setLineDash([9,6]);for(const s of editSelSet){const o=s.obj;ctx.strokeRect(o.x-3,o.y-3,(o.w||40)+6,(o.h||40)+6);}ctx.setLineDash([]);}
+    if(!editSelSet.length)return;ctx.strokeStyle='#5b8cff';ctx.lineWidth=3;ctx.setLineDash([9,6]);for(const s of editSelSet){const p=itemBox(s);if(p)ctx.strokeRect(p.x-3,p.y-3,(p.w||40)+6,(p.h||40)+6);}ctx.setLineDash([]);}
   addEventListener('keydown',e=>{if(!editMode)return;const tg=e.target;if(tg&&(tg.tagName==='INPUT'||tg.tagName==='TEXTAREA'))return;
     const k=e.key.toLowerCase();
     if((e.ctrlKey||e.metaKey)&&k==='z'){e.preventDefault();if(e.shiftKey)doRedo();else doUndo();return;}

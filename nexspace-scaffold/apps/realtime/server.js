@@ -701,6 +701,11 @@ wss.on("connection", (ws) => {
         changed = true;
       } else if (op === "removeRoom") {
         const i = f.rooms.findIndex((r) => r.id === m.id); if (i >= 0) { f.rooms.splice(i, 1); changed = true; }
+      } else if (op === "moveRoom") {                       // drag an existing room zone (door moves with it)
+        const r = f.rooms.find((rm) => rm.id === m.id);
+        if (r) { const nx = grid(cx(m.x, f.w - r.bounds.w)), ny = grid(cx(m.y, f.h - r.bounds.h));
+          const dxp = nx - r.bounds.x, dyp = ny - r.bounds.y; r.bounds.x = nx; r.bounds.y = ny;
+          if (r.door) { r.door.x += dxp; r.door.y += dyp; } changed = true; }
       } else if (op === "remove") {
         const arr = arrFor(m.kind);
         const i = arr.findIndex((x) => x.id === m.id); if (i >= 0) { arr.splice(i, 1); changed = true; }
