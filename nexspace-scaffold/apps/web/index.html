@@ -36,11 +36,18 @@
   #bar.collapsed #barItems{display:none}
   @media(max-width:820px){
     #bar{gap:8px;padding:0 8px;top:8px;flex-wrap:wrap}
-    #barLeft,#barRight{flex-direction:row;flex-wrap:wrap;align-items:center;min-width:0;max-width:none;max-height:none;overflow:visible;padding:6px 9px;gap:5px}
+    #barLeft,#barRight{flex-direction:row;flex-wrap:wrap;align-items:center;width:100%;min-width:0;max-width:none;max-height:none;overflow:visible;padding:7px 10px;gap:6px}
     #barLeft .btn,#barRight .btn{width:auto;text-align:center}
-    #barLeft .hud-group,#barRight .hud-group{flex-direction:row}
-    #barItems{flex-direction:row;order:3;width:100%;margin-top:6px;border-top:1px solid rgba(123,146,196,.2);padding-top:7px;max-height:60vh;overflow-y:auto;justify-content:flex-start}
+    #barLeft .hud-group,#barRight .hud-group{flex-direction:row;flex-wrap:wrap}
+    #barLeft .brand{padding:0;margin-right:2px}
+    #barLeft select{width:auto;flex:1;min-width:140px}
+    #barItems{flex-direction:row;flex-wrap:wrap;align-content:flex-start;order:3;width:100%;margin-top:7px;border-top:1px solid rgba(123,146,196,.2);padding-top:8px;max-height:56vh;overflow-y:auto;justify-content:flex-start}
     #barItems .btn,#barItems select{padding:10px 12px;font-size:14px}      /* bigger touch targets */
+    #barRight{position:relative}
+    #barToggle{margin-left:auto}                                            /* expand/collapse handle sits at the right */
+    /* collapsed (default on phones): keep only brand + status + the ☰ toggle so the scene is visible */
+    #bar.collapsed #barLeft,#bar.collapsed #barRight{width:auto}
+    #bar.collapsed #barLeft #rolePill,#bar.collapsed #barLeft #btnSignout,#bar.collapsed #barLeft #floorSel,#bar.collapsed #barLeft #viewSeg{display:none}
     .tvmain{flex-direction:column} .tvside{width:100%;max-width:none} .tvplayer{aspect-ratio:16/9}
     #chat,#wb{max-width:96vw}
     #tv,#rooms,#customize,#activity,#minigame{bottom:auto;top:64px}         /* keep panels clear of the joystick */
@@ -383,7 +390,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24b · vertical side-rail HUD (left+right) + pathfinding/tour/gallery/devices/editor-undo','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24c · side-rail HUD + mobile expand/collapse + pathfinding/tour/gallery/devices/editor-undo','color:#ffb454;font-weight:700');
   const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
   const mini=document.getElementById('minimap'),mctx=mini.getContext('2d');
   let DPR=Math.max(1,Math.min(2,devicePixelRatio||1)),VW=0,VH=0;
@@ -1890,9 +1897,12 @@
   document.getElementById('edDel').addEventListener('click',editDelete);
   document.getElementById('edUndo').addEventListener('click',doUndo);
   document.getElementById('edRedo').addEventListener('click',doRedo);
-  // responsive toolbar: hamburger collapses/expands the controls; collapsed by default on small screens
-  (function(){const bar=document.getElementById('bar');if(innerWidth<=820)bar.classList.add('collapsed');
-    document.getElementById('barToggle').addEventListener('click',()=>bar.classList.toggle('collapsed'));})();
+  // responsive toolbar: ☰ expands / ✕ collapses the HUD; collapsed by default on phones to free the screen
+  (function(){const bar=document.getElementById('bar'),tg=document.getElementById('barToggle');
+    function sync(){const c=bar.classList.contains('collapsed');tg.textContent=c?'☰':'✕';tg.title=c?'Show controls':'Hide controls';tg.setAttribute('aria-label',c?'Show controls':'Hide controls');}
+    if(innerWidth<=820)bar.classList.add('collapsed');
+    tg.addEventListener('click',()=>{bar.classList.toggle('collapsed');sync();});
+    sync();})();
   document.getElementById('go').addEventListener('click',async function(){
     const name=(document.getElementById('name').value||'Guest').slice(0,16);
     const email=document.getElementById('email').value.trim(),password=document.getElementById('password').value;
