@@ -52,7 +52,7 @@ Leave the email/password blank on the join screen to enter as a **guest**, or si
 
 **AI layer** — in-office **assistant** (`@ai` — answers, summaries, `who's here` / `schedule` / `help`), **auto meeting-notes** when a booking ends, and an **AI greeter** that welcomes new joiners. Free via Google Gemini; Anthropic/OpenAI/Groq/OpenRouter also supported.
 
-**Build & customise** — in-office **floor editor**: add/select/move/**rotate** furniture, **draw/move/resize/rename/delete rooms**, **draw/move/delete walls**, multi-select, undo/redo, one-click **layout templates** (office/lounge/classroom/event); interactive objects (notes, embeds, timers); a rooftop **☕ chai stall**; avatar customization (suit/tie/skin + your own GLB URL); branding/white-label.
+**Build & customise** — in-office **floor editor**: add/select/move/**rotate** furniture, **draw/move/resize/rename/delete rooms**, **draw/move/delete walls**, multi-select, undo/redo, one-click **layout templates** (office/lounge/classroom/event); interactive objects (notes, embeds, timers); a rooftop **☕ chai stall** plus office props — **📋 whiteboard, 📚 bookshelf, 🚰 water cooler, 🖧 server rack** (each a placeable furniture kind, drawn in 2D + 3D); avatar customization (suit/tie/skin + your own GLB URL); branding/white-label.
 
 **3D** — real Three.js renderer with a **GLB character avatar** (`MODEL_URL`, with a sculpted styled fallback), three-point lighting + gradient sky, detailed furniture props, PUBG-style third/first-person camera + jump, 2D⇄3D toggle with no media restart.
 
