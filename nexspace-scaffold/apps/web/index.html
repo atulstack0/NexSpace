@@ -418,7 +418,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24i · sculpted human avatar (head/hair/face + suit) + UI polish + a11y + guest cap + room-draw + templates + side-rail HUD','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24j · 3D scene lighting + gradient sky + sculpted human avatar + UI polish + a11y','color:#ffb454;font-weight:700');
   const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
   const mini=document.getElementById('minimap'),mctx=mini.getContext('2d');
   let DPR=Math.max(1,Math.min(2,devicePixelRatio||1)),VW=0,VH=0;
@@ -1143,14 +1143,22 @@
       if (ready) return true; if (!available()) return false;
       renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("game3d"), antialias: true });
       renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1)); renderer.setSize(VW, VH);
-      scene = new THREE.Scene(); scene.background = new THREE.Color(0x141d31); scene.fog = new THREE.Fog(0x141d31, 1100, 4000); // brighter, less murky
+      scene = new THREE.Scene(); scene.background = skyTexture(); scene.fog = new THREE.Fog(0x141d31, 1300, 4200); // gradient sky + soft depth fog
       camera = new THREE.PerspectiveCamera(70, VW / VH, 1, 7000);
-      scene.add(new THREE.AmbientLight(0xffffff, 0.78));
-      scene.add(new THREE.HemisphereLight(0xcfe0ff, 0x20283c, 0.95)); // soft sky/ground fill for nicer avatars
-      const dir = new THREE.DirectionalLight(0xffffff, 0.9); dir.position.set(400, 900, 250); scene.add(dir);
+      scene.add(new THREE.AmbientLight(0xffffff, 0.74));
+      scene.add(new THREE.HemisphereLight(0xcfe0ff, 0x222a40, 0.95)); // soft sky/ground fill for nicer avatars
+      const dir = new THREE.DirectionalLight(0xfff3df, 1.05); dir.position.set(420, 920, 260); scene.add(dir);     // warm key
+      const rim = new THREE.DirectionalLight(0xffd9a0, 0.5); rim.position.set(-520, 360, -440); scene.add(rim);    // warm rim — separates the avatar from the bg
+      const fill = new THREE.DirectionalLight(0x9fc0ff, 0.34); fill.position.set(-320, 220, 520); scene.add(fill); // cool fill
       worldGroup = new THREE.Group(); scene.add(worldGroup);
       avatarGroup = new THREE.Group(); scene.add(avatarGroup);
       ready = true; loadEric(); return true;
+    }
+    function skyTexture() {   // vertical gradient backdrop (nicer than a flat fill, blends into the fog)
+      const c = document.createElement("canvas"); c.width = 16; c.height = 256; const g = c.getContext("2d");
+      const grd = g.createLinearGradient(0, 0, 0, 256);
+      grd.addColorStop(0, "#223763"); grd.addColorStop(0.5, "#16213c"); grd.addColorStop(1, "#0e1524");
+      g.fillStyle = grd; g.fillRect(0, 0, 16, 256); return new THREE.CanvasTexture(c);
     }
     function resize() { if (renderer && camera) { renderer.setSize(VW, VH); camera.aspect = VW / VH; camera.updateProjectionMatrix(); } }
     function dispose(g) { g.children.slice().forEach((c) => { c.traverse((n) => { if (n.geometry) n.geometry.dispose(); }); g.remove(c); }); }
