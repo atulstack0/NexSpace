@@ -65,7 +65,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 | Auth (JWT login) + server-enforced RBAC | ✅ | `apps/api/src/auth`, realtime |
 | SSO (OIDC authorization-code) with built-in mock IdP; real provider via env | ✅ | `apps/api/src/auth/sso`, web |
 | Google sign-in — real OAuth run by the realtime server (single-service, no DB); role mapping via env | ✅ | realtime `/auth/google/*`, web |
-| Invites & guest links + CSV bulk import (admin-minted, time-boxed) | ✅ | `apps/api/src/auth`, web |
+| Invites & guest links + CSV bulk import (admin-minted, time-boxed); **guest weekly time-cap** — unregistered guests get 4h/week (tracked client-side, weekly reset) with low-time warnings + a sign-in/register prompt; members/owners exempt | ✅ | `apps/api/src/auth`, web |
 | Recording — 🔴 indicator + LiveKit Egress start/stop | ✅ (egress needs storage) | `apps/api/src/livekit`, realtime, web |
 | Drag-and-drop floor editor → persists to API → live reload to everyone | ✅ | `apps/web/editor.html`, `apps/api`, realtime |
 | Analytics — admin dashboard + CSV | ✅ | realtime `/analytics`, `apps/web/analytics.html` |
@@ -87,7 +87,7 @@ Verify any change: `cd nexspace-scaffold; npm run check` (also runs in CI on eve
 - **Outdoor "chai stall"** environment + in-world mini-games. (Multi-floor + portals, and interactive objects — notes, YouTube/Spotify/web embeds, shared timers — are now built.)
 - **Calendar / Teams** (need OAuth + accounts) and **SCIM** auto-provisioning.
 - **AI** recording transcription (Whisper/Deepgram) + NPC greeter — the in-office **assistant + auto meeting-notes are built**; deep transcription/NPCs are not. **Native mobile/desktop apps** (web is responsive), **SOC2/GDPR/HIPAA** compliance.
-- **Guest time-cap** (P5-04) — still open code-only item (next batch).
+- _All code-only backlog items are now built._ Remaining items need external services/accounts/assets/infra: Calendar/Teams/Zapier integrations, SAML/SCIM, recording transcription, native desktop/mobile apps, full glTF art, SOC2/GDPR/HIPAA, 1,000+ load test.
 - **Scale follow-ups**: spatial-hash interest management, Redis-persisted boot state.
 
 ---

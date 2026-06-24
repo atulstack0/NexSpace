@@ -195,6 +195,16 @@
   #devicePop .row{display:flex;flex-direction:column;gap:4px;margin-bottom:8px}
   #devicePop label{color:var(--muted);font-size:12px}
   #devicePop select{padding:8px;border-radius:8px;border:1px solid var(--line);background:#0d1424;color:var(--text);font-size:13px;max-width:100%}
+  /* guest weekly time-cap prompt (§6.15 / P5-04) */
+  #guestCap{position:fixed;inset:0;z-index:70;display:none;align-items:center;justify-content:center;background:radial-gradient(1000px 500px at 50% 30%,rgba(255,180,84,.12),transparent),rgba(8,11,18,.95)}
+  #guestCap.show{display:flex}
+  #guestCapCard{width:min(440px,92vw);background:linear-gradient(180deg,var(--panel),#121828);border:1px solid var(--line);border-radius:18px;padding:24px 26px;text-align:center}
+  #guestCapCard h2{font-size:19px;margin:0 0 8px;color:var(--text)}
+  #guestCapCard p{color:var(--muted);font-size:13.5px;line-height:1.6;margin:0 0 16px}
+  #guestCapCard p b{color:var(--text)}
+  #gcBtns{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+  #gcBtns button{padding:10px 16px;border-radius:10px;border:1px solid var(--line);background:var(--accent);color:#fff;font-weight:600;font-size:13px;cursor:pointer}
+  #gcBtns button.ghost{background:transparent;color:var(--muted)}
   #name,#email,#password{width:100%;margin:8px 0 0;padding:11px 13px;border-radius:10px;border:1px solid var(--line);background:#0d1424;color:var(--text);font-size:14px}
   #go{width:100%;margin-top:12px;padding:13px;border:0;border-radius:12px;font-size:15px;font-weight:700;color:#fff;cursor:pointer;background:linear-gradient(135deg,var(--accent),#7aa2ff)}
   .tip{font-size:11px;color:var(--muted);margin-top:12px}
@@ -391,11 +401,16 @@
   <div class="row"><label>🎤 Microphone</label><select id="micSel"></select></div>
   <div class="row"><label>🎥 Camera</label><select id="camSel"></select></div>
 </div>
+<div id="guestCap"><div id="guestCapCard">
+  <h2>⏳ Guest time limit reached</h2>
+  <p id="guestCapMsg">You've used your free <b>4 hours of guest access</b> this week. Sign in or create a free account to keep collaborating — the limit resets weekly.</p>
+  <div id="gcBtns"><button id="guestCapSignin">Sign in / Register</button><button id="guestCapLater" class="ghost">Remind me in 10 min</button></div>
+</div></div>
 
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24e · room-draw + floor templates + side-rail HUD + mobile collapse + pathfinding/tour/gallery/devices/editor-undo','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24f · guest time-cap + room-draw + templates + side-rail HUD + mobile collapse + pathfinding/tour/gallery/devices/editor-undo','color:#ffb454;font-weight:700');
   const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
   const mini=document.getElementById('minimap'),mctx=mini.getContext('2d');
   let DPR=Math.max(1,Math.min(2,devicePixelRatio||1)),VW=0,VH=0;
@@ -519,7 +534,7 @@
         applyBranding(world.branding);populateFloors(world);
         initLiveKit();
         try{if(localStorage.getItem('nexspace_view')==='3d'&&viewMode!=='3d'){const b3=document.querySelector('#viewSeg button[data-view="3d"]');if(b3)setTimeout(()=>b3.click(),300);}}catch(_){}
-        maybeShowTour();}
+        maybeShowTour();startGuestCap();}
       else if(m.t==='floor'){applyFloorChange(m);}
       else if(m.t==='tv'){applyTv(m);}
       else if(m.t==='snapshot'){
@@ -1950,6 +1965,21 @@
   document.getElementById('tourDone').addEventListener('click',hideTour);
   document.getElementById('tourSkip').addEventListener('click',hideTour);
   document.getElementById('helpFab').addEventListener('click',showTour);
+  // guest weekly time-cap (§6.15 / P5-04): unregistered guests get 4h/week, then a sign-in/register prompt
+  const GUEST_CAP_MIN=240,GUEST_WEEK_MS=7*24*3600*1000;let guestTimer=null;
+  function guestUsed(){try{const w=JSON.parse(localStorage.getItem('nexspace_guest_time')||'{}');if(!w.weekStart||Date.now()-w.weekStart>=GUEST_WEEK_MS)return{weekStart:Date.now(),min:0};return{weekStart:w.weekStart,min:Number(w.min)||0};}catch(_){return{weekStart:Date.now(),min:0};}}
+  function guestSave(o){try{localStorage.setItem('nexspace_guest_time',JSON.stringify(o));}catch(_){}}
+  function guestCapReached(){document.getElementById('guestCap').classList.add('show');}
+  function startGuestCap(){
+    if(myToken||guestTimer)return;                         // registered users are exempt; don't double-start
+    const st=guestUsed();guestSave(st);
+    if(st.min>=GUEST_CAP_MIN){guestCapReached();return;}
+    guestTimer=setInterval(()=>{st.min+=1;guestSave(st);const left=GUEST_CAP_MIN-st.min;
+      if(left===30||left===10)toast('⏳ '+left+' min of free guest time left this week');
+      if(left<=0){clearInterval(guestTimer);guestTimer=null;guestCapReached();}},60000);
+  }
+  document.getElementById('guestCapSignin').addEventListener('click',()=>location.reload());
+  document.getElementById('guestCapLater').addEventListener('click',()=>{document.getElementById('guestCap').classList.remove('show');setTimeout(()=>{if(!myToken)guestCapReached();},10*60000);});
   // Login: use ?sso=<token> from a Google redirect (or an invite), else a stored token from a prior sign-in.
   (function(){const p=new URLSearchParams(location.search);const fromUrl=p.get('sso')||p.get('invite');
     let tok=fromUrl;if(!tok){try{tok=localStorage.getItem('nexspace_token')||null;}catch(_){}}
