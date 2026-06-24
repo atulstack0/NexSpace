@@ -547,6 +547,12 @@ wss.on("connection", (ws) => {
     p.rlCount = (p.rlCount || 0) + 1;
     if (p.rlCount > RATE_LIMIT) { if (!p.rlNotified) { p.rlNotified = true; send(ws, { t: "rateLimited" }); } return; }
 
+    if (m.t === "clientlog") {   // browser errors/events forwarded into the live /logs.html stream
+      const lvl = ["info", "warn", "error", "debug"].includes(m.level) ? m.level : "info";
+      const out = "[client:" + p.name + "] " + String(m.msg || "").slice(0, 400);
+      if (lvl === "error") console.error(out); else if (lvl === "warn") console.warn(out); else if (lvl === "debug") console.debug(out); else console.log(out);
+      return;
+    }
     if (m.t === "move") {
       // server-authoritative: clamp to MAX_SPEED since this client's last update (anti-teleport)
       const dt = Math.min(1, (_now - (p.lastMoveAt || _now)) / 1000);

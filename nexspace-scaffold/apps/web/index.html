@@ -428,7 +428,13 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24r · editable walls + rename/resizable rooms + labelled toolbar + live logs + human GLB','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24s · client logs → /logs.html + editable walls + rename/resizable rooms + human GLB','color:#ffb454;font-weight:700');
+  // forward browser errors + key client events to the server's live log stream (/logs.html). Buffers until the socket opens.
+  const _clogBuf=[];
+  function clog(level,msg){const e={t:'clientlog',level,msg:String(msg).slice(0,400)};try{if(ws&&ws.readyState===1){ws.send(JSON.stringify(e));return;}}catch(_){}_clogBuf.push(e);if(_clogBuf.length>50)_clogBuf.shift();}
+  function flushClog(){try{while(_clogBuf.length&&ws&&ws.readyState===1)ws.send(JSON.stringify(_clogBuf.shift()));}catch(_){}}
+  window.addEventListener('error',ev=>{try{clog('error','JS error: '+(ev.message||(ev.error&&ev.error.message)||ev.error)+' @'+String(ev.filename||'').split('/').pop()+':'+(ev.lineno||0));}catch(_){}});
+  window.addEventListener('unhandledrejection',ev=>{try{const r=ev.reason;clog('error','Unhandled promise: '+((r&&r.message)||r));}catch(_){}});
   const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
   const mini=document.getElementById('minimap'),mctx=mini.getContext('2d');
   let DPR=Math.max(1,Math.min(2,devicePixelRatio||1)),VW=0,VH=0;
@@ -533,8 +539,8 @@
     const proto=location.protocol==='https:'?'wss':'ws';
     ws=new WebSocket(proto+'://'+location.host);
     const conn=document.getElementById('conn'),ct=document.getElementById('connText');
-    ws.onopen=()=>{conn.classList.remove('bad');ct.textContent='connected';ws.send(JSON.stringify({t:'join',name,token:myToken,appear:myAppear||undefined}));};
-    ws.onclose=()=>{conn.classList.add('bad');ct.textContent='reconnecting…';setTimeout(()=>connect(name),1500);};
+    ws.onopen=()=>{conn.classList.remove('bad');ct.textContent='connected';ws.send(JSON.stringify({t:'join',name,token:myToken,appear:myAppear||undefined}));clog('info','joined as '+name+' ('+(myRole||'guest')+', '+viewMode+')');flushClog();};
+    ws.onclose=()=>{conn.classList.add('bad');ct.textContent='reconnecting…';clog('warn','socket closed — reconnecting');setTimeout(()=>connect(name),1500);};
     ws.onerror=()=>{conn.classList.add('bad');ct.textContent='connection error';};
     ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch{return;}
       if(m.t==='welcome'){myId=m.id;world=m.world;WORLD={w:world.w,h:world.h};me.x=m.you.x;me.y=m.you.y;cam.x=me.x;cam.y=me.y;
