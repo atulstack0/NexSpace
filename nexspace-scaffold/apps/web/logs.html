@@ -50,6 +50,7 @@
   </div>
   <input id="search" placeholder="Filter text… (e.g. editFloor, join, ai)" />
   <button class="btn active" id="autoBtn" title="Auto-scroll to newest">↓ Auto-scroll</button>
+  <button class="btn" id="dlBtn" title="Download today's full log file">⤓ Download</button>
   <button class="btn" id="clearBtn" title="Clear the view">🗑 Clear</button>
 </div>
 <div id="wrap"><div id="empty">Waiting for log events… interact with the app (join, move, edit a room, @ai) to see them stream here.</div></div>
@@ -86,6 +87,7 @@
   searchEl.addEventListener('input',()=>{q=searchEl.value.trim().toLowerCase(); applyFilter();});
   autoBtn.addEventListener('click',()=>{auto=!auto; autoBtn.classList.toggle('active',auto); if(auto)window.scrollTo(0,document.body.scrollHeight);});
   clearBtn.addEventListener('click',()=>{wrap.innerHTML=''; refreshCount();});
+  document.getElementById('dlBtn').addEventListener('click',()=>window.open('/logs/download'+authQS,'_blank'));
   function connect(){
     const es=new EventSource('/logs/stream'+authQS);
     es.onopen=()=>{statusEl.classList.remove('bad'); statusText.textContent='live';};

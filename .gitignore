@@ -26,7 +26,8 @@ out/
 # Persisted owner floor edits (written at runtime by the realtime server)
 floors-data.json
 
-# Logs
+# Logs (runtime log files written by the realtime server)
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
