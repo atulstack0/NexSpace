@@ -170,9 +170,16 @@
   #hint{position:fixed;bottom:14px;left:14px;z-index:15;font-size:12px;color:var(--muted);background:linear-gradient(180deg,rgba(18,25,42,.9),rgba(11,15,27,.85));border:1px solid rgba(123,146,196,.22);border-radius:12px;padding:9px 13px;line-height:1.6;max-width:48vw;backdrop-filter:blur(10px)}
   kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 6px;font-size:11px;color:var(--text)}
   #minimapWrap{position:fixed;bottom:12px;right:12px;z-index:15;border:1px solid rgba(123,146,196,.28);border-radius:12px;overflow:hidden;background:rgba(11,16,25,.92);box-shadow:0 12px 30px rgba(0,0,0,.5),inset 0 -2px 0 rgba(255,180,84,.16)}
-  #overlay{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:radial-gradient(1000px 500px at 50% 30%,rgba(91,140,255,.18),transparent),rgba(8,11,18,.94)}
-  #card{width:min(470px,92vw);background:linear-gradient(180deg,var(--panel),#121828);border:1px solid var(--line);border-radius:18px;padding:28px 30px;text-align:center}
-  #card .orb{width:30px;height:30px;border-radius:7px;transform:rotate(45deg);margin:6px auto 16px;background:linear-gradient(135deg,var(--warn),#ff8a3c);box-shadow:0 0 16px rgba(255,180,84,.6)}
+  #overlay{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(900px 460px at 50% 28%,rgba(91,140,255,.20),transparent),radial-gradient(700px 400px at 80% 90%,rgba(255,180,84,.10),transparent),rgba(8,11,18,.96);
+    background-color:rgba(8,11,18,.96)}
+  #overlay::before{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(123,146,196,.07) 1px,transparent 1px);background-size:26px 26px;pointer-events:none}
+  #card{position:relative;width:min(460px,92vw);background:linear-gradient(180deg,rgba(22,30,48,.98),#101626);border:1px solid rgba(123,146,196,.24);border-radius:20px;padding:30px 30px 26px;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.05),inset 0 -2px 0 rgba(255,180,84,.22)}
+  #card .orb{width:34px;height:34px;border-radius:8px;transform:rotate(45deg);margin:2px auto 14px;background:linear-gradient(135deg,var(--warn),#ff8a3c);box-shadow:0 0 18px rgba(255,180,84,.65)}
+  #card .wordmark{font-weight:800;letter-spacing:3.5px;font-size:25px;color:var(--text);margin:0}
+  #card .tagline{color:var(--accent2);font-size:11.5px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin:3px 0 12px}
+  #card .joinChips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:14px 0 2px}
+  #card .joinChips span{font-size:11px;font-weight:600;color:#c7d2ea;background:rgba(123,146,196,.12);border:1px solid rgba(123,146,196,.22);border-radius:20px;padding:5px 11px}
   #card h1{font-size:21px;margin:0 0 4px} #card p{color:var(--muted);font-size:13px;line-height:1.6}
   /* first-run onboarding tour (§7 / P6-05) */
   #tour{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;background:radial-gradient(1000px 500px at 50% 30%,rgba(91,140,255,.18),transparent),rgba(8,11,18,.92)}
@@ -380,8 +387,11 @@
 <div id="minimapWrap"><canvas id="minimap" width="180" height="123"></canvas></div>
 
 <div id="overlay"><div id="card">
-  <div class="orb"></div><h1>Join the office</h1>
-  <p>Your position syncs through the server; everyone shares the same rooms, doors, and media wall, and hears each other with spatial audio.</p>
+  <div class="orb"></div>
+  <h1 class="wordmark">NEXSPACE</h1>
+  <p class="tagline">Your team's spatial office</p>
+  <p>Walk in, see who's around, and talk naturally — voices fade with distance, step into a room for privacy, share a screen, or start a watch‑party. In 2D <b>or</b> 3D.</p>
+  <div class="joinChips"><span>🎙️ Spatial audio</span><span>🗺️ 2D &amp; 3D</span><span>📺 Watch‑party</span><span>🤖 AI assistant</span></div>
   <input id="name" maxlength="16" placeholder="Your name" />
   <input id="email" placeholder="Email (e.g. owner@nexspace.dev — blank = guest)" />
   <input id="password" type="password" placeholder="Password" />
@@ -418,7 +428,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24k · rigged human GLB avatar (Soldier, from URL) + 3D lighting + sculpted fallback + UI polish','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24l · branded join/landing screen + rigged human GLB avatar + 3D lighting + UI polish','color:#ffb454;font-weight:700');
   const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
   const mini=document.getElementById('minimap'),mctx=mini.getContext('2d');
   let DPR=Math.max(1,Math.min(2,devicePixelRatio||1)),VW=0,VH=0;
