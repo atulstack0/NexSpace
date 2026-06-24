@@ -558,7 +558,7 @@ wss.on("connection", (ws) => {
       A.sessions++; if (clients.size > A.peak) A.peak = clients.size;
       fireWebhook("user.joined", { id, name, role });
       notifySlack("👋 " + name + " entered the office");
-      send(ws, { t: "welcome", id, world: worldForClient(player.floor), you: { ...player }, whiteboard: whiteboard.strokes, tv: tvState(), presentation: f0.presentation || null, game: f0.game || null });
+      send(ws, { t: "welcome", id, world: worldForClient(player.floor), you: { ...player }, whiteboard: whiteboard.strokes, tv: tvState(), presentation: f0.presentation || null, game: f0.game || null, tag: tagPublic(f0) });
       broadcastActivity(player.floor, "join", player.name, ws);   // tell the floor someone arrived
       setTimeout(() => { if (clients.has(ws)) postGuide(player); }, 1500); // AI greeter welcomes the new joiner (§6.21)
       console.log(`+ ${player.name} (${id}) [${role}] — ${clients.size} online`);
@@ -579,6 +579,7 @@ wss.on("connection", (ws) => {
       return;
     }
     if (m.t === "move") {
+      { const ft = floorOf(p).tag; if (ft && !ft.over && ft.frozen[p.id]) { p.lastMoveAt = _now; return; } }   // frozen in Freeze Tag → can't move
       // server-authoritative: clamp to MAX_SPEED since this client's last update (anti-teleport)
       const dt = Math.min(1, (_now - (p.lastMoveAt || _now)) / 1000);
       p.lastMoveAt = _now;
@@ -656,6 +657,16 @@ wss.on("connection", (ws) => {
       const f = floorOf(p); const old = f.game || newGame();
       f.game = { board: Array(9).fill(null), turn: "X", seats: old.seats, names: old.names, winner: null, draw: false }; // keep seats, fresh board
       broadcastGame(f);
+    } else if (m.t === "tagStart") {                           // Freeze Tag: start a floor-wide round (random "It")
+      const f = floorOf(p); if (f.tag && !f.tag.over) return;
+      const here = [...clients.values()].filter((c) => c.floor === f.slug);
+      if (here.length < 2) return send(ws, { t: "tag", tag: null, note: "Freeze Tag needs at least 2 people on this floor." });
+      const it = here[Math.floor(Math.random() * here.length)];
+      f.tag = { it: it.id, itName: it.name, frozen: {}, startedAt: Date.now(), endsAt: Date.now() + TAG_DURATION, over: false, winner: null };
+      console.log(`freeze-tag started on '${f.slug}' by ${p.name} — It: ${it.name}`);
+      broadcastTag(f);
+    } else if (m.t === "tagStop") {                            // stop the round (anyone may bail it out)
+      const f = floorOf(p); if (f.tag && !f.tag.over) endTag(f, null, p.name + " stopped the round.");
     } else if (m.t === "present") {                            // start presenting your screen to the room/floor
       if (rank(p.role) < RANK.member) return deny(ws, "present", "member");
       const f = floorOf(p); const r = f.rooms.find((rm) => inRoom(p, rm));
@@ -839,6 +850,7 @@ wss.on("connection", (ws) => {
     if (p) {
       const f = floors.get(p.floor); if (f && f.presentation && f.presentation.byId === p.id) { f.presentation = null; broadcastPresentation(f); } // presenter left → stop
       if (f && f.game) { const g = f.game; let ch = false; if (g.seats.X === p.id) { g.seats.X = null; g.names.X = ""; ch = true; } if (g.seats.O === p.id) { g.seats.O = null; g.names.O = ""; ch = true; } if (ch) broadcastGame(f); } // free their game seat
+      if (f && f.tag && !f.tag.over) { if (f.tag.it === p.id) endTag(f, null, p.name + " (It) left — round over."); else if (f.tag.frozen[p.id]) { delete f.tag.frozen[p.id]; broadcastTag(f); } }  // Freeze Tag cleanup
       broadcastActivity(p.floor, "leave", p.name, ws);
       fireWebhook("user.left", { id: p.id, name: p.name }); notifySlack("👋 " + p.name + " left the office"); console.log(`- ${p.name} (${p.id}) — ${clients.size} online`);
     }
@@ -850,6 +862,7 @@ let lastTick = Date.now();
 setInterval(() => {
   const now = Date.now(), dt = (now - lastTick) / 1000; lastTick = now;
   for (const f of floors.values()) if (f.mediaWall && f.mediaWall.playing) { f.mediaWall.pos += dt; if (f.mediaWall.pos > f.mediaWall.dur) f.mediaWall.pos = 0; }
+  for (const f of floors.values()) if (f.tag && !f.tag.over) evalFreezeTag(f, now);   // Freeze Tag: proximity tag/unfreeze + win/time
   for (const f of floors.values()) for (const r of f.rooms) {   // schedule: drop finished bookings, activate ones whose start arrived
     if (!r.bookings || !r.bookings.length) { if (r._activeId) { refreshRoomActive(f, r, now); broadcastBooking(f, r); } continue; }
     const before = r.bookings.length;
@@ -933,6 +946,33 @@ function newGame() { return { board: Array(9).fill(null), turn: "X", seats: { X:
 const WIN_LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 function winLine(b) { return WIN_LINES.some(([a, c, d]) => b[a] && b[a] === b[c] && b[a] === b[d]); }
 function broadcastGame(f) { const msg = JSON.stringify({ t: "game", floor: f.slug, game: f.game || null }); for (const [ws, q] of clients) if (q.floor === f.slug && ws.readyState === 1) ws.send(msg); }
+// ---------- Freeze Tag (floor-wide chase game) ----------
+const TAG_RADIUS2 = 54 * 54, TAG_DURATION = 90000;   // tag/unfreeze proximity² and round length (ms)
+function tagPublic(f) { const t = f.tag; if (!t) return null; return { it: t.it, itName: t.itName, frozen: Object.keys(t.frozen), endsAt: t.endsAt, over: !!t.over, winner: t.winner || null, msg: t.msg || null }; }
+function broadcastTag(f) { const msg = JSON.stringify({ t: "tag", floor: f.slug, tag: tagPublic(f) }); for (const [ws, q] of clients) if (q.floor === f.slug && ws.readyState === 1) ws.send(msg); }
+function endTag(f, winner, msg) { if (!f.tag || f.tag.over) return; f.tag.over = true; f.tag.winner = winner; f.tag.msg = msg; console.log(`freeze-tag over on '${f.slug}': ${msg}`); broadcastTag(f); setTimeout(() => { if (f.tag && f.tag.over) { f.tag = null; broadcastTag(f); } }, 7000); }
+function evalFreezeTag(f, now) {
+  const t = f.tag; if (!t || t.over) return;
+  const players = [...clients.values()].filter((c) => c.floor === f.slug);
+  const it = players.find((c) => c.id === t.it);
+  if (!it) return endTag(f, null, "The 'It' player left — round over.");
+  let changed = false;
+  for (const c of players) {                                   // It freezes nearby active runners
+    if (c.id === t.it || t.frozen[c.id]) continue;
+    const dx = c.x - it.x, dy = c.y - it.y; if (dx * dx + dy * dy < TAG_RADIUS2) { t.frozen[c.id] = true; changed = true; }
+  }
+  for (const c of players) {                                   // active runners unfreeze nearby frozen runners
+    if (c.id === t.it || t.frozen[c.id]) continue;
+    for (const o of players) {
+      if (o.id === t.it || o.id === c.id || !t.frozen[o.id]) continue;
+      const dx = o.x - c.x, dy = o.y - c.y; if (dx * dx + dy * dy < TAG_RADIUS2) { delete t.frozen[o.id]; changed = true; }
+    }
+  }
+  const runners = players.filter((c) => c.id !== t.it);
+  if (runners.length > 0 && runners.every((c) => t.frozen[c.id])) return endTag(f, "it", it.name + " froze everyone! ❄️");
+  if (now >= t.endsAt) return endTag(f, "runners", "Time! The runners survived 🏃");
+  if (changed) broadcastTag(f);
+}
 // chat routing (§6.9): channels are org-wide (cross-floor); floor + nearby are local to the sender's floor
 function deliverChat(d) {
   const dfloor = d.floor || DEFAULT_FLOOR;

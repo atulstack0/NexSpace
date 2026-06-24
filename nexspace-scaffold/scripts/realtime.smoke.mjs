@@ -51,7 +51,7 @@ await new Promise((res, rej) => {
 function join(name, token) {
   return new Promise((resolve) => {
     const ws = new WebSocket(`ws://localhost:${PORT}`);
-    const st = { ws, name, id: null, role: null, world: null, floorMsg: null, tv: null, last: null, denied: [], rateLimited: false, chats: [], draws: [], cleared: false, reacts: [], nudged: false, kicked: false, bookings: {}, sched: {}, activity: [], game: null, emotes: [] };
+    const st = { ws, name, id: null, role: null, world: null, floorMsg: null, tv: null, last: null, denied: [], rateLimited: false, chats: [], draws: [], cleared: false, reacts: [], nudged: false, kicked: false, bookings: {}, sched: {}, activity: [], game: null, emotes: [], tag: undefined };
     ws.on("open", () => ws.send(JSON.stringify({ t: "join", name, token })));
     ws.on("message", (d) => {
       const m = JSON.parse(d.toString());
@@ -65,6 +65,7 @@ function join(name, token) {
       if (m.t === "activity") st.activity.push(m);
       if (m.t === "game") st.game = m.game;
       if (m.t === "emote") st.emotes.push(m);
+      if (m.t === "tag") st.tag = m.tag;
       if (m.t === "denied") st.denied.push(m.action);
       if (m.t === "rateLimited") st.rateLimited = true;
       if (m.t === "chat") st.chats.push(m);
@@ -264,6 +265,14 @@ try {
   admin.ws.send(JSON.stringify({ t: "tvCtrl", playing: false, position: 42 }));
   await wait(200);
   (guest.tv?.playing === false && Math.abs((guest.tv?.position || 0) - 42) < 2) ? ok("tvCtrl syncs pause + position to everyone (watch-party)") : bad("tvCtrl did not sync playback");
+
+  // Freeze Tag — start a round (random "It") + stop it
+  admin.ws.send(JSON.stringify({ t: "tagStart" }));
+  await wait(250);
+  (guest.tag && !guest.tag.over && (guest.tag.it === admin.id || guest.tag.it === guest.id)) ? ok("Freeze Tag starts and designates an 'It'") : bad("tagStart did not begin a round");
+  admin.ws.send(JSON.stringify({ t: "tagStop" }));
+  await wait(250);
+  (!guest.tag || guest.tag.over) ? ok("Freeze Tag stops on request") : bad("tagStop did not end the round");
 
   // owner/admin floor editor (live add / move / remove, broadcast to everyone)
   const wBefore = guest.world?.widgets?.length || 0;
