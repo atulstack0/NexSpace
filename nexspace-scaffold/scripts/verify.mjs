@@ -34,6 +34,7 @@ checkJs("apps/realtime/server.js", "apps/realtime/server.js");
 console.log("Syntax — client inline JS");
 checkInline("apps/web/index.html", "apps/web/index.html");
 checkInline("apps/web/editor.html", "apps/web/editor.html");
+checkInline("apps/web/logs.html", "apps/web/logs.html");
 
 console.log("Types — API (tsc --noEmit)");
 // Regenerate the Prisma client first so the typecheck always matches the current schema.prisma

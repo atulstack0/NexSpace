@@ -22,7 +22,7 @@ const crypto = require("crypto");
 // environment (whitelisted so a stray PORT/DATABASE_URL in apps/api/.env can't hijack this server).
 // In production (Render etc.) these come from the dashboard and the file reads simply no-op.
 (function loadEnv() {
-  const want = /^(LIVEKIT_|S3_|GOOGLE_|YOUTUBE_|JWT_SECRET|OWNER_PASSWORD|ADMIN_PASSWORD|MEMBER_PASSWORD|ANTHROPIC_API_KEY|OPENAI_API_KEY|OPENAI_BASE_URL|GEMINI_API_KEY|AI_MODEL)/;
+  const want = /^(LIVEKIT_|S3_|GOOGLE_|YOUTUBE_|JWT_SECRET|OWNER_PASSWORD|ADMIN_PASSWORD|MEMBER_PASSWORD|ANTHROPIC_API_KEY|OPENAI_API_KEY|OPENAI_BASE_URL|GEMINI_API_KEY|AI_MODEL|LOGS_TOKEN)/;
   for (const f of [path.join(__dirname, ".env"), path.join(__dirname, "..", "api", ".env")]) {
     try {
       for (const line of fs.readFileSync(f, "utf8").split(/\r?\n/)) {
@@ -40,6 +40,32 @@ const RATE_LIMIT = 80;   // max messages/sec per connection (abuse protection, �
 const MAX_CLIENTS = Number(process.env.MAX_CLIENTS) || 200; // connection cap per node (§8)
 const CHAT_NEARBY = 350; // px radius for 'nearby' chat on the open floor (§6.9)
 const WEB_DIR = path.join(__dirname, "..", "web");
+
+// ---------- Live logging (debug tracing) — ring buffer + Server-Sent-Events fan-out to /logs.html ----------
+// Every console.log/warn/error is mirrored into a bounded buffer and streamed to connected log viewers,
+// so existing flow logs (join/leave/login/edits/errors) show up live with no extra call-site changes.
+const LOG_MAX = 500, LOG_BUF = [], logClients = new Set();
+const _safe = (a) => { try { return typeof a === "string" ? a : JSON.stringify(a); } catch { return String(a); } };
+function pushLog(level, args) {
+  const e = { t: Date.now(), level, msg: args.map(_safe).join(" ") };
+  LOG_BUF.push(e); if (LOG_BUF.length > LOG_MAX) LOG_BUF.shift();
+  const line = "data: " + JSON.stringify(e) + "\n\n";
+  for (const res of logClients) { try { res.write(line); } catch { /* dead client */ } }
+}
+(function patchConsole() {
+  const o = { log: console.log.bind(console), warn: console.warn.bind(console), error: console.error.bind(console), debug: (console.debug || console.log).bind(console) };
+  console.log = (...a) => { pushLog("info", a); o.log(...a); };
+  console.warn = (...a) => { pushLog("warn", a); o.warn(...a); };
+  console.error = (...a) => { pushLog("error", a); o.error(...a); };
+  console.debug = (...a) => { pushLog("debug", a); o.debug(...a); };
+})();
+// Logs are sensitive (names, emails, chat). Require ?key=LOGS_TOKEN in production; allow localhost in dev when unset.
+function logsAuthorized(req, u) {
+  const key = u.searchParams.get("key") || "";
+  if (process.env.LOGS_TOKEN) return key === process.env.LOGS_TOKEN;
+  const ra = req.socket.remoteAddress || "";
+  return ra.includes("127.0.0.1") || ra.includes("::1");
+}
 
 // ---------- Auth (RBAC) — verifies the dependency-free JWT minted by the API ----------
 const JWT_SECRET = process.env.JWT_SECRET || "nexspace-dev-secret-change-me";
@@ -356,6 +382,17 @@ function floorTemplate(name, W, H) {
 const server = http.createServer((req, res) => {
   let urlPath = (req.url || "/").split("?")[0];   // strip query first, so "/?sso=…" still serves the app
   if (urlPath === "/" || urlPath === "") urlPath = "/index.html";
+  if (urlPath === "/logs/recent" || urlPath === "/logs/stream") {   // live debug logs for /logs.html (token-gated)
+    const u = new URL(req.url, "http://x");
+    if (!logsAuthorized(req, u)) { res.writeHead(403, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "logs locked — open /logs.html?key=<LOGS_TOKEN>" })); return; }
+    if (urlPath === "/logs/recent") return json(res, { logs: LOG_BUF.slice(-LOG_MAX) });
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-store", "Connection": "keep-alive", "X-Accel-Buffering": "no" });
+    res.write("retry: 3000\n\n");
+    for (const e of LOG_BUF.slice(-200)) res.write("data: " + JSON.stringify(e) + "\n\n");   // backfill recent history
+    logClients.add(res); console.log("logs viewer connected (" + logClients.size + " watching)");
+    req.on("close", () => { logClients.delete(res); });
+    return;
+  }
   if (urlPath === "/livekit/token" && req.method === "POST") { // real voice/video, no separate API needed
     if (!livekitConfigured()) return json(res, { error: "LiveKit not configured" }, 503);
     return readJsonBody(req, (b) => {
@@ -740,7 +777,7 @@ wss.on("connection", (ws) => {
           f.widgets.push(o); changed = true;
         }
       }
-      if (changed) { const wmsg = JSON.stringify({ t: "world", world: worldForClient(f.slug) }); for (const [ws2, q] of clients) if (q.floor === f.slug && ws2.readyState === 1) ws2.send(wmsg); persistFloors(); }
+      if (changed) { console.log(`editFloor '${op}'${m.kind ? " (" + m.kind + ")" : ""} by ${p.name} on '${f.slug}'`); const wmsg = JSON.stringify({ t: "world", world: worldForClient(f.slug) }); for (const [ws2, q] of clients) if (q.floor === f.slug && ws2.readyState === 1) ws2.send(wmsg); persistFloors(); }
     }
   });
 
@@ -934,8 +971,9 @@ async function askAssistant(p, prompt, ctx) {
   const recent = recentByFloor.get(ctx.floor || DEFAULT_FLOOR) || [];
   const ctxText = recent.length ? ("Recent room chat:\n" + recent.slice(-25).map((c) => c.name + ": " + c.body).join("\n") + "\n\n") : "";
   const ask = (prompt || "").trim() || "Summarize the recent room chat.";
-  try { const text = await callLLM(sys, ctxText + "Request from " + p.name + ": " + ask); postAssistant(text, ctx); }
-  catch (e) { postAssistant("⚠️ I couldn't reach the AI service (" + (e && e.message || e) + ").", ctx); }
+  console.log(`ai assistant query by ${p.name} via ${aiProvider()}: "${ask.slice(0, 80)}"`);
+  try { const text = await callLLM(sys, ctxText + "Request from " + p.name + ": " + ask); console.log(`ai assistant replied to ${p.name} (${(text || "").length} chars)`); postAssistant(text, ctx); }
+  catch (e) { console.error("ai assistant call failed for " + p.name + ": " + (e && e.message || e)); postAssistant("⚠️ I couldn't reach the AI service (" + (e && e.message || e) + ").", ctx); }
 }
 // When a booked meeting ends, post brief AI meeting-notes to the floor (only if a key is set + there was chat).
 async function postMeetingNotes(f, r, b) {

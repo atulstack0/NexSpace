@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NexSpace · Live logs</title>
+<style>
+  :root{--bg:#0e1320;--panel:#161d2e;--panel2:#1e2740;--line:#2b3654;--text:#e8edf7;--muted:#8a96b3;--accent:#5b8cff;--accent2:#39d3a6;--warn:#ffb454;--danger:#ff5d6c}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  #bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid rgba(123,146,196,.22);
+    background:linear-gradient(180deg,rgba(16,22,38,.96),rgba(11,15,27,.9));position:sticky;top:0;z-index:2;backdrop-filter:blur(10px)}
+  .brand{font-weight:800;letter-spacing:1.4px;text-transform:uppercase;font-size:13px;display:flex;align-items:center;gap:9px}
+  .dot{width:11px;height:11px;border-radius:3px;transform:rotate(45deg);background:linear-gradient(135deg,var(--warn),#ff8a3c);box-shadow:0 0 9px rgba(255,180,84,.7)}
+  .pill{font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);background:rgba(16,22,38,.7);border:1px solid rgba(123,146,196,.22);border-radius:7px;padding:5px 9px}
+  #status b{color:var(--accent2)} #status.bad b{color:var(--danger)}
+  .seg{display:flex;border:1px solid rgba(123,146,196,.26);border-radius:9px;overflow:hidden}
+  .seg button{background:transparent;color:var(--muted);border:0;padding:7px 11px;font-size:12px;font-weight:600;cursor:pointer}
+  .seg button.active{background:linear-gradient(180deg,var(--accent),#3f6de0);color:#fff}
+  input,.btn{font-size:12.5px;font-weight:600}
+  input{background:#0d1424;border:1px solid var(--line);border-radius:9px;color:var(--text);padding:7px 11px;min-width:180px;flex:1}
+  .btn{background:linear-gradient(180deg,rgba(42,55,86,.85),rgba(22,30,50,.92));color:#cfd8ef;border:1px solid rgba(123,146,196,.26);border-radius:9px;padding:7px 11px;cursor:pointer}
+  .btn:hover{border-color:var(--warn);color:#fff}
+  .btn.active{background:linear-gradient(180deg,var(--accent),#3f6de0);border-color:#7aa2ff;color:#fff}
+  #wrap{padding:6px 0 40px}
+  .row{display:flex;gap:10px;align-items:baseline;padding:3px 14px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.55;border-bottom:1px solid rgba(255,255,255,.03);white-space:pre-wrap;word-break:break-word}
+  .row:hover{background:rgba(123,146,196,.06)}
+  .ts{color:var(--muted);flex:0 0 auto}
+  .lvl{flex:0 0 auto;font-weight:700;border-radius:5px;padding:0 7px;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase}
+  .lvl.info{color:#cfe0ff;background:rgba(91,140,255,.16)}
+  .lvl.warn{color:#ffe0b0;background:rgba(255,180,84,.16)}
+  .lvl.error{color:#ffd2d7;background:rgba(255,93,108,.18)}
+  .lvl.debug{color:#bcefe0;background:rgba(57,211,166,.14)}
+  .msg{flex:1}
+  .row.error .msg{color:#ffd2d7} .row.warn .msg{color:#ffe6c4}
+  #empty{color:var(--muted);font-size:13px;padding:24px 16px;text-align:center}
+</style>
+</head>
+<body>
+<div id="bar">
+  <span class="brand"><span class="dot"></span>NexSpace · Logs</span>
+  <span class="pill" id="status">● <b id="statusText">connecting…</b></span>
+  <span class="pill">shown: <b id="count">0</b></span>
+  <div class="seg" id="levelSeg">
+    <button data-l="all" class="active">All</button>
+    <button data-l="info">Info</button>
+    <button data-l="warn">Warn</button>
+    <button data-l="error">Error</button>
+    <button data-l="debug">Debug</button>
+  </div>
+  <input id="search" placeholder="Filter text… (e.g. editFloor, join, ai)" />
+  <button class="btn active" id="autoBtn" title="Auto-scroll to newest">↓ Auto-scroll</button>
+  <button class="btn" id="clearBtn" title="Clear the view">🗑 Clear</button>
+</div>
+<div id="wrap"><div id="empty">Waiting for log events… interact with the app (join, move, edit a room, @ai) to see them stream here.</div></div>
+<script>
+(function(){
+  "use strict";
+  const wrap=document.getElementById('wrap'), statusEl=document.getElementById('status'), statusText=document.getElementById('statusText'),
+        countEl=document.getElementById('count'), searchEl=document.getElementById('search'),
+        autoBtn=document.getElementById('autoBtn'), clearBtn=document.getElementById('clearBtn'), empty=document.getElementById('empty');
+  const MAX_ROWS=2000;
+  let level='all', q='', auto=true, shown=0;
+  const key=new URLSearchParams(location.search).get('key');
+  function hhmmss(t){const d=new Date(t);const p=n=>String(n).padStart(2,'0');return p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());}
+  function visible(e){ if(level!=='all'&&e.level!==level) return false; if(q&&e.msg.toLowerCase().indexOf(q)<0) return false; return true; }
+  function add(e){
+    if(empty)empty.remove();
+    const row=document.createElement('div'); row.className='row '+e.level; row.dataset.level=e.level; row._msg=e.msg.toLowerCase();
+    const ts=document.createElement('span'); ts.className='ts'; ts.textContent=hhmmss(e.t);
+    const lv=document.createElement('span'); lv.className='lvl '+e.level; lv.textContent=e.level;
+    const m=document.createElement('span'); m.className='msg'; m.textContent=e.msg;
+    row.append(ts,lv,m);
+    row.style.display=visible(e)?'':'none';
+    wrap.appendChild(row);
+    while(wrap.children.length>MAX_ROWS) wrap.removeChild(wrap.firstChild);
+    refreshCount();
+    if(auto) window.scrollTo(0, document.body.scrollHeight);
+  }
+  function applyFilter(){ for(const row of wrap.children){ const e={level:row.dataset.level,msg:row._msg||''}; row.style.display=( (level==='all'||e.level===level) && (!q||e.msg.indexOf(q)>=0) )?'':'none'; } refreshCount(); }
+  function refreshCount(){ let n=0; for(const row of wrap.children) if(row.style.display!=='none') n++; countEl.textContent=n; }
+  document.getElementById('levelSeg').addEventListener('click',e=>{const b=e.target.closest('button'); if(!b)return; level=b.dataset.l; [...e.currentTarget.children].forEach(x=>x.classList.toggle('active',x===b)); applyFilter();});
+  searchEl.addEventListener('input',()=>{q=searchEl.value.trim().toLowerCase(); applyFilter();});
+  autoBtn.addEventListener('click',()=>{auto=!auto; autoBtn.classList.toggle('active',auto); if(auto)window.scrollTo(0,document.body.scrollHeight);});
+  clearBtn.addEventListener('click',()=>{wrap.innerHTML=''; refreshCount();});
+  function connect(){
+    const es=new EventSource('/logs/stream'+(key?('?key='+encodeURIComponent(key)):''));
+    es.onopen=()=>{statusEl.classList.remove('bad'); statusText.textContent='live';};
+    es.onmessage=ev=>{ let e; try{e=JSON.parse(ev.data);}catch(_){return;} add(e); };
+    es.onerror=()=>{ statusEl.classList.add('bad'); statusText.textContent='reconnecting…'; }; // EventSource auto-reconnects
+  }
+  connect();
+})();
+</script>
+</body>
+</html>
