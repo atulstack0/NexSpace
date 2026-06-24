@@ -418,7 +418,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24j · 3D scene lighting + gradient sky + sculpted human avatar + UI polish + a11y','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24k · rigged human GLB avatar (Soldier, from URL) + 3D lighting + sculpted fallback + UI polish','color:#ffb454;font-weight:700');
   const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
   const mini=document.getElementById('minimap'),mctx=mini.getContext('2d');
   let DPR=Math.max(1,Math.min(2,devicePixelRatio||1)),VW=0,VH=0;
@@ -1044,16 +1044,19 @@
   const Three3D = (function () {
     let ready = false, worldBuilt = false, renderer, scene, camera, worldGroup, avatarGroup, tvPanelMat = null, tvPanelMesh = null;
     let _ray = null;   // reused raycaster for TV occlusion (lazy so THREE is loaded)
-    // Real character model (Renderpeople "Eric"). Optional: if models/eric.glb or the loader is missing,
-    // avatars stay on the built-in styled businessman. Convert one FBX → eric.glb (see CHARACTER.md).
+    // Real, rigged human character model. Loaded from a URL at runtime (no file in the repo).
+    // Default: the three.js "Soldier" sample — a rigged human GLB with Idle/Walk/Run clips, served with CORS via jsDelivr.
+    // Swap MODEL_URL for your own (e.g. a free Ready Player Me avatar .glb, or a local "models/eric.glb"). On any
+    // load/parse/CORS failure the avatars gracefully stay on the built-in styled businessman (see CHARACTER.md).
     let ericProto = null, ericClips = [], ericState = "none";   // none | loading | ready | failed
+    const MODEL_URL = "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/models/gltf/Soldier.glb";
     const ERIC_FOR = "all";                            // "all" → everyone uses the model · "me" → only your avatar
     const ERIC_FACE = Math.PI;                          // base yaw so the model faces forward (flip by ±Math.PI if it faces away)
     function loadEric() {
       if (ericState !== "none") return; if (typeof THREE === "undefined" || !THREE.GLTFLoader) { ericState = "failed"; return; }
       ericState = "loading";
       try {
-        new THREE.GLTFLoader().load("models/eric.glb",
+        new THREE.GLTFLoader().load(MODEL_URL,
           (g) => { ericProto = (g && (g.scene || (g.scenes && g.scenes[0]))) || null; ericClips = (g && g.animations) || []; ericState = ericProto ? "ready" : "failed"; },
           undefined,
           () => { ericState = "failed"; });           // no file / network / parse error → keep the styled fallback
