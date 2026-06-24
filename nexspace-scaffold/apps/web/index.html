@@ -430,7 +430,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24u · draw-wall tool + 📜 Logs button + client logs + editable walls/rooms + human GLB','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24v · jump fix (WebGL) + draw-wall tool + 📜 Logs + editable walls/rooms + human GLB','color:#ffb454;font-weight:700');
   // forward browser errors + key client events to the server's live log stream (/logs.html). Buffers until the socket opens.
   const _clogBuf=[];
   function clog(level,msg){const e={t:'clientlog',level,msg:String(msg).slice(0,400)};try{if(ws&&ws.readyState===1){ws.send(JSON.stringify(e));return;}}catch(_){}_clogBuf.push(e);if(_clogBuf.length>50)_clogBuf.shift();}
@@ -1433,14 +1433,14 @@
         const t = tvThumbTex(tvData.videoId); if (t) { tvPanelMat.map = t; tvPanelMat.color.set(0xffffff); tvPanelMat.needsUpdate = true; tvPanelMat._vid = tvData.videoId; }
       }
       if (tvPanelMesh) tvPanelMesh.visible = !tvWallShown;                        // hide the poster while the live video is mounted on the wall (no double)
-      const eye = 46;
+      const eye = 46 + jumpZ;   // rise with the jump (Space) so it's visible in WebGL too
       if (cameraMode === "firstPerson") {
         camera.position.set(me.x, eye, me.y);
         camera.lookAt(me.x + Math.cos(yaw) * Math.cos(pitch) * 100, eye + Math.sin(pitch) * 100, me.y + Math.sin(yaw) * Math.cos(pitch) * 100);
       } else {
         const back = tpDist;
         camera.position.set(me.x - Math.cos(yaw) * back, Math.max(40, 150 - pitch * 180 + eye), me.y - Math.sin(yaw) * back);
-        camera.lookAt(me.x, 42, me.y);
+        camera.lookAt(me.x, 42 + jumpZ, me.y);
       }
       const seen = new Set();
       for (const [id, e] of peers) {
@@ -1452,7 +1452,7 @@
         else if (!a.videoTex && e.avatar) applyPic(a, e.avatar); // Google profile photo (when no live video)
       }
       if (cameraMode !== "firstPerson") {
-        seen.add("__me"); const a = ensure("__me", 212, "You"); a.group.visible = true; a.group.position.set(me.x, 0, me.y); a.group.rotation.y = Math.PI / 2 - (me.facing || 0); a.head.lookAt(camera.position); if (a.headMesh) a.headMesh.lookAt(camera.position); setNameSprite(a, myName || "You");
+        seen.add("__me"); const a = ensure("__me", 212, "You"); a.group.visible = true; a.group.position.set(me.x, jumpZ, me.y); a.group.rotation.y = Math.PI / 2 - (me.facing || 0); a.head.lookAt(camera.position); if (a.headMesh) a.headMesh.lookAt(camera.position); setNameSprite(a, myName || "You");
         applyAppear3D(a, myAppear); ensureModel(a, myAppear, true);     // my custom look + model
         walkAnim(a, me.x, me.y, dt); applyEmotePose(a, emotes.get(myId));
         if (localVideoEl && localVideoEl.readyState >= 2 && !a.videoTex) { a.videoTex = new THREE.VideoTexture(localVideoEl); a.headMat.map = a.videoTex; a.headMat.needsUpdate = true; a.head.visible = true; if (a.headMesh) a.headMesh.visible = false; }

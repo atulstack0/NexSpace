@@ -45,10 +45,16 @@ const WEB_DIR = path.join(__dirname, "..", "web");
 // Every console.log/warn/error is mirrored into a bounded buffer and streamed to connected log viewers,
 // so existing flow logs (join/leave/login/edits/errors) show up live with no extra call-site changes.
 const LOG_MAX = 500, LOG_BUF = [], logClients = new Set();
+// Persist all logs to a dated file (one per day) under LOG_DIR. On ephemeral hosts (e.g. Render free) the file
+// resets on restart/redeploy — for durable logs, point LOG_DIR at a mounted disk or ship to an external service.
+const LOG_DIR = process.env.LOG_DIR || path.join(process.env.DATA_DIR || __dirname, "logs");
+try { fs.mkdirSync(LOG_DIR, { recursive: true }); } catch { /* read-only fs → file logging just no-ops */ }
+function logFilePath() { return path.join(LOG_DIR, "nexspace-" + new Date().toISOString().slice(0, 10) + ".log"); }
 const _safe = (a) => { try { return typeof a === "string" ? a : JSON.stringify(a); } catch { return String(a); } };
 function pushLog(level, args) {
   const e = { t: Date.now(), level, msg: args.map(_safe).join(" ") };
   LOG_BUF.push(e); if (LOG_BUF.length > LOG_MAX) LOG_BUF.shift();
+  try { fs.appendFile(logFilePath(), new Date(e.t).toISOString() + " [" + e.level + "] " + e.msg + "\n", () => {}); } catch { /* never let logging throw */ }
   const line = "data: " + JSON.stringify(e) + "\n\n";
   for (const res of logClients) { try { res.write(line); } catch { /* dead client */ } }
 }
@@ -386,9 +392,17 @@ function floorTemplate(name, W, H) {
 const server = http.createServer((req, res) => {
   let urlPath = (req.url || "/").split("?")[0];   // strip query first, so "/?sso=…" still serves the app
   if (urlPath === "/" || urlPath === "") urlPath = "/index.html";
-  if (urlPath === "/logs/recent" || urlPath === "/logs/stream") {   // live debug logs for /logs.html (token-gated)
+  if (urlPath === "/logs/recent" || urlPath === "/logs/stream" || urlPath === "/logs/download") {   // live debug logs for /logs.html (token-gated)
     const u = new URL(req.url, "http://x");
     if (!logsAuthorized(req, u)) { res.writeHead(403, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "logs locked — open /logs.html?key=<LOGS_TOKEN>" })); return; }
+    if (urlPath === "/logs/download") {   // download today's log file
+      const fp = logFilePath();
+      return fs.readFile(fp, (err, data) => {
+        if (err) { res.writeHead(404, { "Content-Type": "text/plain" }); res.end("No log file yet today."); return; }
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Content-Disposition": 'attachment; filename="' + path.basename(fp) + '"' });
+        res.end(data);
+      });
+    }
     if (urlPath === "/logs/recent") return json(res, { logs: LOG_BUF.slice(-LOG_MAX) });
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-store", "Connection": "keep-alive", "X-Accel-Buffering": "no" });
     res.write("retry: 3000\n\n");
