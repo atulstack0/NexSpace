@@ -428,7 +428,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24p · labelled toolbar buttons + resizable rooms + richer 3D furniture + branded landing + human GLB','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24q · rename rooms (dbl-click) + labelled toolbar + resizable rooms + richer 3D furniture + human GLB','color:#ffb454;font-weight:700');
   const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
   const mini=document.getElementById('minimap'),mctx=mini.getContext('2d');
   let DPR=Math.max(1,Math.min(2,devicePixelRatio||1)),VW=0,VH=0;
@@ -610,6 +610,11 @@
   canvas.addEventListener('mousedown',e=>{if(e.button!==0)return;
     if(viewMode==='3d'){if(!pointerLocked&&canvas.requestPointerLock)canvas.requestPointerLock();return;} // click to look around
     canvasPrimary(e);});
+  canvas.addEventListener('dblclick',e=>{if(!editMode||viewMode==='3d')return;   // double-click a room to rename it
+    const hit=editHitRoom(toWorld(e));if(!hit)return;const cur=hit.obj.name||'Room';
+    const name=(prompt('Rename room',cur)||cur).slice(0,30);if(name===cur)return;
+    edSend({t:'editFloor',op:'renameRoom',id:hit.obj.id,name});toast('Renamed to "'+name+'"');
+    pushUndo({undo:()=>edSend({t:'editFloor',op:'renameRoom',id:hit.obj.id,name:cur}),redo:()=>edSend({t:'editFloor',op:'renameRoom',id:hit.obj.id,name})});});
   // Touch: drag rotates the 3D camera (no pointer-lock on mobile); a tap moves/interacts in 2D. Joystick handles walking.
   let touchLook=null;
   function addTouchLook(el){if(!el)return;

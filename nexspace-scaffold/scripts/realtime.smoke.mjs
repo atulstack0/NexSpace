@@ -296,6 +296,9 @@ try {
   admin.ws.send(JSON.stringify({ t: "editFloor", op: "addRoom", id: "r-test01", name: "Huddle", bounds: { x: 300, y: 300, w: 320, h: 240 } }));
   await wait(240);
   (guest.world?.rooms?.some((r) => r.id === "r-test01" && r.name === "Huddle")) ? ok("editFloor addRoom draws a new room zone") : bad("addRoom did not broadcast a room");
+  admin.ws.send(JSON.stringify({ t: "editFloor", op: "renameRoom", id: "r-test01", name: "Pods" }));
+  await wait(210);
+  (guest.world?.rooms?.find((r) => r.id === "r-test01")?.name === "Pods") ? ok("editFloor renameRoom renames a room") : bad("renameRoom did not rename");
   admin.ws.send(JSON.stringify({ t: "editFloor", op: "moveRoom", id: "r-test01", x: 500, y: 360 }));
   await wait(220);
   (guest.world?.rooms?.find((r) => r.id === "r-test01")?.bounds?.x === 500) ? ok("editFloor moveRoom relocates an existing room") : bad("moveRoom did not move the room");

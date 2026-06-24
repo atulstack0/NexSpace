@@ -699,6 +699,8 @@ wss.on("connection", (ws) => {
         const door = { x: Math.round(x + w / 2 - 9), y: Math.round(y + h - 9), w: 18, h: 18, state: "open", knocking: false };
         f.rooms.push({ id, name, color, bounds: { x, y, w, h }, door, bookings: [] });
         changed = true;
+      } else if (op === "renameRoom") {                     // double-click a room to rename it
+        const r = f.rooms.find((rm) => rm.id === m.id); if (r) { r.name = String(m.name || "Room").slice(0, 30); changed = true; }
       } else if (op === "removeRoom") {
         const i = f.rooms.findIndex((r) => r.id === m.id); if (i >= 0) { f.rooms.splice(i, 1); changed = true; }
       } else if (op === "moveRoom") {                       // drag an existing room zone (door moves with it)
