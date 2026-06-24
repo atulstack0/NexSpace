@@ -123,8 +123,13 @@
   .rsi{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted);background:#0d1424;border:1px solid var(--line);border-radius:7px;padding:4px 8px}
   .rsi.rsa{color:#ffd27a;border-color:rgba(255,180,84,.45)}
   .rsi button{padding:2px 7px;font-size:11px}
-  .tvbox{display:flex;flex-direction:column;gap:8px;width:600px;max-width:94vw;max-height:54vh;background:rgba(15,22,38,.97);border:1px solid var(--line);border-radius:14px;padding:12px;box-shadow:0 10px 34px rgba(0,0,0,.45)}
-  .tvhead{display:flex;align-items:center;gap:10px;font-size:14px;flex:0 0 auto}
+  /* unified panel chrome (UI polish) — dark glass + tactical amber underline, matches the HUD rails */
+  @keyframes panelIn{from{opacity:0;transform:translateY(7px) scale(.99)}to{opacity:1;transform:none}}
+  .tvlist::-webkit-scrollbar,#chatMsgs::-webkit-scrollbar,#wbWrap::-webkit-scrollbar,#roomsList::-webkit-scrollbar,#activityList::-webkit-scrollbar{width:8px}
+  .tvlist::-webkit-scrollbar-thumb,#chatMsgs::-webkit-scrollbar-thumb,#wbWrap::-webkit-scrollbar-thumb,#roomsList::-webkit-scrollbar-thumb,#activityList::-webkit-scrollbar-thumb{background:rgba(123,146,196,.32);border-radius:4px}
+  .tvsearch input:focus,#chatText:focus,.custrow input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(91,140,255,.25)}
+  .tvbox{display:flex;flex-direction:column;gap:8px;width:600px;max-width:94vw;max-height:54vh;background:linear-gradient(180deg,rgba(18,25,42,.98),rgba(11,15,27,.95));border:1px solid rgba(123,146,196,.24);border-radius:16px;padding:14px;box-shadow:0 18px 48px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.05),inset 0 -2px 0 rgba(255,180,84,.2);backdrop-filter:blur(14px);animation:panelIn .16s ease-out}
+  .tvhead{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;color:var(--text);flex:0 0 auto;padding-bottom:9px;border-bottom:1px solid rgba(123,146,196,.16)}
   #tvNow{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%}
   .tvsearch{display:flex;gap:6px;flex:0 0 auto}
   .tvsearch input{flex:1;background:#0d1424;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:9px 11px;font-size:14px}
@@ -135,8 +140,8 @@
   .tvitem .tt{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .tvitem button{background:#0d1424;border:1px solid var(--line);color:var(--text);border-radius:6px;padding:3px 7px;font-size:12px;cursor:pointer}
   .tvitem button:hover{border-color:var(--accent);color:#fff}
-  #chat{position:fixed;bottom:14px;left:14px;z-index:16;width:300px;max-width:46vw;display:none;flex-direction:column;background:rgba(22,29,46,.96);border:1px solid var(--line);border-radius:12px;overflow:hidden;backdrop-filter:blur(8px)}
-  #chat .chead{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted);font-weight:600}
+  #chat{position:fixed;bottom:14px;left:14px;z-index:16;width:308px;max-width:46vw;display:none;flex-direction:column;background:linear-gradient(180deg,rgba(18,25,42,.97),rgba(11,15,27,.95));border:1px solid rgba(123,146,196,.24);border-radius:14px;overflow:hidden;backdrop-filter:blur(14px);box-shadow:0 18px 48px rgba(0,0,0,.5),inset 0 -2px 0 rgba(255,180,84,.18);animation:panelIn .16s ease-out}
+  #chat .chead{display:flex;align-items:center;gap:8px;padding:9px 11px;border-bottom:1px solid rgba(123,146,196,.18);font-size:12px;color:var(--text);font-weight:700}
   #chat .chead select{margin-left:auto;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:3px 6px;font-size:12px}
   #chatMsgs{height:190px;overflow-y:auto;padding:8px 10px;display:flex;flex-direction:column;gap:6px;font-size:13px}
   #chatMsgs .cm .who{font-weight:700} #chatMsgs .cm .sc{font-size:10px;color:var(--muted);margin-left:5px}
@@ -147,27 +152,27 @@
   #screenshare .shead{display:flex;gap:6px;align-items:center;padding:8px;border-bottom:1px solid var(--line);flex-wrap:wrap}
   #screenView{flex:1;display:flex;align-items:center;justify-content:center;background:#000;min-height:0}
   #screenView video{max-width:100%;max-height:100%}
-  #wb{position:fixed;inset:6% 6% 9% 6%;z-index:30;display:none;flex-direction:column;background:rgba(14,19,32,.98);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  #wb{position:fixed;inset:6% 6% 9% 6%;z-index:30;display:none;flex-direction:column;background:linear-gradient(180deg,rgba(18,25,42,.98),rgba(11,15,27,.96));border:1px solid rgba(123,146,196,.24);border-radius:16px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.6),inset 0 -2px 0 rgba(255,180,84,.18);animation:panelIn .16s ease-out}
   #wb .wbhead{display:flex;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted);flex-wrap:wrap}
   #wbColors{display:flex;gap:6px} #wb .sw{width:20px;height:20px;border-radius:50%;border:2px solid #0b1019;cursor:pointer}
   #wb .sw.active{outline:2px solid #fff}
   #wbWrap{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;background:#0a0f1c;min-height:0}
   #wbCanvas{background:#101725;cursor:crosshair;touch-action:none;border:1px solid var(--line)}
-  #reactBar{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:22;display:none;gap:6px;background:rgba(22,29,46,.96);border:1px solid var(--line);border-radius:12px;padding:6px 8px}
+  #reactBar{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:22;display:none;gap:6px;background:linear-gradient(180deg,rgba(18,25,42,.97),rgba(11,15,27,.95));border:1px solid rgba(123,146,196,.24);border-radius:12px;padding:7px 9px;box-shadow:0 12px 34px rgba(0,0,0,.5);backdrop-filter:blur(12px);animation:panelIn .16s ease-out}
   #reactBar button{background:none;border:0;font-size:20px;cursor:pointer;padding:2px 4px}
   @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}60%{transform:translateX(6px)}}
   body.shake{animation:shake .4s}
   #knock{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);z-index:18;display:none;align-items:center;gap:12px;
-    background:rgba(22,29,46,.96);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:13px}
+    background:linear-gradient(180deg,rgba(18,25,42,.97),rgba(11,15,27,.95));border:1px solid rgba(123,146,196,.24);border-radius:12px;padding:10px 15px;font-size:13px;box-shadow:0 12px 34px rgba(0,0,0,.5);backdrop-filter:blur(12px);animation:panelIn .16s ease-out}
   #knock b{color:#fff}
   #toasts{position:fixed;top:116px;left:50%;transform:translateX(-50%);z-index:25;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
-  .toast{background:rgba(22,29,46,.96);border:1px solid var(--line);border-radius:10px;padding:9px 15px;font-size:13px;transition:opacity .5s}
-  #hint{position:fixed;bottom:14px;left:14px;z-index:15;font-size:12px;color:var(--muted);background:rgba(22,29,46,.85);border:1px solid var(--line);border-radius:10px;padding:8px 12px;line-height:1.6;max-width:48vw}
+  .toast{background:linear-gradient(180deg,rgba(24,32,52,.97),rgba(14,19,33,.95));border:1px solid rgba(255,180,84,.4);border-left:3px solid var(--warn);border-radius:11px;padding:10px 16px;font-size:13px;color:#eef2fb;box-shadow:0 12px 32px rgba(0,0,0,.5);backdrop-filter:blur(10px);transition:opacity .5s;animation:panelIn .16s ease-out}
+  #hint{position:fixed;bottom:14px;left:14px;z-index:15;font-size:12px;color:var(--muted);background:linear-gradient(180deg,rgba(18,25,42,.9),rgba(11,15,27,.85));border:1px solid rgba(123,146,196,.22);border-radius:12px;padding:9px 13px;line-height:1.6;max-width:48vw;backdrop-filter:blur(10px)}
   kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 6px;font-size:11px;color:var(--text)}
-  #minimapWrap{position:fixed;bottom:12px;right:12px;z-index:15;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:rgba(11,16,25,.9)}
+  #minimapWrap{position:fixed;bottom:12px;right:12px;z-index:15;border:1px solid rgba(123,146,196,.28);border-radius:12px;overflow:hidden;background:rgba(11,16,25,.92);box-shadow:0 12px 30px rgba(0,0,0,.5),inset 0 -2px 0 rgba(255,180,84,.16)}
   #overlay{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:radial-gradient(1000px 500px at 50% 30%,rgba(91,140,255,.18),transparent),rgba(8,11,18,.94)}
   #card{width:min(470px,92vw);background:linear-gradient(180deg,var(--panel),#121828);border:1px solid var(--line);border-radius:18px;padding:28px 30px;text-align:center}
-  #card .orb{width:34px;height:34px;border-radius:50%;margin:0 auto 10px;background:conic-gradient(from 200deg,var(--accent),var(--accent2),var(--accent))}
+  #card .orb{width:30px;height:30px;border-radius:7px;transform:rotate(45deg);margin:6px auto 16px;background:linear-gradient(135deg,var(--warn),#ff8a3c);box-shadow:0 0 16px rgba(255,180,84,.6)}
   #card h1{font-size:21px;margin:0 0 4px} #card p{color:var(--muted);font-size:13px;line-height:1.6}
   /* first-run onboarding tour (§7 / P6-05) */
   #tour{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;background:radial-gradient(1000px 500px at 50% 30%,rgba(91,140,255,.18),transparent),rgba(8,11,18,.92)}
@@ -413,7 +418,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24g · a11y pass + guest time-cap + room-draw + templates + side-rail HUD + mobile collapse + pathfinding/tour/gallery/devices/editor-undo','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24h · UI polish (unified glass panels) + a11y + guest cap + room-draw + templates + side-rail HUD + mobile collapse','color:#ffb454;font-weight:700');
   const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
   const mini=document.getElementById('minimap'),mctx=mini.getContext('2d');
   let DPR=Math.max(1,Math.min(2,devicePixelRatio||1)),VW=0,VH=0;
