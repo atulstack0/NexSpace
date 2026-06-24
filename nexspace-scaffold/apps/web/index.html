@@ -250,11 +250,11 @@
     <button class="btn" id="barToggle" title="Show/hide controls">☰</button>
     <div id="barItems">
       <div class="hud-group" title="Voice & video">
-        <button class="btn" id="btnMic" title="Deafen (mute everyone you hear)">🔊</button>
-        <button class="btn" id="btnMicPub" title="Your microphone (LiveKit)" style="display:none">🎤</button>
-        <button class="btn" id="btnCam" title="Your camera (LiveKit)" style="display:none">🎥</button>
+        <button class="btn" id="btnMic" title="Deafen (mute everyone you hear)">🔊 Sound</button>
+        <button class="btn" id="btnMicPub" title="Your microphone (LiveKit)" style="display:none">🎤 Mic</button>
+        <button class="btn" id="btnCam" title="Your camera (LiveKit)" style="display:none">🎥 Camera</button>
         <button class="btn" id="btnGallery" title="Gallery / grid view of cameras (§6.6)" style="display:none">🔲 Gallery</button>
-        <button class="btn" id="btnDevices" title="Choose microphone & camera (§6.6)" style="display:none">⚙️</button>
+        <button class="btn" id="btnDevices" title="Choose microphone & camera (§6.6)" style="display:none">⚙️ Devices</button>
       </div>
       <div class="hud-group" title="Screen sharing">
         <button class="btn" id="btnScreen" title="Share your screen (LiveKit)" style="display:none">🖥️ Share</button>
@@ -275,15 +275,15 @@
       </select>
       <div class="hud-group" title="Tools & panels">
         <button class="btn active" id="btnLinks">◠ Links</button>
-        <button class="btn" id="btnAnalytics" title="Analytics dashboard (admin)">📊</button>
-        <button class="btn" id="btnChat" title="Chat (6.9)">💬</button>
-        <button class="btn" id="btnWb" title="Whiteboard (6.8)">🖊️</button>
-        <button class="btn" id="btnReact" title="React (6.6)">😀</button>
+        <button class="btn" id="btnAnalytics" title="Analytics dashboard (admin)">📊 Analytics</button>
+        <button class="btn" id="btnChat" title="Chat (6.9)">💬 Chat</button>
+        <button class="btn" id="btnWb" title="Whiteboard (6.8)">🖊️ Whiteboard</button>
+        <button class="btn" id="btnReact" title="React / emote (6.6)">😀 React</button>
         <button class="btn" id="btnTv" title="Open the TV (or press T)">📺 TV</button>
         <button class="btn" id="btnRooms" title="Book a room / today's schedule">📅 Rooms</button>
         <button class="btn" id="btnCustomize" title="Customize your avatar">🎨 Avatar</button>
-        <button class="btn" id="btnActivity" title="Activity feed">📋</button>
-        <button class="btn" id="btnGame" title="Play tic-tac-toe">🎮</button>
+        <button class="btn" id="btnActivity" title="Activity feed">📋 Activity</button>
+        <button class="btn" id="btnGame" title="Play tic-tac-toe">🎮 Game</button>
         <button class="btn" id="btnEdit" title="Edit the floor — move/add/remove elements (owner/admin)" style="display:none">✏️ Edit</button>
       </div>
     </div>
@@ -428,7 +428,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24o · resizable rooms (handles) + select/move/delete + richer 3D furniture + branded landing + human GLB','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24p · labelled toolbar buttons + resizable rooms + richer 3D furniture + branded landing + human GLB','color:#ffb454;font-weight:700');
   const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
   const mini=document.getElementById('minimap'),mctx=mini.getContext('2d');
   let DPR=Math.max(1,Math.min(2,devicePixelRatio||1)),VW=0,VH=0;
@@ -1800,7 +1800,7 @@
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)document.title=baseTitle;});
 
   // ---------- Toolbar ----------
-  document.getElementById('btnMic').addEventListener('click',function(){muted=!muted;this.textContent=muted?'🔇':'🔊';this.classList.toggle('danger',muted);this.classList.toggle('active',muted);});
+  document.getElementById('btnMic').addEventListener('click',function(){muted=!muted;this.textContent=muted?'🔇 Deafened':'🔊 Sound';this.classList.toggle('danger',muted);this.classList.toggle('active',muted);});
   document.getElementById('btnLinks').addEventListener('click',function(){showLinks=!showLinks;this.classList.toggle('active',showLinks);});
   document.getElementById('btnAnalytics').addEventListener('click',()=>window.open('/analytics.html','_blank'));
   function rebuildChatScopes(){const sel=document.getElementById('chatScope');const cur=sel.value;
