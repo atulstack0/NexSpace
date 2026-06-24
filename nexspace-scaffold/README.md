@@ -28,6 +28,18 @@ Open **http://localhost:8787 in two tabs** (or two devices on your LAN), enter a
 
 🎧 Headphones recommended. Without LiveKit configured, the per-peer voice is a synthesized tone that demonstrates the spatial-audio pipeline; real mic/camera is the opt-in LiveKit integration below.
 
+## Demo logins
+
+Leave the email/password blank on the join screen to enter as a **guest**, or sign in with one of the built-in role accounts to see RBAC in action (no Google needed):
+
+| Role | Email | Password |
+|---|---|---|
+| Owner | `owner@nexspace.dev` | `owner1234` |
+| Admin | `admin@nexspace.dev` | `admin1234` |
+| Member | `member@nexspace.dev` | `member1234` |
+
+> These are **demo defaults**. Override them for any real deployment by setting `OWNER_PASSWORD`, `ADMIN_PASSWORD`, and `MEMBER_PASSWORD` in your environment (and set a strong `JWT_SECRET`). Owner/Admin can edit the floor, moderate, record, and view analytics; Member and Guest have progressively fewer permissions.
+
 ## Features
 
 **World & movement** — shared 2D/3D office, avatars, A\* click-to-move, collisions, camera pan/zoom/follow, minimap, authoritative 15 Hz sync with interpolation.
