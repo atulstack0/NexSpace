@@ -46,19 +46,21 @@ Leave the email/password blank on the join screen to enter as a **guest**, or si
 
 **Audio & media** — proximity + room + broadcast audio; **LiveKit** voice/video (opt-in) with a **gallery/grid view**, **mic/cam device picker**, screen share + **present-to-room**, and **recording** (egress to S3-compatible storage).
 
-**Collaboration** — multi-scope **chat** (nearby/floor/#channels/DMs) + @mentions + unread badges, collaborative **whiteboard**, **reactions/emotes**, nudge, moderation (mute/kick), a shared **YouTube watch-party** TV, and a **tic-tac-toe** mini-game.
+**Collaboration** — multi-scope **chat** (nearby/floor/#channels/DMs) + @mentions + unread badges, collaborative **whiteboard**, **reactions/emotes** (incl. ☕ sip‑chai), nudge, moderation (mute/kick), a shared **YouTube watch-party** TV.
+
+**Games (🎮)** — **❄️ Freeze Tag** (floor-wide proximity chase: a random "It" freezes runners on contact, free runners thaw frozen teammates, frozen players can't move; win = everyone frozen or a 90s timer; live It/frozen markers in 2D + 3D) and shared **tic-tac-toe**.
 
 **AI layer** — in-office **assistant** (`@ai` — answers, summaries, `who's here` / `schedule` / `help`), **auto meeting-notes** when a booking ends, and an **AI greeter** that welcomes new joiners. Free via Google Gemini; Anthropic/OpenAI/Groq/OpenRouter also supported.
 
-**Build & customise** — in-office **floor editor** (drag, multi-select, undo/redo, **layout templates**, **room-drawing**), interactive objects (notes, embeds, timers), avatar customization (suit/tie/skin + your own GLB URL), branding/white-label.
+**Build & customise** — in-office **floor editor**: add/select/move/**rotate** furniture, **draw/move/resize/rename/delete rooms**, **draw/move/delete walls**, multi-select, undo/redo, one-click **layout templates** (office/lounge/classroom/event); interactive objects (notes, embeds, timers); a rooftop **☕ chai stall**; avatar customization (suit/tie/skin + your own GLB URL); branding/white-label.
 
-**3D** — real Three.js renderer with a **rigged human GLB avatar** (loaded from a URL, with a sculpted styled fallback), three-point lighting + gradient sky, PUBG-style third/first-person camera, 2D⇄3D toggle with no media restart.
+**3D** — real Three.js renderer with a **GLB character avatar** (`MODEL_URL`, with a sculpted styled fallback), three-point lighting + gradient sky, detailed furniture props, PUBG-style third/first-person camera + jump, 2D⇄3D toggle with no media restart.
 
 **Org & access** — JWT auth + Google OAuth, server-enforced **RBAC**, SSO (OIDC + mock IdP), invites / guest links / CSV import + a **guest weekly time-cap**, presence & status.
 
-**Integrations & ops** — public REST API (`/api/v1`) + HMAC **webhooks** + **Slack** notifications, **analytics** dashboard + CSV, **multi-floor** + portals, Redis multi-node fan-out, anti-teleport / rate-limit / connection-cap hardening, and CI.
+**Integrations & ops** — public REST API (`/api/v1`) + HMAC **webhooks** + **Slack** notifications, **analytics** dashboard + CSV, **multi-floor** + portals, Redis multi-node fan-out, anti-teleport / rate-limit / connection-cap hardening, **live debug logs** (server + browser events streamed to `/logs.html`, written to a dated file, admin 📜 button), and CI.
 
-**UI/UX** — game-style HUD with vertical side rails (desktop) that collapse on mobile, a unified dark-glass theme across all panels, first-run onboarding tour, and an accessibility pass (keyboard focus, ARIA labels, live region).
+**UI/UX** — game-style HUD with vertical side rails that **auto-hide** (📌) on desktop and collapse on mobile, a unified dark-glass theme across all panels, first-run onboarding tour, and an accessibility pass (keyboard focus, ARIA labels, live region).
 
 ## Optional features — turn on with env keys
 
@@ -74,6 +76,7 @@ Set these in your host's environment (or `apps/api/.env` for local dev). Everyth
 | `SLACK_WEBHOOK_URL` | Slack notifications |
 | `PUBLIC_API_KEY` / `WEBHOOK_URL` | public REST API / outbound webhooks |
 | `REDIS_URL` | multi-node fan-out + floor persistence |
+| `LOGS_TOKEN` | gate `/logs.html` in production (`/logs.html?key=…`); admins can open it via the 📜 button regardless |
 
 Full table and step-by-step enablement (Calendar, Teams, SSO/SCIM, transcription, native apps, etc.) are in **`../HANDOFF.md`**.
 
