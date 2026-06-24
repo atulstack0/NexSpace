@@ -706,6 +706,15 @@ wss.on("connection", (ws) => {
         if (r) { const nx = grid(cx(m.x, f.w - r.bounds.w)), ny = grid(cx(m.y, f.h - r.bounds.h));
           const dxp = nx - r.bounds.x, dyp = ny - r.bounds.y; r.bounds.x = nx; r.bounds.y = ny;
           if (r.door) { r.door.x += dxp; r.door.y += dyp; } changed = true; }
+      } else if (op === "resizeRoom" && m.bounds && typeof m.bounds === "object") {  // drag a corner/edge handle to resize a room
+        const r = f.rooms.find((rm) => rm.id === m.id);
+        if (r) {
+          const W = grid(Math.max(120, Math.min(f.w, Number(m.bounds.w) || r.bounds.w))), H = grid(Math.max(120, Math.min(f.h, Number(m.bounds.h) || r.bounds.h)));
+          const X = grid(cx(m.bounds.x, f.w - W)), Y = grid(cx(m.bounds.y, f.h - H));
+          r.bounds = { x: X, y: Y, w: W, h: H };
+          if (r.door) { r.door.x = Math.max(X, Math.min(X + W - r.door.w, r.door.x)); r.door.y = Math.max(Y, Math.min(Y + H - r.door.h, r.door.y)); }
+          changed = true;
+        }
       } else if (op === "remove") {
         const arr = arrFor(m.kind);
         const i = arr.findIndex((x) => x.id === m.id); if (i >= 0) { arr.splice(i, 1); changed = true; }

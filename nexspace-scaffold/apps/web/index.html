@@ -428,7 +428,7 @@
 <script>
 "use strict";
 (function(){
-  console.log('%cNexSpace client build: 2026-06-24n · editable rooms (select/move/delete) + richer 3D furniture + branded landing + human GLB avatar','color:#ffb454;font-weight:700');
+  console.log('%cNexSpace client build: 2026-06-24o · resizable rooms (handles) + select/move/delete + richer 3D furniture + branded landing + human GLB','color:#ffb454;font-weight:700');
   const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
   const mini=document.getElementById('minimap'),mctx=mini.getContext('2d');
   let DPR=Math.max(1,Math.min(2,devicePixelRatio||1)),VW=0,VH=0;
@@ -476,7 +476,7 @@
   let ytPlayer=null,ytReady=false,tvApplyingRemote=false,tvUnmuted=false,tvRaw=false,tvRawVid='',tvKickTimer=null,tvWallShown=false,tvSync={pos:0,at:0,playing:false}; // synced watch-party playback (off by default)
   window.onYouTubeIframeAPIReady=function(){ytReady=true;clearTimeout(tvKickTimer);if(myId)tvEnsurePlayer();}; // build the wall player as soon as we've joined
   (function(){const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s);})();
-  let editMode=false,editSelSet=[],editDrag=null,undoStack=[],redoStack=[],drawRoomMode=false,roomDraw=null; // owner/admin floor editor (multi-select + undo/redo + room-draw)
+  let editMode=false,editSelSet=[],editDrag=null,undoStack=[],redoStack=[],drawRoomMode=false,roomDraw=null,roomResize=null; // owner/admin floor editor (multi-select + undo/redo + room draw/resize)
   const reactions=new Map(),adminMuted=new Set();
   const emotes=new Map();   // id -> {type, t0} avatar emote (wave/clap/sit/dance)
   const EMOTE_EMOJI={wave:'👋',clap:'👏',sit:'🪑',dance:'🕺'};
@@ -646,6 +646,9 @@
   function editHit(arr,kind,w){if(!arr)return null;for(let i=arr.length-1;i>=0;i--){const o=arr[i];if(w.x>=o.x&&w.x<=o.x+o.w&&w.y>=o.y&&w.y<=o.y+o.h)return{kind,obj:o};}return null;}
   function editHitRoom(w){if(!world||!world.rooms)return null;for(let i=world.rooms.length-1;i>=0;i--){const r=world.rooms[i],b=r.bounds;if(b&&w.x>=b.x&&w.x<=b.x+b.w&&w.y>=b.y&&w.y<=b.y+b.h)return{kind:'room',obj:r};}return null;}
   const itemBox=(s)=>(s&&s.kind==='room')?s.obj.bounds:s.obj;   // rooms carry position in .bounds; everything else on the object
+  const ROOM_HANDLES=['nw','n','ne','e','se','s','sw','w'];      // resize handles for a selected room
+  function roomHandlePts(b){return{nw:[b.x,b.y],n:[b.x+b.w/2,b.y],ne:[b.x+b.w,b.y],e:[b.x+b.w,b.y+b.h/2],se:[b.x+b.w,b.y+b.h],s:[b.x+b.w/2,b.y+b.h],sw:[b.x,b.y+b.h],w:[b.x,b.y+b.h/2]};}
+  function roomHandleAt(w,b){const pts=roomHandlePts(b),tol=16;for(const k of ROOM_HANDLES){const p=pts[k];if(Math.abs(w.x-p[0])<tol&&Math.abs(w.y-p[1])<tol)return k;}return null;}
   function edSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o));}
   function edMove(kind,id,x,y){edSend({t:'editFloor',op:'move',kind,id,x,y});}
   function edRemove(kind,id){edSend({t:'editFloor',op:'remove',kind,id});}
@@ -654,6 +657,8 @@
   function doUndo(){const r=undoStack.pop();if(!r){toast('Nothing to undo');return;}r.undo();redoStack.push(r);editSelSet=[];updateEditBar();toast('↶ Undo');}
   function doRedo(){const r=redoStack.pop();if(!r){toast('Nothing to redo');return;}r.redo();undoStack.push(r);editSelSet=[];updateEditBar();toast('↷ Redo');}
   function editDown(w,shift){if(!world)return;
+    if(!shift&&editSelSet.length===1&&editSelSet[0].kind==='room'){const b=editSelSet[0].obj.bounds,hh=roomHandleAt(w,b);   // grab a resize handle on the already-selected room
+      if(hh){roomResize={room:editSelSet[0].obj,h:hh,ob:{x:b.x,y:b.y,w:b.w,h:b.h},downX:w.x,downY:w.y};editDrag=null;return;}}
     const hit=editHit(world.widgets,'widget',w)||editHit(world.portals,'portal',w)||editHit(world.furniture,'furniture',w)||editHitRoom(w);
     if(shift){if(hit){const i=editSelSet.findIndex(s=>s.obj===hit.obj);if(i>=0)editSelSet.splice(i,1);else editSelSet.push(hit);}}
     else{if(hit){if(!selHas(hit.obj))editSelSet=[hit];}else editSelSet=[];}
@@ -685,6 +690,19 @@
   function updateRoomBtn(){const b=document.getElementById('edDrawRoom');if(b)b.classList.toggle('active',drawRoomMode);}
   function editRoomDown(w){roomDraw={x0:w.x,y0:w.y,x1:w.x,y1:w.y};}
   document.addEventListener('mousemove',e=>{if(!roomDraw||viewMode==='3d')return;const w=toWorld(e);roomDraw.x1=w.x;roomDraw.y1=w.y;});
+  document.addEventListener('mousemove',e=>{if(!roomResize||viewMode==='3d')return;const w=toWorld(e);
+    const dx=Math.round((w.x-roomResize.downX)/10)*10,dy=Math.round((w.y-roomResize.downY)/10)*10,o=roomResize.ob,h=roomResize.h,MIN=120;
+    let x=o.x,y=o.y,W=o.w,H=o.h;
+    if(h.indexOf('w')>=0){x=o.x+dx;W=o.w-dx;} if(h.indexOf('e')>=0){W=o.w+dx;}
+    if(h.indexOf('n')>=0){y=o.y+dy;H=o.h-dy;} if(h.indexOf('s')>=0){H=o.h+dy;}
+    if(W<MIN){if(h.indexOf('w')>=0)x=o.x+o.w-MIN;W=MIN;} if(H<MIN){if(h.indexOf('n')>=0)y=o.y+o.h-MIN;H=MIN;}
+    const b=roomResize.room.bounds;b.x=x;b.y=y;b.w=W;b.h=H;
+    const d=roomResize.room.door;if(d){d.x=Math.max(b.x,Math.min(b.x+b.w-d.w,d.x));d.y=Math.max(b.y,Math.min(b.y+b.h-d.h,d.y));}});
+  document.addEventListener('mouseup',()=>{if(!roomResize)return;const r=roomResize;roomResize=null;const b=r.room.bounds;
+    if(b.x===r.ob.x&&b.y===r.ob.y&&b.w===r.ob.w&&b.h===r.ob.h)return;
+    const id=r.room.id,nb={x:b.x,y:b.y,w:b.w,h:b.h},ob=r.ob;
+    edSend({t:'editFloor',op:'resizeRoom',id,bounds:nb});
+    pushUndo({undo:()=>edSend({t:'editFloor',op:'resizeRoom',id,bounds:ob}),redo:()=>edSend({t:'editFloor',op:'resizeRoom',id,bounds:nb})});});
   document.addEventListener('mouseup',()=>{if(!roomDraw)return;const r=roomDraw;roomDraw=null;
     const x=Math.min(r.x0,r.x1),y=Math.min(r.y0,r.y1),w=Math.abs(r.x1-r.x0),h=Math.abs(r.y1-r.y0);
     if(w<120||h<120){toast('Room too small — drag a bigger rectangle');return;}
@@ -701,7 +719,7 @@
     for(const s of snaps)del(s);
     editSelSet=[];updateEditBar();
     pushUndo({undo:()=>{for(const s of snaps)restore(s);},redo:()=>{for(const s of snaps)del(s);}});}
-  function editToggle(on){editMode=(on!==undefined)?on:!editMode;editSelSet=[];editDrag=null;drawRoomMode=false;roomDraw=null;updateRoomBtn();
+  function editToggle(on){editMode=(on!==undefined)?on:!editMode;editSelSet=[];editDrag=null;drawRoomMode=false;roomDraw=null;roomResize=null;updateRoomBtn();
     document.getElementById('editBar').style.display=editMode?'flex':'none';
     const be=document.getElementById('btnEdit');if(be)be.classList.toggle('active',editMode);
     canvas.style.cursor=editMode?'move':'crosshair';if(editMode)toast('✏️ Edit mode — click to select, Shift-click for multi, drag to move, Ctrl+Z to undo');updateEditBar();}
@@ -711,7 +729,8 @@
   function drawEditSel(){
     if(roomDraw){const x=Math.min(roomDraw.x0,roomDraw.x1),y=Math.min(roomDraw.y0,roomDraw.y1),w=Math.abs(roomDraw.x1-roomDraw.x0),h=Math.abs(roomDraw.y1-roomDraw.y0);
       ctx.save();ctx.fillStyle='rgba(57,211,166,.12)';ctx.fillRect(x,y,w,h);ctx.strokeStyle='#39d3a6';ctx.lineWidth=3;ctx.setLineDash([10,6]);ctx.strokeRect(x,y,w,h);ctx.setLineDash([]);ctx.restore();}
-    if(!editSelSet.length)return;ctx.strokeStyle='#5b8cff';ctx.lineWidth=3;ctx.setLineDash([9,6]);for(const s of editSelSet){const p=itemBox(s);if(p)ctx.strokeRect(p.x-3,p.y-3,(p.w||40)+6,(p.h||40)+6);}ctx.setLineDash([]);}
+    if(!editSelSet.length)return;ctx.strokeStyle='#5b8cff';ctx.lineWidth=3;ctx.setLineDash([9,6]);for(const s of editSelSet){const p=itemBox(s);if(p)ctx.strokeRect(p.x-3,p.y-3,(p.w||40)+6,(p.h||40)+6);}ctx.setLineDash([]);
+    if(editSelSet.length===1&&editSelSet[0].kind==='room'){const pts=roomHandlePts(editSelSet[0].obj.bounds),hs=7;ctx.fillStyle='#ffb454';ctx.strokeStyle='#0b1019';ctx.lineWidth=2;for(const k in pts){const p=pts[k];ctx.fillRect(p[0]-hs,p[1]-hs,hs*2,hs*2);ctx.strokeRect(p[0]-hs,p[1]-hs,hs*2,hs*2);}}}
   addEventListener('keydown',e=>{if(!editMode)return;const tg=e.target;if(tg&&(tg.tagName==='INPUT'||tg.tagName==='TEXTAREA'))return;
     const k=e.key.toLowerCase();
     if((e.ctrlKey||e.metaKey)&&k==='z'){e.preventDefault();if(e.shiftKey)doRedo();else doUndo();return;}

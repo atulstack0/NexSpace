@@ -299,6 +299,9 @@ try {
   admin.ws.send(JSON.stringify({ t: "editFloor", op: "moveRoom", id: "r-test01", x: 500, y: 360 }));
   await wait(220);
   (guest.world?.rooms?.find((r) => r.id === "r-test01")?.bounds?.x === 500) ? ok("editFloor moveRoom relocates an existing room") : bad("moveRoom did not move the room");
+  admin.ws.send(JSON.stringify({ t: "editFloor", op: "resizeRoom", id: "r-test01", bounds: { x: 500, y: 360, w: 440, h: 300 } }));
+  await wait(220);
+  (guest.world?.rooms?.find((r) => r.id === "r-test01")?.bounds?.w === 440) ? ok("editFloor resizeRoom resizes an existing room") : bad("resizeRoom did not resize the room");
   admin.ws.send(JSON.stringify({ t: "editFloor", op: "removeRoom", id: "r-test01" }));
   await wait(220);
   (!guest.world?.rooms?.some((r) => r.id === "r-test01")) ? ok("editFloor removeRoom deletes the room (room-draw undo)") : bad("removeRoom did not delete");
