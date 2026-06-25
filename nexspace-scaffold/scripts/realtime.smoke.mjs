@@ -298,10 +298,18 @@ try {
   for (const fk of ["whiteboard", "bookshelf", "cooler", "server"]) admin.ws.send(JSON.stringify({ t: "editFloor", op: "add", kind: "furniture", furnitureKind: fk, x: 880, y: 880, id: "f-" + fk + "01" }));
   await wait(220);
   (["whiteboard", "bookshelf", "cooler", "server"].every((fk) => guest.world?.furniture?.some((o) => o.id === "f-" + fk + "01" && o.kind === fk))) ? ok("editFloor accepts the new office prop kinds (whiteboard/bookshelf/cooler/server)") : bad("new office prop kinds not accepted");
+  // added furniture must carry each kind's real dimensions (not a generic default) -- cooler is a 52x52 round prop
+  { const cooler = guest.world?.furniture?.find((o) => o.id === "f-cooler01");
+    (cooler && cooler.w === 52 && cooler.h === 52 && cooler.r === 26) ? ok("added furniture uses each kind's real dimensions (cooler 52x52)") : bad("added furniture got wrong dimensions: " + JSON.stringify(cooler && { w: cooler.w, h: cooler.h, r: cooler.r })); }
   // client-supplied id on add + restore op (powers editor undo/redo)
   admin.ws.send(JSON.stringify({ t: "editFloor", op: "add", wtype: "note", x: 320, y: 320, id: "w-undo01" }));
   await wait(220);
   (guest.world?.widgets?.some((o) => o.id === "w-undo01")) ? ok("editFloor add honours a valid client-supplied id") : bad("client id on add was not used");
+  // embed widgets render in an <iframe src>: a non-http(s) (e.g. javascript:) url must be sanitized to empty
+  admin.ws.send(JSON.stringify({ t: "editFloor", op: "add", wtype: "embed", x: 360, y: 360, id: "w-xss01", url: "javascript:alert(1)" }));
+  await wait(220);
+  { const e = guest.world?.widgets?.find((o) => o.id === "w-xss01");
+    (e && e.type === "embed" && e.url === "") ? ok("embed widget rejects a non-http(s) url (no javascript: iframe src)") : bad("embed url not sanitized: " + JSON.stringify(e && e.url)); }
   admin.ws.send(JSON.stringify({ t: "editFloor", op: "remove", kind: "widget", id: "w-undo01" }));
   await wait(200);
   (!guest.world?.widgets?.some((o) => o.id === "w-undo01")) ? ok("editFloor remove deletes the element") : bad("editFloor remove did not delete");

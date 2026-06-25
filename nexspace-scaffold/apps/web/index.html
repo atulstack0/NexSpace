@@ -186,6 +186,8 @@
     background:radial-gradient(900px 460px at 50% 28%,rgba(91,140,255,.20),transparent),radial-gradient(700px 400px at 80% 90%,rgba(255,180,84,.10),transparent),rgba(8,11,18,.96);
     background-color:rgba(8,11,18,.96)}
   #overlay::before{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(123,146,196,.07) 1px,transparent 1px);background-size:26px 26px;pointer-events:none}
+  /* keep the in-world HUD hidden and out of tab order until the user joins (fixes bleed-through behind the join overlay) */
+  body:not(.joined) #bar,body:not(.joined) #minimapWrap,body:not(.joined) #hint,body:not(.joined) #helpFab{display:none!important}
   #card{position:relative;width:min(460px,92vw);background:linear-gradient(180deg,rgba(22,30,48,.98),#101626);border:1px solid rgba(123,146,196,.24);border-radius:20px;padding:30px 30px 26px;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.05),inset 0 -2px 0 rgba(255,180,84,.22)}
   #card .orb{width:34px;height:34px;border-radius:8px;transform:rotate(45deg);margin:2px auto 14px;background:linear-gradient(135deg,var(--warn),#ff8a3c);box-shadow:0 0 18px rgba(255,180,84,.65)}
   #card .wordmark{font-weight:800;letter-spacing:3.5px;font-size:25px;color:var(--text);margin:0}
@@ -624,7 +626,7 @@
 
   // ---------- Input ----------
   const keys=new Set();let target=null,pathQueue=[];const joy={x:0,y:0,active:false}; // virtual joystick vector (mobile)
-  addEventListener('keydown',e=>{const tg=e.target; if(tg&&(tg.tagName==='INPUT'||tg.tagName==='TEXTAREA'))return; const _wb=document.getElementById('wb'); if(_wb&&_wb.style.display==='flex')return; const k=e.key.toLowerCase();
+  addEventListener('keydown',e=>{if(e.key==='Escape'&&closeAllPanels()){e.preventDefault();return;} const tg=e.target; if(tg&&(tg.tagName==='INPUT'||tg.tagName==='TEXTAREA'))return; const _wb=document.getElementById('wb'); if(_wb&&_wb.style.display==='flex')return; const k=e.key.toLowerCase();
     if(k==='t'){openTv();e.preventDefault();return;}                 // open the TV from any view
     if(k==='escape'){closeTv();closeWidget();closeRooms();closeCustomize();closeActivity();closeGame();return;}
     if(viewMode==='3d'&&k==='v'){cameraMode=cameraMode==='thirdPerson'?'firstPerson':'thirdPerson';toast(cameraMode==='firstPerson'?'👁️ First-person':'🎥 Third-person');return;}
@@ -1723,6 +1725,12 @@
     // timers have no overlay — they render live on the floor
   }
   function closeWidget(){const ov=document.getElementById('widgetOv');ov.style.display='none';document.getElementById('widgetBody').innerHTML='';}
+  // close any open overlay/panel (used by the Escape key so every panel is dismissible from the keyboard)
+  function closeAllPanels(){let any=false;
+    const g=document.getElementById('gallery');if(g&&g.classList.contains('show')){closeGallery();any=true;}
+    const wv=document.getElementById('widgetOv');if(wv&&getComputedStyle(wv).display!=='none'){closeWidget();any=true;}
+    ['chat','tv','rooms','customize','activity','minigame','wb','reactBar','screenshare'].forEach(id=>{const el=document.getElementById(id);if(el&&getComputedStyle(el).display!=='none'){el.style.display='none';any=true;}});
+    if(any){const a=document.activeElement;if(a&&a.blur)a.blur();}return any;}
   // ---------- Shared YouTube TV ----------
   function parseYt(s){s=String(s||'').trim();let m=s.match(/(?:youtu\.be\/|v=|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/);if(m)return m[1];if(/^[A-Za-z0-9_-]{11}$/.test(s))return s;return null;}
   function tvSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o));}
@@ -2221,7 +2229,7 @@
       catch(e){alert('Could not reach the login server — joining as guest.');}
     }
     document.getElementById('rolePill').textContent='you: '+myRole;
-    document.getElementById('overlay').style.display='none';startAudio();if(actx&&actx.state==='suspended')actx.resume();connect(myName);requestAnimationFrame(loop);});
+    document.getElementById('overlay').style.display='none';document.body.classList.add('joined');startAudio();if(actx&&actx.state==='suspended')actx.resume();connect(myName);requestAnimationFrame(loop);});
   document.getElementById('name').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('go').click();});
   // first-run onboarding tour (§7 / P6-05)
   function showTour(){document.getElementById('tour').classList.add('show');}

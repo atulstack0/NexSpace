@@ -396,6 +396,8 @@ const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css
 const FURN_DIMS = { plant: { w: 80, h: 80, r: 40 }, chair: { w: 70, h: 70, r: 30 }, couch: { w: 150, h: 90, r: 12 }, table: { w: 200, h: 120, r: 16 }, rug: { w: 260, h: 180, r: 0 }, chai: { w: 180, h: 96, r: 0 }, whiteboard: { w: 150, h: 30, r: 0 }, bookshelf: { w: 130, h: 42, r: 0 }, cooler: { w: 52, h: 52, r: 26 }, server: { w: 80, h: 64, r: 0 } };
 const FURN_KINDS = ["desk", "table", "couch", "plant", "chair", "rug", "chai", "whiteboard", "bookshelf", "cooler", "server"];
 function furnDim(fk) { return FURN_DIMS[fk] || { w: 150, h: 80, r: 12 }; }
+// Embed widgets render in an <iframe src>; only allow http(s) URLs so an editor can't inject a javascript:/data: src.
+function safeHttpUrl(u) { const s = String(u || "").trim().slice(0, 400); return /^https?:\/\//i.test(s) ? s : ""; }
 function sanitizeFurniture(o) {
   if (!o || typeof o !== "object") return null;
   const kind = FURN_KINDS.includes(o.kind) ? o.kind : "desk";
@@ -793,9 +795,9 @@ wss.on("connection", (ws) => {
         if (o) { o.rot = ((Math.round(Number(m.rot) || 0)) % 360 + 360) % 360; changed = true; }
       } else if (op === "add" && m.kind === "furniture") {
         const fk = FURN_KINDS.includes(m.furnitureKind) ? m.furnitureKind : "desk";
-        const dim = fk === "plant" ? { w: 80, h: 80, r: 40 } : fk === "chair" ? { w: 70, h: 70, r: 30 } : fk === "couch" ? { w: 150, h: 90, r: 12 } : fk === "table" ? { w: 200, h: 120, r: 16 } : fk === "rug" ? { w: 260, h: 180, r: 0 } : { w: 150, h: 80, r: 12 };
+        const dim = furnDim(fk);   // single source of truth (FURN_DIMS) — covers every kind incl. chai/whiteboard/bookshelf/cooler/server
         const fid = (typeof m.id === "string" && /^f-[a-z0-9]{4,32}$/.test(m.id) && !f.furniture.some((x) => x.id === m.id)) ? m.id : "f-" + crypto.randomBytes(3).toString("hex");
-        f.furniture.push({ id: fid, x: grid(cx(m.x, f.w - dim.w)), y: grid(cx(m.y, f.h - dim.h)), ...dim, kind: fk });
+        f.furniture.push({ id: fid, x: grid(cx(m.x, f.w - dim.w)), y: grid(cx(m.y, f.h - dim.h)), ...dim, kind: fk, rot: 0 });
         changed = true;
       } else if (op === "add") {
         const id = (typeof m.id === "string" && /^w-[a-z0-9]{4,32}$/.test(m.id) && !f.widgets.some((x) => x.id === m.id)) ? m.id : "w-" + crypto.randomBytes(3).toString("hex");
@@ -803,7 +805,7 @@ wss.on("connection", (ws) => {
         const wd = { id, type, x: grid(cx(m.x, f.w - 180)), y: grid(cx(m.y, f.h - 120)), w: type === "embed" ? 280 : 180, h: type === "embed" ? 160 : 120 };
         if (type === "note") { wd.text = String(m.text || "New note").slice(0, 300); wd.color = "#ffd166"; }
         else if (type === "timer") { wd.label = String(m.label || "Timer").slice(0, 40); wd.endsAt = Date.now() + 10 * 60000; }
-        else { wd.kind = "web"; wd.url = String(m.url || "").slice(0, 400); wd.title = String(m.title || "Embed").slice(0, 80); }
+        else { wd.kind = "web"; wd.url = safeHttpUrl(m.url); wd.title = String(m.title || "Embed").slice(0, 80); }
         f.widgets.push(wd); changed = true;
       } else if (op === "template") {                       // replace floor furniture with a themed layout (P4-05)
         const name = ["office", "lounge", "classroom", "event"].includes(m.name) ? m.name : "office";
@@ -864,7 +866,7 @@ wss.on("connection", (ws) => {
           const type = ["note", "timer", "embed"].includes(src.type) ? src.type : "note"; o.type = type;
           if (type === "note") { o.text = String(src.text || "Note").slice(0, 300); o.color = /^#[0-9a-f]{3,8}$/i.test(src.color || "") ? src.color : "#ffd166"; }
           else if (type === "timer") { o.label = String(src.label || "Timer").slice(0, 40); o.endsAt = Number(src.endsAt) || (Date.now() + 10 * 60000); }
-          else { o.kind = "web"; o.url = String(src.url || "").slice(0, 400); o.title = String(src.title || "Embed").slice(0, 80); }
+          else { o.kind = "web"; o.url = safeHttpUrl(src.url); o.title = String(src.title || "Embed").slice(0, 80); }
           f.widgets.push(o); changed = true;
         }
       }
